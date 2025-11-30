@@ -41,13 +41,3 @@ create policy "Users can update own workouts"
 create policy "Users can delete own workouts"
   on workout_sessions for delete
   using (auth.uid() = user_id);
-
--- Temporary policy for anonymous users (remove after adding auth)
--- This allows the app to work before login is implemented
-create policy "Allow anonymous inserts"
-  on workout_sessions for insert
-  with check (user_id is null);
-
-create policy "Allow anonymous select"
-  on workout_sessions for select
-  using (user_id is null);

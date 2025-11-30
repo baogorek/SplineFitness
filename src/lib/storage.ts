@@ -6,9 +6,13 @@ const STORAGE_KEYS = {
 } as const
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
   const { data, error } = await supabase
     .from('workout_sessions')
     .select('*')
+    .eq('user_id', user.id)
     .order('completed_at', { ascending: false })
 
   if (error) {
@@ -31,13 +35,16 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
 }
 
 export async function saveWorkoutSession(session: WorkoutSession): Promise<WorkoutHistoryEntry | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
   const isCircuit = session.mode === 'circuit'
   const circuitSession = session as CircuitWorkoutSession
 
   const { data, error } = await supabase
     .from('workout_sessions')
     .insert({
-      user_id: null,
+      user_id: user.id,
       mode: session.mode,
       workout_id: session.workoutId,
       variant: session.variant,

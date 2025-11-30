@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Activity, Zap } from "lucide-react"
+import { useState, useCallback, useRef } from "react"
+import { ArrowLeft, Zap } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
   CircuitRoundData,
@@ -32,6 +33,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [rounds, setRounds] = useState<CircuitRoundData[]>([])
   const [currentRoundMetrics, setCurrentRoundMetrics] = useState<ComboLoadMetrics[]>([])
   const [testMode, setTestMode] = useState(false)
+  const savingRef = useRef(false)
 
   const workout = circuitWorkouts[activeWorkout]
   const currentCombo = workout.combos[currentComboIndex]
@@ -110,6 +112,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   }, [roundTimer])
 
   const handleFinishWorkout = useCallback(async () => {
+    if (savingRef.current) return
+    savingRef.current = true
+
     const session: CircuitWorkoutSession = {
       mode: "circuit",
       workoutId: workout.id,
@@ -180,12 +185,10 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         <div className="px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <button
-                onClick={onModeChange}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-primary hover:bg-primary/90 transition-colors"
-              >
-                <Activity className="h-4 w-4 text-primary-foreground" />
-              </button>
+              <Button variant="outline" size="sm" onClick={onModeChange} className="gap-1">
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">CIRCUIT</span>
               <button
                 onClick={() => setTestMode(!testMode)}

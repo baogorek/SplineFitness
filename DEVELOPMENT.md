@@ -11,7 +11,7 @@ A workout tracking app supporting two modes:
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **UI Components**: shadcn/ui (Radix primitives)
 - **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth (not yet implemented)
+- **Auth**: Supabase Auth with Google OAuth
 
 ## Project Structure
 
@@ -30,8 +30,11 @@ src/
     storage.ts              # Data persistence (Supabase + localStorage)
   components/
     workout-logger.tsx      # Main entry, mode selection
+    auth-provider.tsx       # Auth context with Google OAuth
+    login-screen.tsx        # Google sign-in UI
     circuit/                # Circuit workout components
     traditional/            # Traditional workout components
+    calendar/               # History calendar view
     shared/                 # Shared components
 ```
 
@@ -47,13 +50,15 @@ src/
 
 Table: `workout_sessions`
 - `id`: UUID primary key
-- `user_id`: UUID (null until auth implemented)
+- `user_id`: UUID (references auth.users)
 - `mode`: 'circuit' | 'traditional'
 - `workout_id`: string
 - `variant`: 'A' | 'B'
 - `started_at`: timestamp
 - `completed_at`: timestamp
 - `data`: JSONB (rounds/exercises data)
+
+RLS policies ensure users can only access their own workouts.
 
 See `supabase/schema.sql` for full schema.
 
@@ -65,8 +70,14 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 ```
 
+## Completed Features
+
+- **Google Auth**: Supabase Auth with Google OAuth provider
+- **Calendar UI**: Monthly calendar view showing workout history with modal details
+- **Light Mode**: App uses light theme with proper color tokens
+
 ## Next Steps
 
-1. **Google Auth**: Add Supabase Auth with Google provider
-2. **Calendar UI**: View workout history by date
-3. **Statistics**: Performance trends over time
+1. **Statistics**: Performance trends over time
+2. **Workout Detail Formatting**: Pretty-print workout data in calendar modal (currently JSON)
+3. **Traditional Workout Saving**: Hook up save functionality for traditional mode

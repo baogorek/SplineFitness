@@ -1,6 +1,7 @@
 "use client"
 
-import { Activity, Clock } from "lucide-react"
+import { ArrowLeft, Clock } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { WorkoutVariant, WorkoutMode } from "@/types/workout"
 
 interface WorkoutHeaderProps {
@@ -27,14 +28,12 @@ export function WorkoutHeader({
       <div className="px-4 py-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={onModeChange}
-              className="flex h-8 w-8 items-center justify-center rounded-md bg-primary hover:bg-primary/90 transition-colors"
-            >
-              <Activity className="h-4 w-4 text-primary-foreground" />
-            </button>
+            <Button variant="outline" size="sm" onClick={onModeChange} className="gap-1">
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
             <span className="text-sm font-semibold tracking-tight text-foreground">
-              {mode === "circuit" ? "CIRCUIT" : "HYPERTRACK"}
+              {mode === "circuit" ? "CIRCUIT" : "TRADITIONAL"}
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
