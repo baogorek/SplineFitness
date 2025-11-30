@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
-import { ArrowLeft, Zap } from "lucide-react"
+import { Activity, ArrowLeft, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
