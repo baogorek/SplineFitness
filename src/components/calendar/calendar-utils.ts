@@ -67,7 +67,8 @@ export function groupWorkoutsByDate(
 ): Map<string, WorkoutHistoryEntry[]> {
   const map = new Map<string, WorkoutHistoryEntry[]>()
   for (const entry of entries) {
-    const dateKey = entry.completedAt.split("T")[0]
+    const localDate = new Date(entry.completedAt)
+    const dateKey = formatDateKey(localDate)
     const existing = map.get(dateKey) || []
     map.set(dateKey, [...existing, entry])
   }
