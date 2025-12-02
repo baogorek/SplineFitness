@@ -1,16 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { Activity, Dumbbell, Timer, LogOut, Calendar } from "lucide-react"
+import { Activity, Dumbbell, Timer, LogOut, Calendar, UserPlus } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { WorkoutMode } from "@/types/workout"
 import { CircuitWorkout } from "./circuit/circuit-workout"
 import { TraditionalWorkout } from "./traditional/traditional-workout"
 import { CalendarView } from "./calendar/calendar-view"
+import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
 
-type AppMode = WorkoutMode | "history"
+type AppMode = WorkoutMode | "history" | "booking"
 
 function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void }) {
   const { user, signOut } = useAuth()
@@ -87,6 +88,23 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             </div>
           </CardContent>
         </Card>
+
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg"
+          onClick={() => onSelectMode("booking")}
+        >
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+              <UserPlus className="h-7 w-7 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-foreground">Book 1-on-1</h2>
+              <p className="text-sm text-muted-foreground">
+                Schedule a personal training session
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
@@ -109,6 +127,10 @@ export function WorkoutLogger() {
 
   if (mode === "history") {
     return <CalendarView onBack={handleModeChange} />
+  }
+
+  if (mode === "booking") {
+    return <BookingView onBack={handleModeChange} />
   }
 
   return <ModeSelection onSelectMode={setMode} />
