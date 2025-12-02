@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
-import { Activity, ArrowLeft, Zap } from "lucide-react"
+import { Activity, ArrowLeft, Volume2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
@@ -47,6 +47,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       const maxMinutes = Math.floor((currentCombo?.durationSeconds || 180) / 60)
       if (minute < maxMinutes) {
         audio.playMinuteBeep()
+        if (currentCombo?.subExercises[minute]) {
+          audio.speak(currentCombo.subExercises[minute].name)
+        }
       }
     },
     onComplete: () => {
@@ -58,6 +61,11 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const roundTimer = useTimer({ countUp: true, speedMultiplier })
 
+  const handleTestAudio = () => {
+    audio.playMinuteBeep()
+    audio.speak("Jump Squats")
+  }
+
   const handleWorkoutChange = (variant: WorkoutVariant) => {
     if (phase === "ready" && currentComboIndex === 0 && rounds.length === 0) {
       setActiveWorkout(variant)
@@ -66,11 +74,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const handleStartCombo = useCallback(() => {
     setPhase("timing")
+    if (currentCombo?.subExercises[0]) {
+      audio.speak(currentCombo.subExercises[0].name)
+    }
     comboTimer.start()
     if (!roundTimer.isRunning) {
       roundTimer.start()
     }
-  }, [comboTimer, roundTimer])
+  }, [comboTimer, roundTimer, currentCombo, audio])
 
   const handleSaveLoad = useCallback(
     (loads: Record<string, number>) => {
@@ -200,6 +211,13 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               >
                 <Zap className="h-3 w-3" />
                 {testMode ? "12x" : "Test"}
+              </button>
+              <button
+                onClick={handleTestAudio}
+                className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Volume2 className="h-3 w-3" />
+                Audio
               </button>
             </div>
             <div className="text-right">

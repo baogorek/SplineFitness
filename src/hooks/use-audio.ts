@@ -47,8 +47,18 @@ export function useAudio() {
     setTimeout(() => playBeep(784, 0.3), 300)
   }, [playBeep])
 
+  const speak = useCallback((text: string) => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.9
+      window.speechSynthesis.speak(utterance)
+    }
+  }, [])
+
   return {
     playMinuteBeep,
     playCompleteSound,
+    speak,
   }
 }
