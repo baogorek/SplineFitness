@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HYPERTRACK",
+  title: "Spline Fitness",
   description: "Track your workouts",
 };
 
