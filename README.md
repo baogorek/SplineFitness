@@ -87,6 +87,20 @@ Place images in `public/blog/images/` and reference them:
 ![Alt text](/blog/images/your-image.jpg)
 ```
 
+### Embedding YouTube Videos
+
+Use the `YouTube` component with the video ID (the part after `v=` in the URL):
+
+```mdx
+<YouTube id="dQw4w9WgXcQ" />
+```
+
+With a custom title for accessibility:
+
+```mdx
+<YouTube id="dQw4w9WgXcQ" title="My workout tutorial" />
+```
+
 ### Frontmatter Options
 
 | Field | Required | Description |
