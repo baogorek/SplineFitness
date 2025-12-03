@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spline Fitness
+
+A workout tracking app with an integrated blog, built with Next.js 16.
+
+## Features
+
+- **Circuit Training**: Timed combos with rounds, audio cues, and load metrics
+- **Traditional Workouts**: Sets, reps, and weight tracking
+- **Workout History**: Calendar view of past workouts
+- **1-on-1 Booking**: Cal.com integration for personal training sessions
+- **Blog**: MDX-powered blog for fitness content
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS v4
+- **UI Components**: shadcn/ui (Radix primitives)
+- **Database**: Supabase (PostgreSQL)
+- **Auth**: Supabase Auth with Google OAuth
+- **Blog**: MDX with gray-matter frontmatter
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/
+│   ├── blog/                 # Blog routes
+│   │   ├── page.tsx          # Blog listing
+│   │   └── [slug]/page.tsx   # Individual posts
+│   └── page.tsx              # Home page
+├── components/
+│   ├── blog/                 # Blog components
+│   ├── circuit/              # Circuit workout UI
+│   ├── traditional/          # Traditional workout UI
+│   ├── calendar/             # History calendar
+│   ├── booking/              # Cal.com booking
+│   ├── shared/               # Shared components
+│   └── ui/                   # shadcn/ui components
+├── content/
+│   └── posts/                # Blog posts (MDX)
+├── data/                     # Workout definitions
+├── hooks/                    # Custom React hooks
+├── lib/                      # Utilities (Supabase, blog helpers)
+└── types/                    # TypeScript definitions
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Blog
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Adding a New Post
 
-## Deploy on Vercel
+Create a `.mdx` file in `src/content/posts/`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```mdx
+---
+title: "Your Post Title"
+description: "Brief description for SEO and previews"
+date: "2024-12-02"
+author: "Your Name"
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Your Post Title
+
+Write your content here using Markdown...
+```
+
+### Adding Images
+
+Place images in `public/blog/images/` and reference them:
+
+```mdx
+![Alt text](/blog/images/your-image.jpg)
+```
+
+### Frontmatter Options
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `title` | Yes | Post title |
+| `description` | Yes | SEO description |
+| `date` | Yes | Publication date (YYYY-MM-DD) |
+| `author` | Yes | Author name |
+| `draft` | No | Set `true` to hide from listing |
+| `categories` | No | Array of categories (future) |
+| `tags` | No | Array of tags (future) |
+
+## Database Schema
+
+Table: `workout_sessions`
+- `id`: UUID primary key
+- `user_id`: UUID (references auth.users)
+- `mode`: 'circuit' | 'traditional'
+- `workout_id`: string
+- `variant`: 'A' | 'B'
+- `started_at`: timestamp
+- `completed_at`: timestamp
+- `data`: JSONB (rounds/exercises data)
+
+RLS policies ensure users can only access their own workouts. See `supabase/schema.sql` for full schema.
+
+## Design Assets
+
+Logo source files are in `design/`:
+- `muscle-logo.R` - R script that generates the Spline Fitness logo
+
+## Deployment
+
+Deploy on [Vercel](https://vercel.com):
+
+```bash
+npm run build
+```
+
+The blog uses static generation - all posts are pre-built at deploy time.
