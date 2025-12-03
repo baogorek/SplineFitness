@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Activity, Dumbbell, Timer, LogOut, Calendar, UserPlus } from "lucide-react"
+import { Dumbbell, Timer, LogOut, Calendar, UserPlus, BookOpen } from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { WorkoutMode } from "@/types/workout"
@@ -25,14 +27,9 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
         </Button>
       </div>
 
-      <div className="flex items-center gap-3 mb-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-          <Activity className="h-6 w-6 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">HYPERTRACK</h1>
-          <p className="text-sm text-muted-foreground">Select workout type</p>
-        </div>
+      <div className="flex flex-col items-center mb-2">
+        <Image src="/spline_logo.svg" alt="Spline Fitness" width={140} height={140} priority />
+        <p className="text-sm text-muted-foreground mt-1">Select workout type</p>
       </div>
 
       <p className="text-xs text-muted-foreground mb-6">{user?.email}</p>
@@ -105,6 +102,22 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             </div>
           </CardContent>
         </Card>
+
+        <Link href="/blog">
+          <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+                <BookOpen className="h-7 w-7 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-foreground">Blog</h2>
+                <p className="text-sm text-muted-foreground">
+                  Fitness tips and training insights
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   )
