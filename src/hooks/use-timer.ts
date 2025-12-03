@@ -6,12 +6,13 @@ export interface UseTimerOptions {
   targetSeconds?: number
   onMinuteMark?: (minute: number) => void
   onComplete?: (totalSeconds: number) => void
+  onTick?: (remainingSeconds: number) => void
   countUp?: boolean
   speedMultiplier?: number
 }
 
 export function useTimer(options: UseTimerOptions = {}) {
-  const { targetSeconds, onMinuteMark, onComplete, countUp = false, speedMultiplier = 1 } = options
+  const { targetSeconds, onMinuteMark, onComplete, onTick, countUp = false, speedMultiplier = 1 } = options
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
@@ -19,9 +20,11 @@ export function useTimer(options: UseTimerOptions = {}) {
   const lastMinuteRef = useRef(0)
   const onMinuteMarkRef = useRef(onMinuteMark)
   const onCompleteRef = useRef(onComplete)
+  const onTickRef = useRef(onTick)
 
   onMinuteMarkRef.current = onMinuteMark
   onCompleteRef.current = onComplete
+  onTickRef.current = onTick
 
   useEffect(() => {
     if (isRunning) {
@@ -36,9 +39,14 @@ export function useTimer(options: UseTimerOptions = {}) {
             onMinuteMarkRef.current?.(currentMinute)
           }
 
-          if (targetSeconds && next >= targetSeconds) {
-            setIsRunning(false)
-            onCompleteRef.current?.(next)
+          if (targetSeconds) {
+            const remaining = targetSeconds - next
+            onTickRef.current?.(remaining)
+
+            if (next >= targetSeconds) {
+              setIsRunning(false)
+              onCompleteRef.current?.(next)
+            }
           }
 
           return next

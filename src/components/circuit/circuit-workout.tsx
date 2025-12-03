@@ -52,6 +52,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         }
       }
     },
+    onTick: (remainingSeconds) => {
+      const secondsIntoMinute = remainingSeconds % 60
+      if (secondsIntoMinute === 30) {
+        audio.speak("30 seconds left")
+      } else if (secondsIntoMinute >= 1 && secondsIntoMinute <= 5) {
+        const countdownWords = ["one", "two", "three", "four", "five"]
+        audio.speak(countdownWords[secondsIntoMinute - 1])
+      }
+    },
     onComplete: () => {
       audio.playCompleteSound()
       setPhase("input")
@@ -301,22 +310,23 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           <div className="space-y-3">
-            {workout.combos.map((combo, index) => {
-              const isCompleted = currentRoundMetrics.some((m) => m.comboId === combo.id)
-              const isActive = index === currentComboIndex
-              const loadMetric = currentRoundMetrics.find((m) => m.comboId === combo.id)
+            {workout.combos
+              .filter((_, index) => index >= currentComboIndex)
+              .map((combo, filteredIndex) => {
+                const originalIndex = currentComboIndex + filteredIndex
+                const isActive = originalIndex === currentComboIndex
 
-              return (
-                <ComboCard
-                  key={combo.id}
-                  combo={combo}
-                  index={index}
-                  isActive={isActive && (phase === "ready" || phase === "timing")}
-                  isCompleted={isCompleted}
-                  loadMetrics={loadMetric}
-                />
-              )
-            })}
+                return (
+                  <ComboCard
+                    key={combo.id}
+                    combo={combo}
+                    index={originalIndex}
+                    isActive={isActive && (phase === "ready" || phase === "timing")}
+                    isCompleted={false}
+                    loadMetrics={undefined}
+                  />
+                )
+              })}
           </div>
         </div>
       </div>
