@@ -1,6 +1,6 @@
 "use client"
 
-import { Activity } from "lucide-react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "./auth-provider"
@@ -10,14 +10,8 @@ export function LoginScreen() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-          <Activity className="h-6 w-6 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">HYPERTRACK</h1>
-          <p className="text-sm text-muted-foreground">Track your workouts</p>
-        </div>
+      <div className="flex flex-col items-center mb-8">
+        <Image src="/spline_logo.svg" alt="Spline Fitness" width={180} height={180} priority />
       </div>
 
       <Card className="w-full max-w-sm">
