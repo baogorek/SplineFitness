@@ -113,6 +113,49 @@ With a custom title for accessibility:
 | `categories` | No | Array of categories (future) |
 | `tags` | No | Array of tags (future) |
 
+## Supabase Setup
+
+If setting up Supabase from scratch:
+
+1. Create a new project at [supabase.com](https://supabase.com)
+
+2. Get credentials from **Project Settings → API Keys**:
+   - Project URL
+   - Publishable key (or legacy anon key)
+
+3. Add to `.env.local` and Vercel environment variables
+
+4. Run in **SQL Editor**:
+   ```sql
+   create table workout_sessions (
+     id uuid default gen_random_uuid() primary key,
+     user_id uuid references auth.users not null,
+     mode text not null,
+     workout_id text not null,
+     variant text,
+     started_at timestamptz not null,
+     completed_at timestamptz not null,
+     data jsonb not null,
+     created_at timestamptz default now()
+   );
+
+   alter table workout_sessions enable row level security;
+
+   create policy "Users can view own sessions" on workout_sessions
+     for select using (auth.uid() = user_id);
+
+   create policy "Users can insert own sessions" on workout_sessions
+     for insert with check (auth.uid() = user_id);
+   ```
+
+5. Configure **Google OAuth**:
+   - In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create OAuth 2.0 credentials
+   - Add authorized redirect URI: `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
+   - In Supabase → **Authentication → Providers → Google**, add Client ID and Secret
+   - In Supabase → **Authentication → URL Configuration**:
+     - Site URL: `https://splinefitness.com`
+     - Redirect URLs: `https://splinefitness.com/**`, `http://localhost:3000/**`
+
 ## Database Schema
 
 Table: `workout_sessions`
