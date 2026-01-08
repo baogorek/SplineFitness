@@ -5,10 +5,12 @@ import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QuizQuestion } from "@/components/practice/quiz-question"
+import { MuscleFormulaQuiz } from "@/components/practice/muscle-formula/muscle-formula-quiz"
 import { questions, getQuestionsByChapter, getAllChapters } from "@/data/practice-questions"
 
-export default function PracticePage() {
+function MultipleChoiceQuiz() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [completed, setCompleted] = useState(false)
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
@@ -38,6 +40,59 @@ export default function PracticePage() {
   }
 
   return (
+    <>
+      <div className="flex flex-wrap gap-2 mb-8">
+        <Button
+          variant={selectedChapter === null ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleChapterSelect(null)}
+        >
+          All Chapters
+        </Button>
+        {chapters.map((chapter) => (
+          <Button
+            key={chapter}
+            variant={selectedChapter === chapter ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleChapterSelect(chapter)}
+          >
+            Chapter {chapter}
+          </Button>
+        ))}
+      </div>
+
+      {activeQuestions.length === 0 ? (
+        <p className="text-muted-foreground">No questions available for this selection.</p>
+      ) : completed ? (
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold text-foreground mb-4">Quiz Complete!</h2>
+          <p className="text-muted-foreground mb-6">
+            You&apos;ve completed all {activeQuestions.length} questions.
+          </p>
+          <Button onClick={handleRestart} className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            Start Over
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center">
+          <div className="text-sm text-muted-foreground mb-4">
+            {currentIndex + 1} of {activeQuestions.length}
+          </div>
+          <QuizQuestion
+            question={activeQuestions[currentIndex]}
+            questionNumber={currentIndex + 1}
+            onNext={handleNext}
+            isLast={currentIndex === activeQuestions.length - 1}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
+export default function PracticePage() {
+  return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -60,52 +115,20 @@ export default function PracticePage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-8">
-          <Button
-            variant={selectedChapter === null ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleChapterSelect(null)}
-          >
-            All Chapters
-          </Button>
-          {chapters.map((chapter) => (
-            <Button
-              key={chapter}
-              variant={selectedChapter === chapter ? "default" : "outline"}
-              size="sm"
-              onClick={() => handleChapterSelect(chapter)}
-            >
-              Chapter {chapter}
-            </Button>
-          ))}
-        </div>
+        <Tabs defaultValue="multiple-choice" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="multiple-choice">Multiple Choice</TabsTrigger>
+            <TabsTrigger value="muscle-formula">6-Step Muscle Formula</TabsTrigger>
+          </TabsList>
 
-        {activeQuestions.length === 0 ? (
-          <p className="text-muted-foreground">No questions available for this selection.</p>
-        ) : completed ? (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Quiz Complete!</h2>
-            <p className="text-muted-foreground mb-6">
-              You&apos;ve completed all {activeQuestions.length} questions.
-            </p>
-            <Button onClick={handleRestart} className="gap-2">
-              <RotateCcw className="h-4 w-4" />
-              Start Over
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="text-sm text-muted-foreground mb-4">
-              {currentIndex + 1} of {activeQuestions.length}
-            </div>
-            <QuizQuestion
-              question={activeQuestions[currentIndex]}
-              questionNumber={currentIndex + 1}
-              onNext={handleNext}
-              isLast={currentIndex === activeQuestions.length - 1}
-            />
-          </div>
-        )}
+          <TabsContent value="multiple-choice">
+            <MultipleChoiceQuiz />
+          </TabsContent>
+
+          <TabsContent value="muscle-formula">
+            <MuscleFormulaQuiz />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )
