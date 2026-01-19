@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { WorkoutMode } from "@/types/workout"
 import { CircuitWorkout } from "./circuit/circuit-workout"
@@ -15,119 +14,169 @@ import { useAuth } from "./auth-provider"
 
 type AppMode = WorkoutMode | "history" | "booking"
 
+const workoutModes = [
+  {
+    id: "circuit" as const,
+    icon: Timer,
+    title: "Circuit",
+    subtitle: "Timed combos",
+    description: "Athlean-X style rounds with rest periods",
+    color: "bg-orange-500",
+    lightBg: "bg-orange-50",
+    border: "border-orange-200",
+    hoverBorder: "hover:border-orange-300",
+    iconColor: "text-orange-600",
+  },
+  {
+    id: "traditional" as const,
+    icon: Dumbbell,
+    title: "Traditional",
+    subtitle: "Sets & reps",
+    description: "Classic strength training with weight tracking",
+    color: "bg-blue-500",
+    lightBg: "bg-blue-50",
+    border: "border-blue-200",
+    hoverBorder: "hover:border-blue-300",
+    iconColor: "text-blue-600",
+  },
+  {
+    id: "history" as const,
+    icon: Calendar,
+    title: "History",
+    subtitle: "Your progress",
+    description: "View past workouts on calendar",
+    color: "bg-emerald-500",
+    lightBg: "bg-emerald-50",
+    border: "border-emerald-200",
+    hoverBorder: "hover:border-emerald-300",
+    iconColor: "text-emerald-600",
+  },
+  {
+    id: "booking" as const,
+    icon: UserPlus,
+    title: "Coaching",
+    subtitle: "1-on-1 sessions",
+    description: "Book personal training",
+    color: "bg-violet-500",
+    lightBg: "bg-violet-50",
+    border: "border-violet-200",
+    hoverBorder: "hover:border-violet-300",
+    iconColor: "text-violet-600",
+  },
+]
+
 function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void }) {
   const { user, signOut, signInWithGoogle } = useAuth()
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="absolute top-4 right-4">
+    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
+      {/* Subtle background pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.4]"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, rgb(203 213 225 / 0.5) 1px, transparent 0)`,
+          backgroundSize: '32px 32px'
+        }}
+      />
+
+      {/* Header */}
+      <header className="relative z-10 flex items-center justify-end p-4 gap-4">
         {user ? (
-          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign out
-          </Button>
+          <>
+            <span className="text-sm text-slate-500 hidden sm:block">{user.email}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+            >
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
+          </>
         ) : (
-          <Button variant="default" size="sm" onClick={signInWithGoogle} className="gap-2">
-            <LogIn className="h-4 w-4" />
-            Sign in to save workouts
-          </Button>
+          <>
+            <span className="text-sm text-slate-400">Guest mode (workouts won't be saved)</span>
+            <Button
+              size="sm"
+              onClick={signInWithGoogle}
+              className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+            >
+              <LogIn className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sign in</span>
+            </Button>
+          </>
         )}
-      </div>
+      </header>
 
-      <div className="flex flex-col items-center mb-2">
-        <Image src="/spline_logo.svg" alt="Spline Fitness" width={140} height={140} priority />
-        <p className="text-sm text-muted-foreground mt-1">Select workout type</p>
-      </div>
+      {/* Main content */}
+      <main className="relative z-10 flex flex-col items-center px-4 sm:px-6 pb-8">
+        {/* Logo hero */}
+        <div className="text-center mb-8 sm:mb-10">
+          <Image
+            src="/spline_logo.svg"
+            alt="Spline Fitness"
+            width={280}
+            height={280}
+            priority
+            className="mx-auto"
+          />
+        </div>
 
-      <p className="text-xs text-muted-foreground mb-6">
-        {user ? user.email : "Guest mode - workouts won't be saved"}
-      </p>
+        {/* Workout mode cards */}
+        <div className="w-full max-w-3xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {workoutModes.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => onSelectMode(mode.id)}
+                className={`group relative rounded-2xl bg-white border-2 ${mode.border} ${mode.hoverBorder} p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1`}
+              >
+                {/* Colored accent bar */}
+                <div className={`absolute top-0 left-6 right-6 h-1 ${mode.color} rounded-b-full`} />
 
-      <div className="grid gap-4 w-full max-w-md">
-        <Card
-          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg"
-          onClick={() => onSelectMode("circuit")}
-        >
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-              <Timer className="h-7 w-7 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground">Circuit Training</h2>
-              <p className="text-sm text-muted-foreground">
-                Athlean-X style timed combos with rounds
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+                {/* Icon */}
+                <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${mode.lightBg} mb-4 transition-transform duration-200 group-hover:scale-110`}>
+                  <mode.icon className={`h-7 w-7 ${mode.iconColor}`} />
+                </div>
 
-        <Card
-          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg"
-          onClick={() => onSelectMode("traditional")}
-        >
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-              <Dumbbell className="h-7 w-7 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground">Traditional</h2>
-              <p className="text-sm text-muted-foreground">
-                Sets, reps, and weight tracking
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+                {/* Content */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {mode.title}
+                    </h2>
+                    <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
+                  </div>
+                  <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                    {mode.subtitle}
+                  </p>
+                  <p className="text-sm text-slate-500 pt-1">
+                    {mode.description}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
 
-        <Card
-          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg"
-          onClick={() => onSelectMode("history")}
-        >
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-              <Calendar className="h-7 w-7 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground">History</h2>
-              <p className="text-sm text-muted-foreground">
-                View past workouts by date
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg"
-          onClick={() => onSelectMode("booking")}
-        >
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-              <UserPlus className="h-7 w-7 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground">Book 1-on-1</h2>
-              <p className="text-sm text-muted-foreground">
-                Schedule a personal training session
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Link href="/blog">
-          <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
-            <CardContent className="flex items-center gap-4 p-6">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-                <BookOpen className="h-7 w-7 text-primary" />
+          {/* Blog link */}
+          <Link
+            href="/blog"
+            className="group mt-4 flex items-center justify-between rounded-xl bg-white border border-slate-200 p-4 transition-all duration-200 hover:border-slate-300 hover:shadow-md"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100">
+                <BookOpen className="h-5 w-5 text-slate-500" />
               </div>
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-foreground">Blog</h2>
-                <p className="text-sm text-muted-foreground">
-                  Fitness tips and training insights
-                </p>
+              <div>
+                <h3 className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Blog</h3>
+                <p className="text-xs text-slate-400">Fitness tips & training insights</p>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
+          </Link>
+        </div>
+      </main>
     </div>
   )
 }
