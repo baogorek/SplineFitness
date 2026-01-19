@@ -69,10 +69,17 @@ export function LandingPage({ posts }: LandingPageProps) {
               A simple, focused workout tracker for circuit training and traditional lifting.
               Log your sessions, track your progress, and stay consistent.
             </p>
-            <Button onClick={signInWithGoogle} disabled={loading} size="lg" className="gap-2">
-              Get Started
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={signInWithGoogle} disabled={loading} size="lg" className="gap-2">
+                Sign in to save workouts
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Link href="/">
+                <Button variant="outline" size="lg">
+                  Continue as guest
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
 

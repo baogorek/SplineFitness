@@ -8,13 +8,15 @@ import { getWorkoutHistory } from "@/lib/storage"
 import { formatMonthYear, groupWorkoutsByDate } from "./calendar-utils"
 import { CalendarGrid } from "./calendar-grid"
 import { WorkoutDetailModal } from "./workout-detail-modal"
+import { useAuth } from "@/components/auth-provider"
 
 interface CalendarViewProps {
   onBack: () => void
 }
 
 export function CalendarView({ onBack }: CalendarViewProps) {
-  const [currentMonth, setCurrentMonth] = useState(() => new Date())
+  const { user, signInWithGoogle } = useAuth()
+  const [currentMonth, setCurrentMonth] = useState<Date | null>(null)
   const [workouts, setWorkouts] = useState<WorkoutHistoryEntry[]>([])
   const [workoutsByDate, setWorkoutsByDate] = useState<Map<string, WorkoutHistoryEntry[]>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -22,6 +24,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   const [selectedWorkouts, setSelectedWorkouts] = useState<WorkoutHistoryEntry[]>([])
 
   useEffect(() => {
+    setCurrentMonth(new Date())
     async function fetchHistory() {
       const history = await getWorkoutHistory()
       setWorkouts(history)
@@ -32,11 +35,11 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   }, [])
 
   const handlePrevMonth = () => {
-    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+    setCurrentMonth((prev) => prev ? new Date(prev.getFullYear(), prev.getMonth() - 1, 1) : new Date())
   }
 
   const handleNextMonth = () => {
-    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+    setCurrentMonth((prev) => prev ? new Date(prev.getFullYear(), prev.getMonth() + 1, 1) : new Date())
   }
 
   const handleDayClick = (date: Date, dayWorkouts: WorkoutHistoryEntry[]) => {
@@ -81,13 +84,13 @@ export function CalendarView({ onBack }: CalendarViewProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={handlePrevMonth}>
+            <Button variant="ghost" size="icon" onClick={handlePrevMonth} disabled={!currentMonth}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h2 className="text-lg font-semibold text-foreground">
-              {formatMonthYear(currentMonth)}
+              {currentMonth ? formatMonthYear(currentMonth) : "Loading..."}
             </h2>
-            <Button variant="ghost" size="icon" onClick={handleNextMonth}>
+            <Button variant="ghost" size="icon" onClick={handleNextMonth} disabled={!currentMonth}>
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
@@ -95,7 +98,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
       </header>
 
       <main className="flex-1 p-4">
-        {loading ? (
+        {loading || !currentMonth ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Loading history...</p>
           </div>
@@ -109,10 +112,24 @@ export function CalendarView({ onBack }: CalendarViewProps) {
 
         {workouts.length === 0 && !loading && (
           <div className="text-center mt-8">
-            <p className="text-muted-foreground">No workouts recorded yet.</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Complete a workout to see it here!
-            </p>
+            {user ? (
+              <>
+                <p className="text-muted-foreground">No workouts recorded yet.</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Complete a workout to see it here!
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground">Sign in to track your workout history</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Your workouts will be saved and displayed here when you sign in.
+                </p>
+                <Button onClick={signInWithGoogle} className="mt-4">
+                  Sign in with Google
+                </Button>
+              </>
+            )}
           </div>
         )}
       </main>
