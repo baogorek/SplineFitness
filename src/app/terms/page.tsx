@@ -139,7 +139,7 @@ export default function TermsPage() {
               If you have questions about these terms, please contact us at:
             </p>
             <p className="text-muted-foreground">
-              <strong>Email:</strong> support@splinefitness.com
+              <strong>Email:</strong> baogorek@gmail.com
             </p>
           </section>
         </div>

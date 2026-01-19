@@ -147,7 +147,7 @@ export default function PrivacyPage() {
               If you have questions about this privacy policy or your data, please contact us at:
             </p>
             <p className="text-muted-foreground">
-              <strong>Email:</strong> privacy@splinefitness.com
+              <strong>Email:</strong> baogorek@gmail.com
             </p>
           </section>
         </div>
