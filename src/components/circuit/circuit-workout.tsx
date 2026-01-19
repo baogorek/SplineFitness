@@ -18,6 +18,7 @@ import { ComboTimer } from "./combo-timer"
 import { RoundTimer } from "./round-timer"
 import { LoadInputModal } from "./load-input-modal"
 import { RoundSummary } from "./round-summary"
+import { useAuth } from "@/components/auth-provider"
 
 type Phase = "ready" | "timing" | "input" | "round-complete" | "workout-complete"
 
@@ -33,7 +34,10 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [rounds, setRounds] = useState<CircuitRoundData[]>([])
   const [currentRoundMetrics, setCurrentRoundMetrics] = useState<ComboLoadMetrics[]>([])
   const [testMode, setTestMode] = useState(false)
+  const [savedToHistory, setSavedToHistory] = useState(false)
   const savingRef = useRef(false)
+
+  const { signInWithGoogle } = useAuth()
 
   const workout = circuitWorkouts[activeWorkout]
   const currentCombo = workout.combos[currentComboIndex]
@@ -143,7 +147,8 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       completedAt: new Date().toISOString(),
       rounds: rounds,
     }
-    await saveWorkoutSession(session)
+    const result = await saveWorkoutSession(session)
+    setSavedToHistory(result !== null)
     setPhase("workout-complete")
   }, [workout.id, activeWorkout, rounds])
 
@@ -184,9 +189,25 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
             </div>
           </div>
 
-          <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-            <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-          </div>
+          {savedToHistory ? (
+            <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
+              <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
+              <p className="text-sm text-amber-600 font-medium">
+                Sign in to save your workouts and track progress over time
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={signInWithGoogle}
+                className="mt-3"
+              >
+                Sign in with Google
+              </Button>
+            </div>
+          )}
 
           <button
             onClick={onModeChange}

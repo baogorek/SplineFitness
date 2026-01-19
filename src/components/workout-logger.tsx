@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Dumbbell, Timer, LogOut, Calendar, UserPlus, BookOpen } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,15 +16,22 @@ import { useAuth } from "./auth-provider"
 type AppMode = WorkoutMode | "history" | "booking"
 
 function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, signInWithGoogle } = useAuth()
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="absolute top-4 right-4">
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign out
-        </Button>
+        {user ? (
+          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign out
+          </Button>
+        ) : (
+          <Button variant="default" size="sm" onClick={signInWithGoogle} className="gap-2">
+            <LogIn className="h-4 w-4" />
+            Sign in to save workouts
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col items-center mb-2">
@@ -32,7 +39,9 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
         <p className="text-sm text-muted-foreground mt-1">Select workout type</p>
       </div>
 
-      <p className="text-xs text-muted-foreground mb-6">{user?.email}</p>
+      <p className="text-xs text-muted-foreground mb-6">
+        {user ? user.email : "Guest mode - workouts won't be saved"}
+      </p>
 
       <div className="grid gap-4 w-full max-w-md">
         <Card

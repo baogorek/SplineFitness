@@ -1,27 +1,23 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { WorkoutLogger } from "@/components/workout-logger"
-import { LandingPage } from "@/components/landing-page"
 import { useAuth } from "@/components/auth-provider"
-import { BlogPostMeta } from "@/types/blog"
 
-interface HomeClientProps {
-  posts: BlogPostMeta[]
-}
+export function HomeClient() {
+  const { loading } = useAuth()
+  const [mounted, setMounted] = useState(false)
 
-export function HomeClient({ posts }: HomeClientProps) {
-  const { user, loading } = useAuth()
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-muted-foreground">Loading...</div>
       </main>
     )
-  }
-
-  if (!user) {
-    return <LandingPage posts={posts} />
   }
 
   return (
