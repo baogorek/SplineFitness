@@ -1,9 +1,10 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Circle, Play } from "lucide-react"
-import { Combo, ComboLoadMetrics } from "@/types/workout"
+import { CheckCircle2, Circle, Play, Clock } from "lucide-react"
+import { Combo, ExerciseSetting, ComboCompletionResult } from "@/types/workout"
 import { cn } from "@/lib/utils"
 
 interface ComboCardProps {
@@ -11,7 +12,8 @@ interface ComboCardProps {
   index: number
   isActive: boolean
   isCompleted: boolean
-  loadMetrics?: ComboLoadMetrics
+  exerciseSettings?: Record<string, ExerciseSetting>
+  completionResult?: ComboCompletionResult
   onClick?: () => void
 }
 
@@ -20,9 +22,21 @@ export function ComboCard({
   index,
   isActive,
   isCompleted,
-  loadMetrics,
+  exerciseSettings,
+  completionResult,
   onClick,
 }: ComboCardProps) {
+  const totalDuration = useMemo(() => {
+    return combo.subExercises.reduce((sum, sub) => {
+      return sum + (exerciseSettings?.[sub.id]?.durationSeconds || 60)
+    }, 0)
+  }, [combo.subExercises, exerciseSettings])
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return secs > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${mins}:00`
+  }
   return (
     <Card
       className={cn(
@@ -57,16 +71,24 @@ export function ComboCard({
               {combo.category}
             </Badge>
           </div>
-          {isCompleted && loadMetrics && (
-            <span className="text-xs text-muted-foreground">
-              Avg:{" "}
-              {Math.round(
-                Object.values(loadMetrics.subExerciseLoads).reduce((a, b) => a + b, 0) /
-                  Object.values(loadMetrics.subExerciseLoads).length
-              )}
-              %
+          <div className="flex items-center gap-2">
+            {isCompleted && completionResult && (
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  completionResult.completedWithoutStopping
+                    ? "text-green-500"
+                    : "text-amber-500"
+                )}
+              >
+                {completionResult.completedWithoutStopping ? "Complete" : "Stopped"}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {formatDuration(totalDuration)}
             </span>
-          )}
+          </div>
         </div>
       </CardHeader>
 
@@ -86,7 +108,7 @@ export function ComboCard({
               />
               <span
                 className={cn(
-                  "text-sm",
+                  "text-sm flex-1",
                   isCompleted
                     ? "text-muted-foreground"
                     : isActive
@@ -96,9 +118,9 @@ export function ComboCard({
               >
                 {sub.name}
               </span>
-              {isCompleted && loadMetrics && (
-                <span className="ml-auto text-xs text-muted-foreground font-mono">
-                  {loadMetrics.subExerciseLoads[sub.id] ?? 0}%
+              {exerciseSettings?.[sub.id] && exerciseSettings[sub.id].durationSeconds !== 60 && (
+                <span className="text-xs text-muted-foreground font-mono">
+                  {exerciseSettings[sub.id].durationSeconds}s
                 </span>
               )}
             </div>

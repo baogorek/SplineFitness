@@ -1,41 +1,68 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { Activity, ArrowLeft, Volume2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
   CircuitRoundData,
-  ComboLoadMetrics,
+  ComboCompletionResult,
   CircuitWorkoutSession,
+  ExerciseSetting,
+  ExerciseVariation,
+  WeakLinkEntry,
+  WeakLinkPractice,
+  ExercisePreference,
 } from "@/types/workout"
 import { circuitWorkouts } from "@/data/circuit-workouts"
 import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
-import { saveWorkoutSession } from "@/lib/storage"
+import {
+  saveWorkoutSession,
+  getExercisePreferences,
+  saveBulkExercisePreferences,
+} from "@/lib/storage"
 import { ComboCard } from "./combo-card"
 import { ComboTimer } from "./combo-timer"
 import { RoundTimer } from "./round-timer"
-import { LoadInputModal } from "./load-input-modal"
 import { RoundSummary } from "./round-summary"
 import { useAuth } from "@/components/auth-provider"
+import { CircuitSetup } from "./circuit-setup"
+import { ComboCompletionModal } from "./combo-completion-modal"
+import { WeakLinkPracticeModal } from "./weak-link-practice-modal"
+import { WeakLinkTimer } from "./weak-link-timer"
 
-type Phase = "ready" | "timing" | "input" | "round-complete" | "workout-complete"
+type Phase =
+  | "setup"
+  | "ready"
+  | "timing"
+  | "input"
+  | "round-complete"
+  | "weak-link-select"
+  | "weak-link-practice"
+  | "workout-complete"
 
 interface CircuitWorkoutProps {
   onModeChange: () => void
 }
 
 export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
+  const [phase, setPhase] = useState<Phase>("setup")
   const [activeWorkout, setActiveWorkout] = useState<WorkoutVariant>("A")
   const [currentRound, setCurrentRound] = useState(1)
   const [currentComboIndex, setCurrentComboIndex] = useState(0)
-  const [phase, setPhase] = useState<Phase>("ready")
   const [rounds, setRounds] = useState<CircuitRoundData[]>([])
-  const [currentRoundMetrics, setCurrentRoundMetrics] = useState<ComboLoadMetrics[]>([])
+  const [currentRoundResults, setCurrentRoundResults] = useState<ComboCompletionResult[]>([])
+  const [exerciseSettings, setExerciseSettings] = useState<Record<string, ExerciseSetting>>({})
+  const [savedPreferences, setSavedPreferences] = useState<Record<string, ExercisePreference>>({})
+  const [weakLinks, setWeakLinks] = useState<WeakLinkEntry[]>([])
+  const [weakLinkPracticeExercises, setWeakLinkPracticeExercises] = useState<WeakLinkEntry[]>([])
+  const [weakLinkPracticeDuration, setWeakLinkPracticeDuration] = useState(60)
+  const [weakLinkPracticeRecords, setWeakLinkPracticeRecords] = useState<WeakLinkPractice[]>([])
   const [testMode, setTestMode] = useState(false)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const savingRef = useRef(false)
+  const workoutStartRef = useRef<string | null>(null)
 
   const { signInWithGoogle } = useAuth()
 
@@ -45,28 +72,90 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const audio = useAudio()
 
+  useEffect(() => {
+    getExercisePreferences().then(setSavedPreferences)
+  }, [])
+
+  const currentComboDuration = useMemo(() => {
+    if (!currentCombo) return 180
+    return currentCombo.subExercises.reduce((sum, sub) => {
+      return sum + (exerciseSettings[sub.id]?.durationSeconds || 60)
+    }, 0)
+  }, [currentCombo, exerciseSettings])
+
+  // Calculate exercise end times (in seconds remaining from combo start)
+  // e.g., for 3 exercises at 60s, 45s, 30s (total 135s):
+  // exerciseEndTimes = [135, 75, 30] (seconds remaining when each exercise ends)
+  const exerciseEndTimes = useMemo(() => {
+    if (!currentCombo) return []
+    const endTimes: number[] = []
+    let remaining = currentComboDuration
+    for (const sub of currentCombo.subExercises) {
+      const duration = exerciseSettings[sub.id]?.durationSeconds || 60
+      remaining -= duration
+      endTimes.push(remaining)
+    }
+    return endTimes
+  }, [currentCombo, currentComboDuration, exerciseSettings])
+
+  // Track which exercise was last announced to avoid repeats
+  const lastAnnouncedExerciseRef = useRef<number>(-1)
+  const lastAnnouncedCueRef = useRef<string>("")
+
   const comboTimer = useTimer({
-    targetSeconds: currentCombo?.durationSeconds || 180,
-    onMinuteMark: (minute) => {
-      const maxMinutes = Math.floor((currentCombo?.durationSeconds || 180) / 60)
-      if (minute < maxMinutes) {
-        audio.playMinuteBeep()
-        if (currentCombo?.subExercises[minute]) {
-          audio.speak(currentCombo.subExercises[minute].name)
+    targetSeconds: currentComboDuration,
+    onTick: (remainingSeconds) => {
+      if (!currentCombo) return
+
+      // Find which exercise we're currently in
+      let currentExerciseIndex = 0
+      for (let i = 0; i < exerciseEndTimes.length; i++) {
+        if (remainingSeconds > exerciseEndTimes[i]) {
+          currentExerciseIndex = i
+          break
+        }
+        currentExerciseIndex = i
+      }
+
+      const currentExercise = currentCombo.subExercises[currentExerciseIndex]
+      const exerciseDuration = exerciseSettings[currentExercise?.id]?.durationSeconds || 60
+      const exerciseEndTime = exerciseEndTimes[currentExerciseIndex]
+      const secondsLeftInExercise = remainingSeconds - exerciseEndTime
+
+      // Announce exercise name at the start of each exercise
+      if (lastAnnouncedExerciseRef.current !== currentExerciseIndex) {
+        lastAnnouncedExerciseRef.current = currentExerciseIndex
+        lastAnnouncedCueRef.current = ""
+        if (currentExercise) {
+          audio.playMinuteBeep()
+          audio.speak(currentExercise.name)
         }
       }
-    },
-    onTick: (remainingSeconds) => {
-      const secondsIntoMinute = remainingSeconds % 60
-      if (secondsIntoMinute === 30) {
-        audio.speak("30 seconds left")
-      } else if (secondsIntoMinute >= 1 && secondsIntoMinute <= 5) {
+
+      // Audio cues based on exercise duration and time remaining
+      const cueKey = `${currentExerciseIndex}-${secondsLeftInExercise}`
+
+      // 30 seconds warning (only for exercises >= 60s)
+      if (exerciseDuration >= 60 && secondsLeftInExercise === 30 && lastAnnouncedCueRef.current !== cueKey) {
+        lastAnnouncedCueRef.current = cueKey
+        audio.speak("30 seconds")
+      }
+      // 15 seconds warning (only for exercises >= 45s)
+      else if (exerciseDuration >= 45 && secondsLeftInExercise === 15 && lastAnnouncedCueRef.current !== cueKey) {
+        lastAnnouncedCueRef.current = cueKey
+        audio.speak("15 seconds")
+      }
+      // 5-4-3-2-1 countdown
+      else if (secondsLeftInExercise >= 1 && secondsLeftInExercise <= 5 && lastAnnouncedCueRef.current !== cueKey) {
+        lastAnnouncedCueRef.current = cueKey
         const countdownWords = ["one", "two", "three", "four", "five"]
-        audio.speak(countdownWords[secondsIntoMinute - 1])
+        audio.speak(countdownWords[secondsLeftInExercise - 1])
       }
     },
     onComplete: () => {
       audio.playCompleteSound()
+      lastAnnouncedExerciseRef.current = -1
+      lastAnnouncedCueRef.current = ""
       setPhase("input")
     },
     speedMultiplier,
@@ -79,33 +168,60 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     audio.speak("Jump Squats")
   }
 
-  const handleWorkoutChange = (variant: WorkoutVariant) => {
-    if (phase === "ready" && currentComboIndex === 0 && rounds.length === 0) {
+  const handleSetupComplete = useCallback(
+    (variant: WorkoutVariant, settings: Record<string, ExerciseSetting>) => {
       setActiveWorkout(variant)
-    }
-  }
+      setExerciseSettings(settings)
+      workoutStartRef.current = new Date().toISOString()
+      setPhase("ready")
+    },
+    []
+  )
 
   const handleStartCombo = useCallback(() => {
     setPhase("timing")
-    if (currentCombo?.subExercises[0]) {
-      audio.speak(currentCombo.subExercises[0].name)
-    }
+    // Reset audio tracking refs for new combo
+    lastAnnouncedExerciseRef.current = -1
+    lastAnnouncedCueRef.current = ""
     comboTimer.start()
     if (!roundTimer.isRunning) {
       roundTimer.start()
     }
-  }, [comboTimer, roundTimer, currentCombo, audio])
+    // First exercise announcement happens in onTick
+  }, [comboTimer, roundTimer])
 
-  const handleSaveLoad = useCallback(
-    (loads: Record<string, number>) => {
-      const metric: ComboLoadMetrics = {
-        comboId: currentCombo.id,
-        round: currentRound,
-        subExerciseLoads: loads,
+  const handleSaveComboResult = useCallback(
+    (result: ComboCompletionResult, savePreferences: boolean) => {
+      const updatedResults = [...currentRoundResults, result]
+      setCurrentRoundResults(updatedResults)
+
+      if (!result.completedWithoutStopping && result.weakLinkExerciseId) {
+        const exercise = currentCombo.subExercises.find(
+          (s) => s.id === result.weakLinkExerciseId
+        )
+        if (exercise) {
+          setWeakLinks((prev) => [
+            ...prev,
+            {
+              exerciseId: exercise.id,
+              exerciseName: exercise.name,
+              comboId: currentCombo.id,
+              round: currentRound,
+            },
+          ])
+        }
       }
 
-      const updatedMetrics = [...currentRoundMetrics, metric]
-      setCurrentRoundMetrics(updatedMetrics)
+      if (savePreferences) {
+        const variationSettings: Record<string, ExerciseSetting> = {}
+        Object.entries(result.exerciseVariations).forEach(([exerciseId, variation]) => {
+          variationSettings[exerciseId] = {
+            durationSeconds: exerciseSettings[exerciseId]?.durationSeconds || 60,
+            variation,
+          }
+        })
+        saveBulkExercisePreferences(variationSettings)
+      }
 
       comboTimer.reset()
 
@@ -117,52 +233,135 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         const roundData: CircuitRoundData = {
           round: currentRound,
           totalTimeSeconds: roundTimer.elapsedSeconds,
-          comboMetrics: updatedMetrics,
+          comboResults: updatedResults,
           completedAt: new Date().toISOString(),
         }
         setRounds((prev) => [...prev, roundData])
         setPhase("round-complete")
       }
     },
-    [currentCombo, currentComboIndex, currentRound, currentRoundMetrics, workout.combos.length, comboTimer, roundTimer]
+    [
+      currentCombo,
+      currentComboIndex,
+      currentRound,
+      currentRoundResults,
+      workout.combos.length,
+      comboTimer,
+      roundTimer,
+      exerciseSettings,
+    ]
   )
 
   const handleStartNextRound = useCallback(() => {
     setCurrentRound((prev) => prev + 1)
     setCurrentComboIndex(0)
-    setCurrentRoundMetrics([])
+    setCurrentRoundResults([])
     roundTimer.reset()
     setPhase("ready")
   }, [roundTimer])
 
-  const handleFinishWorkout = useCallback(async () => {
-    if (savingRef.current) return
-    savingRef.current = true
-
-    const session: CircuitWorkoutSession = {
-      mode: "circuit",
-      workoutId: workout.id,
-      variant: activeWorkout,
-      startedAt: new Date(Date.now() - rounds.reduce((acc, r) => acc + r.totalTimeSeconds * 1000, 0)).toISOString(),
-      completedAt: new Date().toISOString(),
-      rounds: rounds,
+  const handleFinishRound = useCallback(() => {
+    if (weakLinks.length > 0) {
+      setPhase("weak-link-select")
+    } else {
+      handleFinishWorkout()
     }
-    const result = await saveWorkoutSession(session)
-    setSavedToHistory(result !== null)
-    setPhase("workout-complete")
-  }, [workout.id, activeWorkout, rounds])
+  }, [weakLinks.length])
 
-  const completedCombos = currentRoundMetrics.length
+  const handleStartWeakLinkPractice = useCallback(
+    (exercises: WeakLinkEntry[], duration: number) => {
+      setWeakLinkPracticeExercises(exercises)
+      setWeakLinkPracticeDuration(duration)
+      setPhase("weak-link-practice")
+    },
+    []
+  )
+
+  const handleWeakLinkPracticeComplete = useCallback(
+    (records: WeakLinkPractice[]) => {
+      setWeakLinkPracticeRecords(records)
+      handleFinishWorkout(records)
+    },
+    []
+  )
+
+  const handleSkipWeakLinkPractice = useCallback(() => {
+    handleFinishWorkout()
+  }, [])
+
+  const handleFinishWorkout = useCallback(
+    async (practiceRecords?: WeakLinkPractice[]) => {
+      if (savingRef.current) return
+      savingRef.current = true
+
+      const session: CircuitWorkoutSession = {
+        mode: "circuit",
+        workoutId: workout.id,
+        variant: activeWorkout,
+        startedAt: workoutStartRef.current || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        rounds: rounds,
+        exerciseSettings,
+        weakLinkPractice: practiceRecords || weakLinkPracticeRecords,
+      }
+      const result = await saveWorkoutSession(session)
+      setSavedToHistory(result !== null)
+      setPhase("workout-complete")
+    },
+    [workout.id, activeWorkout, rounds, exerciseSettings, weakLinkPracticeRecords]
+  )
+
+  const completedCombos = currentRoundResults.length
   const totalCombos = workout.combos.length
   const progressPercent = totalCombos > 0 ? (completedCombos / totalCombos) * 100 : 0
 
+  const defaultVariations = useMemo(() => {
+    const variations: Record<string, ExerciseVariation> = {}
+    Object.entries(savedPreferences).forEach(([id, pref]) => {
+      variations[id] = pref.defaultVariation
+    })
+    Object.entries(exerciseSettings).forEach(([id, setting]) => {
+      if (setting.variation) {
+        variations[id] = setting.variation
+      }
+    })
+    return variations
+  }, [savedPreferences, exerciseSettings])
+
+  if (phase === "setup") {
+    const initialSettings: Record<string, ExerciseSetting> = {}
+    Object.entries(savedPreferences).forEach(([id, pref]) => {
+      initialSettings[id] = {
+        durationSeconds: pref.durationSeconds,
+        variation: pref.defaultVariation,
+      }
+    })
+
+    return (
+      <CircuitSetup
+        onBack={onModeChange}
+        onStart={handleSetupComplete}
+        savedSettings={initialSettings}
+      />
+    )
+  }
+
+  if (phase === "weak-link-practice") {
+    return (
+      <WeakLinkTimer
+        exercises={weakLinkPracticeExercises}
+        durationSeconds={weakLinkPracticeDuration}
+        onComplete={handleWeakLinkPracticeComplete}
+      />
+    )
+  }
+
   if (phase === "workout-complete") {
     const totalTime = rounds.reduce((acc, r) => acc + r.totalTimeSeconds, 0)
-    const avgLoad = Math.round(
-      rounds.flatMap(r => r.comboMetrics).reduce((acc, m) => {
-        const loads = Object.values(m.subExerciseLoads)
-        return acc + loads.reduce((a, b) => a + b, 0) / loads.length
-      }, 0) / rounds.flatMap(r => r.comboMetrics).length
+    const completionRate = Math.round(
+      (rounds.flatMap((r) => r.comboResults).filter((r) => r.completedWithoutStopping).length /
+        rounds.flatMap((r) => r.comboResults).length) *
+        100
     )
 
     return (
@@ -173,21 +372,50 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           </div>
           <h1 className="text-3xl font-bold text-foreground">Workout Complete!</h1>
           <p className="text-muted-foreground">
-            You completed {rounds.length} round{rounds.length !== 1 ? "s" : ""} of {workout.name}
+            You completed {rounds.length} round{rounds.length !== 1 ? "s" : ""} of{" "}
+            {workout.name}
           </p>
 
           <div className="grid grid-cols-2 gap-4 mt-6">
             <div className="rounded-lg bg-muted/50 p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Time</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                Total Time
+              </p>
               <p className="text-2xl font-mono font-bold text-foreground">
-                {Math.floor(totalTime / 60)}:{(totalTime % 60).toString().padStart(2, '0')}
+                {Math.floor(totalTime / 60)}:{(totalTime % 60).toString().padStart(2, "0")}
               </p>
             </div>
             <div className="rounded-lg bg-muted/50 p-4 text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Load</p>
-              <p className="text-2xl font-mono font-bold text-foreground">{avgLoad}%</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                Completion
+              </p>
+              <p className="text-2xl font-mono font-bold text-foreground">{completionRate}%</p>
             </div>
           </div>
+
+          {weakLinks.length > 0 && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-4 text-left">
+              <p className="text-sm font-medium text-amber-500 mb-2">Weak Links Identified</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                {[...new Set(weakLinks.map((w) => w.exerciseName))].map((name) => (
+                  <li key={name}>• {name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {weakLinkPracticeRecords.length > 0 && (
+            <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-4 text-left">
+              <p className="text-sm font-medium text-green-500 mb-2">Weak Link Practice</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                {weakLinkPracticeRecords.map((r, i) => (
+                  <li key={i}>
+                    • {r.exerciseName} ({r.practiceTimeSeconds}s)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {savedToHistory ? (
             <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
@@ -198,12 +426,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               <p className="text-sm text-amber-600 font-medium">
                 Sign in to save your workouts and track progress over time
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={signInWithGoogle}
-                className="mt-3"
-              >
+              <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
                 Sign in with Google
               </Button>
             </div>
@@ -251,7 +474,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               </button>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Round {currentRound}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                Round {currentRound}
+              </p>
               <p className="text-sm font-mono font-semibold text-foreground">
                 {completedCombos}/{totalCombos} combos
               </p>
@@ -260,28 +485,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
           <div className="flex items-center justify-between">
             <div className="flex rounded-lg bg-muted p-1">
-              <button
-                onClick={() => handleWorkoutChange("A")}
-                disabled={phase !== "ready" || currentComboIndex > 0 || rounds.length > 0}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+              <div
+                className={`px-4 py-2 text-sm font-medium rounded-md ${
                   activeWorkout === "A"
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    : "text-muted-foreground"
                 }`}
               >
-                Workout A
-              </button>
-              <button
-                onClick={() => handleWorkoutChange("B")}
-                disabled={phase !== "ready" || currentComboIndex > 0 || rounds.length > 0}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeWorkout === "B"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground disabled:opacity-50"
-                }`}
-              >
-                Workout B
-              </button>
+                Workout {activeWorkout}
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -321,7 +533,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               formattedTime={comboTimer.formattedTime}
               isRunning={comboTimer.isRunning}
               elapsedSeconds={comboTimer.elapsedSeconds}
-              targetSeconds={currentCombo.durationSeconds}
+              targetSeconds={currentComboDuration}
               onStart={phase === "ready" ? handleStartCombo : comboTimer.start}
               onPause={comboTimer.pause}
               onReset={comboTimer.reset}
@@ -344,7 +556,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                     index={originalIndex}
                     isActive={isActive && (phase === "ready" || phase === "timing")}
                     isCompleted={false}
-                    loadMetrics={undefined}
+                    exerciseSettings={exerciseSettings}
                   />
                 )
               })}
@@ -352,14 +564,28 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         </div>
       </div>
 
-      {phase === "input" && <LoadInputModal combo={currentCombo} onSave={handleSaveLoad} />}
+      {phase === "input" && (
+        <ComboCompletionModal
+          combo={currentCombo}
+          defaultVariations={defaultVariations}
+          onSave={handleSaveComboResult}
+        />
+      )}
 
       {phase === "round-complete" && rounds.length > 0 && (
         <RoundSummary
           roundData={rounds[rounds.length - 1]}
           allRounds={rounds}
           onStartNextRound={handleStartNextRound}
-          onFinishWorkout={handleFinishWorkout}
+          onFinishWorkout={handleFinishRound}
+        />
+      )}
+
+      {phase === "weak-link-select" && (
+        <WeakLinkPracticeModal
+          weakLinks={weakLinks}
+          onStartPractice={handleStartWeakLinkPractice}
+          onSkip={handleSkipWeakLinkPractice}
         />
       )}
     </div>

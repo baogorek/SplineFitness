@@ -1,11 +1,44 @@
 export type WorkoutMode = "traditional" | "circuit"
 export type WorkoutVariant = "A" | "B"
+export type ExerciseVariation = "easy" | "standard" | "advanced"
 
 // Circuit Types
 export interface SubExercise {
   id: string
   name: string
   order: number
+}
+
+export interface ExercisePreference {
+  exerciseId: string
+  durationSeconds: number
+  defaultVariation: ExerciseVariation
+}
+
+export interface ExerciseSetting {
+  durationSeconds: number
+  variation: ExerciseVariation
+}
+
+export interface ComboCompletionResult {
+  comboId: string
+  completedWithoutStopping: boolean
+  weakLinkExerciseId?: string
+  exerciseVariations: Record<string, ExerciseVariation>
+}
+
+export interface WeakLinkEntry {
+  exerciseId: string
+  exerciseName: string
+  comboId: string
+  round: number
+}
+
+export interface WeakLinkPractice {
+  exerciseId: string
+  exerciseName: string
+  practiceTimeSeconds: number
+  practicedAt: string
 }
 
 export interface Combo {
@@ -24,7 +57,7 @@ export interface ComboLoadMetrics {
 export interface CircuitRoundData {
   round: number
   totalTimeSeconds: number
-  comboMetrics: ComboLoadMetrics[]
+  comboResults: ComboCompletionResult[]
   completedAt?: string
 }
 
@@ -42,6 +75,8 @@ export interface CircuitWorkoutSession {
   startedAt: string
   completedAt?: string
   rounds: CircuitRoundData[]
+  exerciseSettings?: Record<string, ExerciseSetting>
+  weakLinkPractice?: WeakLinkPractice[]
 }
 
 // Traditional Types

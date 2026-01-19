@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Play, Flag } from "lucide-react"
+import { CheckCircle2, Play, Flag, AlertTriangle } from "lucide-react"
 import { CircuitRoundData } from "@/types/workout"
 import { formatTime } from "@/lib/storage"
 
@@ -20,14 +20,15 @@ export function RoundSummary({
   onStartNextRound,
   onFinishWorkout,
 }: RoundSummaryProps) {
-  const avgLoad = Math.round(
-    roundData.comboMetrics.reduce((acc, combo) => {
-      const comboAvg =
-        Object.values(combo.subExerciseLoads).reduce((a, b) => a + b, 0) /
-        Object.values(combo.subExerciseLoads).length
-      return acc + comboAvg
-    }, 0) / roundData.comboMetrics.length
-  )
+  const completedCount = roundData.comboResults.filter(
+    (r) => r.completedWithoutStopping
+  ).length
+  const totalCount = roundData.comboResults.length
+  const completionRate = Math.round((completedCount / totalCount) * 100)
+
+  const weakLinks = roundData.comboResults
+    .filter((r) => !r.completedWithoutStopping && r.weakLinkExerciseId)
+    .map((r) => r.weakLinkExerciseId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -55,11 +56,25 @@ export function RoundSummary({
             </div>
             <div className="rounded-lg bg-muted/50 p-4 text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                Avg Load
+                Completion
               </p>
-              <p className="text-2xl font-mono font-bold text-foreground">{avgLoad}%</p>
+              <p className="text-2xl font-mono font-bold text-foreground">
+                {completedCount}/{totalCount}
+              </p>
             </div>
           </div>
+
+          {weakLinks.length > 0 && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+              <div className="flex items-center gap-2 text-amber-500 mb-1">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">Weak Links This Round</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {weakLinks.length} exercise{weakLinks.length !== 1 ? "s" : ""} identified for practice
+              </p>
+            </div>
+          )}
 
           {allRounds.length > 1 && (
             <div className="space-y-2">
@@ -67,19 +82,30 @@ export function RoundSummary({
                 All Rounds
               </p>
               <div className="space-y-2">
-                {allRounds.map((round, index) => (
-                  <div
-                    key={round.round}
-                    className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2"
-                  >
-                    <Badge variant="secondary" className="text-xs">
-                      Round {round.round}
-                    </Badge>
-                    <span className="font-mono text-sm text-foreground">
-                      {formatTime(round.totalTimeSeconds)}
-                    </span>
-                  </div>
-                ))}
+                {allRounds.map((round) => {
+                  const roundCompleted = round.comboResults.filter(
+                    (r) => r.completedWithoutStopping
+                  ).length
+                  const roundTotal = round.comboResults.length
+                  return (
+                    <div
+                      key={round.round}
+                      className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2"
+                    >
+                      <Badge variant="secondary" className="text-xs">
+                        Round {round.round}
+                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">
+                          {roundCompleted}/{roundTotal}
+                        </span>
+                        <span className="font-mono text-sm text-foreground">
+                          {formatTime(round.totalTimeSeconds)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
