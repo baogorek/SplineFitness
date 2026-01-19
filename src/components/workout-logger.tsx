@@ -175,6 +175,16 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
           </Link>
+
+          {/* Footer links */}
+          <div className="mt-8 flex justify-center gap-6 text-xs text-slate-400">
+            <Link href="/privacy" className="hover:text-slate-600 transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-slate-600 transition-colors">
+              Terms of Service
+            </Link>
+          </div>
         </div>
       </main>
     </div>
