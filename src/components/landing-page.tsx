@@ -149,6 +149,18 @@ export function LandingPage({ posts }: LandingPageProps) {
           </div>
           <div className="flex items-center gap-6">
             <Link
+              href="/privacy"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/terms"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Terms
+            </Link>
+            <Link
               href="/blog"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
