@@ -32,9 +32,12 @@ import { ComboCompletionModal } from "./combo-completion-modal"
 import { WeakLinkPracticeModal } from "./weak-link-practice-modal"
 import { WeakLinkTimer } from "./weak-link-timer"
 
+const TRANSITION_SECONDS = 5
+
 type Phase =
   | "setup"
   | "ready"
+  | "transition"
   | "timing"
   | "input"
   | "round-complete"
@@ -61,8 +64,11 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [weakLinkPracticeRecords, setWeakLinkPracticeRecords] = useState<WeakLinkPractice[]>([])
   const [testMode, setTestMode] = useState(false)
   const [savedToHistory, setSavedToHistory] = useState(false)
+  const [transitionExerciseName, setTransitionExerciseName] = useState("")
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
+  const isFirstComboRef = useRef(true)
+  const resumeAfterTransitionRef = useRef(false)
 
   const { signInWithGoogle } = useAuth()
 
@@ -83,9 +89,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     }, 0)
   }, [currentCombo, exerciseSettings])
 
-  // Calculate exercise end times (in seconds remaining from combo start)
-  // e.g., for 3 exercises at 60s, 45s, 30s (total 135s):
-  // exerciseEndTimes = [135, 75, 30] (seconds remaining when each exercise ends)
   const exerciseEndTimes = useMemo(() => {
     if (!currentCombo) return []
     const endTimes: number[] = []
@@ -98,7 +101,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     return endTimes
   }, [currentCombo, currentComboDuration, exerciseSettings])
 
-  // Track which exercise was last announced to avoid repeats
   const lastAnnouncedExerciseRef = useRef<number>(-1)
   const lastAnnouncedCueRef = useRef<string>("")
 
@@ -107,7 +109,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     onTick: (remainingSeconds) => {
       if (!currentCombo) return
 
-      // Find which exercise we're currently in
       let currentExerciseIndex = 0
       for (let i = 0; i < exerciseEndTimes.length; i++) {
         if (remainingSeconds > exerciseEndTimes[i]) {
@@ -122,31 +123,37 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       const exerciseEndTime = exerciseEndTimes[currentExerciseIndex]
       const secondsLeftInExercise = remainingSeconds - exerciseEndTime
 
-      // Announce exercise name at the start of each exercise
-      if (lastAnnouncedExerciseRef.current !== currentExerciseIndex) {
+      // Detect exercise transition: pause combo timer, show transition countdown
+      if (lastAnnouncedExerciseRef.current !== currentExerciseIndex && lastAnnouncedExerciseRef.current !== -1) {
         lastAnnouncedExerciseRef.current = currentExerciseIndex
         lastAnnouncedCueRef.current = ""
+        comboTimer.pause()
+        resumeAfterTransitionRef.current = true
         if (currentExercise) {
+          setTransitionExerciseName(currentExercise.name)
           audio.playMinuteBeep()
           audio.speak(currentExercise.name)
         }
+        transitionTimer.reset()
+        transitionTimer.start()
+        setPhase("transition")
+        return
       }
 
-      // Audio cues based on exercise duration and time remaining
-      const cueKey = `${currentExerciseIndex}-${secondsLeftInExercise}`
+      // Mark first exercise as announced (no transition needed for it)
+      if (lastAnnouncedExerciseRef.current === -1) {
+        lastAnnouncedExerciseRef.current = currentExerciseIndex
+      }
 
-      // 30 seconds warning (only for exercises >= 60s)
+      // 30s / 15s warnings and 5-4-3-2-1 countdown
+      const cueKey = `${currentExerciseIndex}-${secondsLeftInExercise}`
       if (exerciseDuration >= 60 && secondsLeftInExercise === 30 && lastAnnouncedCueRef.current !== cueKey) {
         lastAnnouncedCueRef.current = cueKey
         audio.speak("30 seconds")
-      }
-      // 15 seconds warning (only for exercises >= 45s)
-      else if (exerciseDuration >= 45 && secondsLeftInExercise === 15 && lastAnnouncedCueRef.current !== cueKey) {
+      } else if (exerciseDuration >= 45 && secondsLeftInExercise === 15 && lastAnnouncedCueRef.current !== cueKey) {
         lastAnnouncedCueRef.current = cueKey
         audio.speak("15 seconds")
-      }
-      // 5-4-3-2-1 countdown
-      else if (secondsLeftInExercise >= 1 && secondsLeftInExercise <= 5 && lastAnnouncedCueRef.current !== cueKey) {
+      } else if (secondsLeftInExercise >= 1 && secondsLeftInExercise <= 5 && lastAnnouncedCueRef.current !== cueKey) {
         lastAnnouncedCueRef.current = cueKey
         const countdownWords = ["one", "two", "three", "four", "five"]
         audio.speak(countdownWords[secondsLeftInExercise - 1])
@@ -161,11 +168,41 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     speedMultiplier,
   })
 
+  const transitionTimer = useTimer({
+    targetSeconds: TRANSITION_SECONDS,
+    onTick: (remainingSeconds) => {
+      if (remainingSeconds >= 1 && remainingSeconds <= 3) {
+        const cueKey = `transition-${remainingSeconds}`
+        if (lastAnnouncedCueRef.current !== cueKey) {
+          if (!window.speechSynthesis.speaking) {
+            lastAnnouncedCueRef.current = cueKey
+            const countdownWords = ["one", "two", "three"]
+            audio.speak(countdownWords[remainingSeconds - 1])
+          }
+        }
+      }
+    },
+    onComplete: () => {
+      lastAnnouncedCueRef.current = ""
+      setPhase("timing")
+      if (resumeAfterTransitionRef.current) {
+        comboTimer.start()
+      } else {
+        isFirstComboRef.current = false
+        comboTimer.start()
+        if (!roundTimer.isRunning) {
+          roundTimer.start()
+        }
+      }
+    },
+    speedMultiplier,
+  })
+
   const roundTimer = useTimer({ countUp: true, speedMultiplier })
 
   const handleTestAudio = () => {
     audio.playMinuteBeep()
-    audio.speak("Jump Squats")
+    audio.speak("Alt. Single Leg Box Squats")
   }
 
   const handleSetupComplete = useCallback(
@@ -179,16 +216,19 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   )
 
   const handleStartCombo = useCallback(() => {
-    setPhase("timing")
-    // Reset audio tracking refs for new combo
     lastAnnouncedExerciseRef.current = -1
     lastAnnouncedCueRef.current = ""
-    comboTimer.start()
-    if (!roundTimer.isRunning) {
-      roundTimer.start()
+    resumeAfterTransitionRef.current = false
+    const firstExercise = currentCombo?.subExercises[0]
+    if (firstExercise) {
+      setTransitionExerciseName(firstExercise.name)
+      audio.playMinuteBeep()
+      audio.speak(firstExercise.name)
     }
-    // First exercise announcement happens in onTick
-  }, [comboTimer, roundTimer])
+    transitionTimer.reset()
+    transitionTimer.start()
+    setPhase("transition")
+  }, [transitionTimer, currentCombo, audio])
 
   const handleSaveComboResult = useCallback(
     (result: ComboCompletionResult, savePreferences: boolean) => {
@@ -528,6 +568,18 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
             round={currentRound}
           />
 
+          {phase === "transition" && (
+            <div className="flex flex-col items-center gap-4 py-8">
+              <p className="text-sm text-muted-foreground uppercase tracking-wider">Get Ready</p>
+              <span className="text-6xl font-mono font-bold text-foreground tabular-nums">
+                {transitionTimer.formattedTime}
+              </span>
+              <p className="text-lg font-semibold text-primary">
+                {transitionExerciseName}
+              </p>
+            </div>
+          )}
+
           {(phase === "timing" || phase === "ready") && (
             <ComboTimer
               formattedTime={comboTimer.formattedTime}
@@ -554,7 +606,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                     key={combo.id}
                     combo={combo}
                     index={originalIndex}
-                    isActive={isActive && (phase === "ready" || phase === "timing")}
+                    isActive={isActive && (phase === "ready" || phase === "timing" || phase === "transition")}
                     isCompleted={false}
                     exerciseSettings={exerciseSettings}
                   />
