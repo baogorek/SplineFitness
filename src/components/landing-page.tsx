@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { Timer, Dumbbell, Calendar, UserPlus, ArrowRight, GraduationCap } from "lucide-react"
+import { Timer, Dumbbell, Calendar, UserPlus, ArrowRight, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
@@ -31,10 +31,10 @@ const features = [
     description: "Book personal training sessions with experienced coaches",
   },
   {
-    icon: GraduationCap,
-    title: "NSCA-CPT Practice",
-    description: "Practice questions to master fitness science and certification prep",
-    href: "/practice",
+    icon: BookOpen,
+    title: "Exercise Library",
+    description: "Browse all circuit training exercises and hear their names spoken aloud",
+    href: "/exercises",
   },
 ]
 

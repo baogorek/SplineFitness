@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, ChevronRight } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -159,22 +159,39 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             ))}
           </div>
 
-          {/* Blog link */}
-          <Link
-            href="/blog"
-            className="group mt-4 flex items-center justify-between rounded-xl bg-white border border-slate-200 p-4 transition-all duration-200 hover:border-slate-300 hover:shadow-md"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100">
-                <BookOpen className="h-5 w-5 text-slate-500" />
+          {/* Secondary links */}
+          <div className="mt-4 space-y-3">
+            <Link
+              href="/exercises"
+              className="group flex items-center justify-between rounded-xl bg-white border border-slate-200 p-4 transition-all duration-200 hover:border-slate-300 hover:shadow-md"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100">
+                  <Volume2 className="h-5 w-5 text-slate-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Exercise Library</h3>
+                  <p className="text-xs text-slate-400">Browse exercises & hear their names</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Blog</h3>
-                <p className="text-xs text-slate-400">Fitness tips & training insights</p>
+              <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
+            </Link>
+            <Link
+              href="/blog"
+              className="group flex items-center justify-between rounded-xl bg-white border border-slate-200 p-4 transition-all duration-200 hover:border-slate-300 hover:shadow-md"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100">
+                  <BookOpen className="h-5 w-5 text-slate-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-700 group-hover:text-slate-900 transition-colors">Blog</h3>
+                  <p className="text-xs text-slate-400">Fitness tips & training insights</p>
+                </div>
               </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
-          </Link>
+              <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
+            </Link>
+          </div>
 
           {/* Footer links */}
           <div className="mt-8 flex justify-center gap-6 text-xs text-slate-400">

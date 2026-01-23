@@ -50,7 +50,11 @@ export function useAudio() {
   const speak = useCallback((text: string) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
+      const spoken = text
+        .replace(/^Alt\.\s/g, "Alternating ")
+        .replace(/\bBW\b/g, "Bodyweight")
+        .replace(/\b1 1\/2\b/g, "One and a Half")
+      const utterance = new SpeechSynthesisUtterance(spoken)
       utterance.rate = 0.9
       window.speechSynthesis.speak(utterance)
     }
