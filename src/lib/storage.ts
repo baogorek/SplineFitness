@@ -2,6 +2,7 @@ import {
   WorkoutSession,
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
+  CircuitSessionProgress,
   ExercisePreference,
   ExerciseVariation,
   ExerciseSetting,
@@ -10,6 +11,7 @@ import { supabase } from "./supabase"
 
 const STORAGE_KEYS = {
   CURRENT_SESSION: "strength-tracker:current-session",
+  CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
 } as const
 
@@ -111,6 +113,22 @@ export function clearCurrentSession(): void {
   } catch (error) {
     console.warn("Error clearing current session:", error)
   }
+}
+
+export function saveCircuitProgress(progress: CircuitSessionProgress): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(STORAGE_KEYS.CIRCUIT_PROGRESS, JSON.stringify(progress))
+}
+
+export function getCircuitProgress(): CircuitSessionProgress | null {
+  if (typeof window === "undefined") return null
+  const data = localStorage.getItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+  return data ? JSON.parse(data) : null
+}
+
+export function clearCircuitProgress(): void {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
 }
 
 export function formatTime(seconds: number): string {
