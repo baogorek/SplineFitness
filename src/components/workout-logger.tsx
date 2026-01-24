@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -11,6 +11,7 @@ import { TraditionalWorkout } from "./traditional/traditional-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
+import { getCircuitProgress } from "@/lib/storage"
 
 type AppMode = WorkoutMode | "history" | "booking"
 
@@ -210,6 +211,12 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
 
 export function WorkoutLogger() {
   const [mode, setMode] = useState<AppMode | null>(null)
+
+  useEffect(() => {
+    if (getCircuitProgress()) {
+      setMode("circuit")
+    }
+  }, [])
 
   const handleModeChange = () => {
     setMode(null)

@@ -8,6 +8,7 @@ import {
   CircuitRoundData,
   ComboCompletionResult,
   CircuitWorkoutSession,
+  CircuitSessionProgress,
   ExerciseSetting,
   ExerciseVariation,
   WeakLinkEntry,
@@ -21,6 +22,9 @@ import {
   saveWorkoutSession,
   getExercisePreferences,
   saveBulkExercisePreferences,
+  saveCircuitProgress,
+  getCircuitProgress,
+  clearCircuitProgress,
 } from "@/lib/storage"
 import { ComboCard } from "./combo-card"
 import { ComboTimer } from "./combo-timer"
@@ -36,6 +40,7 @@ const TRANSITION_SECONDS = 5
 
 type Phase =
   | "setup"
+  | "resume-prompt"
   | "ready"
   | "transition"
   | "timing"
@@ -78,8 +83,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const audio = useAudio()
 
+  const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(null)
+
   useEffect(() => {
     getExercisePreferences().then(setSavedPreferences)
+    const saved = getCircuitProgress()
+    if (saved) {
+      setPendingResume(saved)
+      setPhase("resume-prompt")
+    }
   }, [])
 
   const currentComboDuration = useMemo(() => {
@@ -204,6 +216,41 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     audio.playMinuteBeep()
     audio.speak("Alt. Single Leg Box Squats")
   }
+
+  useEffect(() => {
+    if (phase === "setup" || phase === "resume-prompt" || phase === "workout-complete") return
+    saveCircuitProgress({
+      variant: activeWorkout,
+      exerciseSettings,
+      currentRound,
+      currentComboIndex,
+      rounds,
+      currentRoundResults,
+      weakLinks,
+      startedAt: workoutStartRef.current || new Date().toISOString(),
+      savedAt: new Date().toISOString(),
+    })
+  }, [phase, activeWorkout, exerciseSettings, currentRound, currentComboIndex, rounds, currentRoundResults, weakLinks])
+
+  const handleResume = useCallback(() => {
+    if (!pendingResume) return
+    setActiveWorkout(pendingResume.variant)
+    setExerciseSettings(pendingResume.exerciseSettings)
+    setCurrentRound(pendingResume.currentRound)
+    setCurrentComboIndex(pendingResume.currentComboIndex)
+    setRounds(pendingResume.rounds)
+    setCurrentRoundResults(pendingResume.currentRoundResults)
+    setWeakLinks(pendingResume.weakLinks)
+    workoutStartRef.current = pendingResume.startedAt
+    setPendingResume(null)
+    setPhase("ready")
+  }, [pendingResume])
+
+  const handleDiscardResume = useCallback(() => {
+    clearCircuitProgress()
+    setPendingResume(null)
+    setPhase("setup")
+  }, [])
 
   const handleSetupComplete = useCallback(
     (variant: WorkoutVariant, settings: Record<string, ExerciseSetting>) => {
@@ -344,6 +391,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         exerciseSettings,
         weakLinkPractice: practiceRecords || weakLinkPracticeRecords,
       }
+      clearCircuitProgress()
       const result = await saveWorkoutSession(session)
       setSavedToHistory(result !== null)
       setPhase("workout-complete")
@@ -383,6 +431,52 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         onStart={handleSetupComplete}
         savedSettings={initialSettings}
       />
+    )
+  }
+
+  if (phase === "resume-prompt" && pendingResume) {
+    const completedCombosInRound = pendingResume.currentRoundResults.length
+    const completedRounds = pendingResume.rounds.length
+    const savedTime = new Date(pendingResume.savedAt)
+    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
+    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="h-20 w-20 rounded-full bg-amber-600 flex items-center justify-center mx-auto">
+            <Activity className="h-10 w-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Resume Workout?</h1>
+          <p className="text-muted-foreground">
+            You have an in-progress Workout {pendingResume.variant} session from {timeAgoText}.
+          </p>
+          <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
+            <p className="text-sm text-foreground">
+              Round {pendingResume.currentRound} — {completedCombosInRound}/6 combos done
+            </p>
+            {completedRounds > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {completedRounds} round{completedRounds !== 1 ? "s" : ""} completed
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-3 mt-6">
+            <button
+              onClick={handleResume}
+              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors w-full"
+            >
+              Resume
+            </button>
+            <button
+              onClick={handleDiscardResume}
+              className="px-6 py-3 bg-muted text-muted-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors w-full"
+            >
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 

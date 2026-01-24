@@ -79,6 +79,18 @@ export interface CircuitWorkoutSession {
   weakLinkPractice?: WeakLinkPractice[]
 }
 
+export interface CircuitSessionProgress {
+  variant: WorkoutVariant
+  exerciseSettings: Record<string, ExerciseSetting>
+  currentRound: number
+  currentComboIndex: number
+  rounds: CircuitRoundData[]
+  currentRoundResults: ComboCompletionResult[]
+  weakLinks: WeakLinkEntry[]
+  startedAt: string
+  savedAt: string
+}
+
 // Traditional Types
 export interface TraditionalSetData {
   id: number
