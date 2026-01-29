@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
 import { useAuth } from "./auth-provider"
 import { BlogPostMeta } from "@/types/blog"
+import { FEATURES } from "@/lib/feature-flags"
 
 const features = [
   {
@@ -70,15 +71,31 @@ export function LandingPage({ posts }: LandingPageProps) {
               Log your sessions, track your progress, and stay consistent.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button onClick={signInWithGoogle} disabled={loading} size="lg" className="gap-2">
-                Sign in to save workouts
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Link href="/">
-                <Button variant="outline" size="lg">
-                  Continue as guest
-                </Button>
-              </Link>
+              {FEATURES.AUTH_ENABLED ? (
+                <>
+                  <Button onClick={signInWithGoogle} disabled={loading} size="lg" className="gap-2">
+                    Sign in to save workouts
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <Link href="/">
+                    <Button variant="outline" size="lg">
+                      Continue as guest
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/">
+                    <Button size="lg" className="gap-2">
+                      Get Started
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Sign in coming soon
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </section>
