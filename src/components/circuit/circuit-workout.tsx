@@ -31,6 +31,7 @@ import { ComboTimer } from "./combo-timer"
 import { RoundTimer } from "./round-timer"
 import { RoundSummary } from "./round-summary"
 import { useAuth } from "@/components/auth-provider"
+import { FEATURES } from "@/lib/feature-flags"
 import { CircuitSetup } from "./circuit-setup"
 import { ComboCompletionModal } from "./combo-completion-modal"
 import { WeakLinkPracticeModal } from "./weak-link-practice-modal"
@@ -70,6 +71,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [testMode, setTestMode] = useState(false)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [transitionExerciseName, setTransitionExerciseName] = useState("")
+  const [completedSessionData, setCompletedSessionData] = useState<CircuitWorkoutSession | null>(null)
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
   const isFirstComboRef = useRef(true)
@@ -347,35 +349,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     setPhase("ready")
   }, [roundTimer])
 
-  const handleFinishRound = useCallback(() => {
-    if (weakLinks.length > 0) {
-      setPhase("weak-link-select")
-    } else {
-      handleFinishWorkout()
-    }
-  }, [weakLinks.length])
-
-  const handleStartWeakLinkPractice = useCallback(
-    (exercises: WeakLinkEntry[], duration: number) => {
-      setWeakLinkPracticeExercises(exercises)
-      setWeakLinkPracticeDuration(duration)
-      setPhase("weak-link-practice")
-    },
-    []
-  )
-
-  const handleWeakLinkPracticeComplete = useCallback(
-    (records: WeakLinkPractice[]) => {
-      setWeakLinkPracticeRecords(records)
-      handleFinishWorkout(records)
-    },
-    []
-  )
-
-  const handleSkipWeakLinkPractice = useCallback(() => {
-    handleFinishWorkout()
-  }, [])
-
   const handleFinishWorkout = useCallback(
     async (practiceRecords?: WeakLinkPractice[]) => {
       if (savingRef.current) return
@@ -392,12 +365,45 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         weakLinkPractice: practiceRecords || weakLinkPracticeRecords,
       }
       clearCircuitProgress()
-      const result = await saveWorkoutSession(session)
-      setSavedToHistory(result !== null)
+      setCompletedSessionData(session)
+
+      if (FEATURES.AUTH_ENABLED) {
+        const result = await saveWorkoutSession(session)
+        setSavedToHistory(result !== null)
+      }
       setPhase("workout-complete")
     },
     [workout.id, activeWorkout, rounds, exerciseSettings, weakLinkPracticeRecords]
   )
+
+  const handleFinishRound = useCallback(() => {
+    if (weakLinks.length > 0) {
+      setPhase("weak-link-select")
+    } else {
+      handleFinishWorkout()
+    }
+  }, [weakLinks.length, handleFinishWorkout])
+
+  const handleStartWeakLinkPractice = useCallback(
+    (exercises: WeakLinkEntry[], duration: number) => {
+      setWeakLinkPracticeExercises(exercises)
+      setWeakLinkPracticeDuration(duration)
+      setPhase("weak-link-practice")
+    },
+    []
+  )
+
+  const handleWeakLinkPracticeComplete = useCallback(
+    (records: WeakLinkPractice[]) => {
+      setWeakLinkPracticeRecords(records)
+      handleFinishWorkout(records)
+    },
+    [handleFinishWorkout]
+  )
+
+  const handleSkipWeakLinkPractice = useCallback(() => {
+    handleFinishWorkout()
+  }, [handleFinishWorkout])
 
   const completedCombos = currentRoundResults.length
   const totalCombos = workout.combos.length
@@ -551,19 +557,47 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
             </div>
           )}
 
-          {savedToHistory ? (
-            <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-              <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-            </div>
+          {FEATURES.AUTH_ENABLED ? (
+            savedToHistory ? (
+              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
+                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
+                <p className="text-sm text-amber-600 font-medium">
+                  Sign in to save your workouts and track progress over time
+                </p>
+                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
+                  Sign in with Google
+                </Button>
+              </div>
+            )
           ) : (
-            <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
-              <p className="text-sm text-amber-600 font-medium">
-                Sign in to save your workouts and track progress over time
-              </p>
-              <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                Sign in with Google
-              </Button>
-            </div>
+            <>
+              {completedSessionData && (
+                <div className="rounded-lg bg-slate-100 border border-slate-200 p-4 mt-4 text-left">
+                  <p className="text-sm font-medium text-slate-700 mb-2">Workout Data</p>
+                  <pre className="text-xs text-slate-600 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                    {JSON.stringify(completedSessionData, null, 2)}
+                  </pre>
+                </div>
+              )}
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 mt-4">
+                <p className="text-sm text-blue-700 font-medium mb-1">Help us improve!</p>
+                <p className="text-xs text-blue-600">
+                  Database saving coming soon. Please{" "}
+                  <a
+                    href="https://github.com/baogorek/SplineFitness/issues"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    file an issue on GitHub
+                  </a>{" "}
+                  with any feedback.
+                </p>
+              </div>
+            </>
           )}
 
           <button

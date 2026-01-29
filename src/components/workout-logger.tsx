@@ -12,6 +12,7 @@ import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
 import { getCircuitProgress } from "@/lib/storage"
+import { FEATURES } from "@/lib/feature-flags"
 
 type AppMode = WorkoutMode | "history" | "booking"
 
@@ -82,31 +83,35 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-end p-4 gap-4">
-        {user ? (
-          <>
-            <span className="text-sm text-slate-500 hidden sm:block">{user.email}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={signOut}
-              className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-            >
-              <LogOut className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Sign out</span>
-            </Button>
-          </>
+        {FEATURES.AUTH_ENABLED ? (
+          user ? (
+            <>
+              <span className="text-sm text-slate-500 hidden sm:block">{user.email}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={signOut}
+                className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+              >
+                <LogOut className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm text-slate-400">Guest mode (workouts won&apos;t be saved)</span>
+              <Button
+                size="sm"
+                onClick={signInWithGoogle}
+                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+              >
+                <LogIn className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sign in</span>
+              </Button>
+            </>
+          )
         ) : (
-          <>
-            <span className="text-sm text-slate-400">Guest mode (workouts won't be saved)</span>
-            <Button
-              size="sm"
-              onClick={signInWithGoogle}
-              className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
-            >
-              <LogIn className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Sign in</span>
-            </Button>
-          </>
+          <span className="text-sm text-slate-400">Sign in coming soon</span>
         )}
       </header>
 
