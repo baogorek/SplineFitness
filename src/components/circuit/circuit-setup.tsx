@@ -5,9 +5,7 @@ import { ArrowLeft, Play, Clock, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
-  CircuitWorkoutDefinition,
   ExerciseSetting,
-  ExerciseVariation,
   WorkoutVariant,
 } from "@/types/workout"
 import { circuitWorkouts } from "@/data/circuit-workouts"
@@ -18,10 +16,12 @@ interface CircuitSetupProps {
   onBack: () => void
   onStart: (
     variant: WorkoutVariant,
-    exerciseSettings: Record<string, ExerciseSetting>
+    exerciseSettings: Record<string, ExerciseSetting>,
+    exerciseChoices: Record<string, "main" | "alternative">
   ) => void
   initialVariant?: WorkoutVariant
   savedSettings?: Record<string, ExerciseSetting>
+  savedChoices?: Record<string, "main" | "alternative">
 }
 
 export function CircuitSetup({
@@ -29,10 +29,14 @@ export function CircuitSetup({
   onStart,
   initialVariant = "A",
   savedSettings,
+  savedChoices,
 }: CircuitSetupProps) {
   const [variant, setVariant] = useState<WorkoutVariant>(initialVariant)
   const [exerciseSettings, setExerciseSettings] = useState<
     Record<string, ExerciseSetting>
+  >({})
+  const [exerciseChoices, setExerciseChoices] = useState<
+    Record<string, "main" | "alternative">
   >({})
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set())
 
@@ -40,18 +44,22 @@ export function CircuitSetup({
 
   useEffect(() => {
     const allExercises: Record<string, ExerciseSetting> = {}
+    const allChoices: Record<string, "main" | "alternative"> = {}
     Object.values(circuitWorkouts).forEach((w) => {
       w.combos.forEach((combo) => {
         combo.subExercises.forEach((sub) => {
           allExercises[sub.id] = savedSettings?.[sub.id] || {
             durationSeconds: 60,
-            variation: "standard" as ExerciseVariation,
+          }
+          if (sub.alternative) {
+            allChoices[sub.id] = savedChoices?.[sub.id] || sub.defaultChoice || "main"
           }
         })
       })
     })
     setExerciseSettings(allExercises)
-  }, [savedSettings])
+    setExerciseChoices(allChoices)
+  }, [savedSettings, savedChoices])
 
   const handleDurationChange = (exerciseId: string, duration: number) => {
     setExerciseSettings((prev) => ({
@@ -201,21 +209,52 @@ export function CircuitSetup({
                 {isExpanded && (
                   <CardContent className="pt-0 pb-3">
                     <div className="space-y-2 pt-2 border-t border-border">
-                      {combo.subExercises.map((sub, subIndex) => (
-                        <div
-                          key={sub.id}
-                          className="flex items-center justify-between py-1"
-                        >
-                          <span className="text-sm text-foreground">
-                            {subIndex + 1}. {sub.name}
-                          </span>
-                          <DurationSelector
-                            value={exerciseSettings[sub.id]?.durationSeconds || 60}
-                            onChange={(v) => handleDurationChange(sub.id, v)}
-                            compact
-                          />
-                        </div>
-                      ))}
+                      {combo.subExercises.map((sub, subIndex) => {
+                        const hasAlt = !!sub.alternative
+                        const choice = exerciseChoices[sub.id]
+                        const displayName = hasAlt && choice === "alternative"
+                          ? sub.alternative!.name
+                          : sub.name
+
+                        return (
+                          <div key={sub.id} className="space-y-1.5">
+                            <div className="flex items-center justify-between py-1">
+                              <span className="text-sm text-foreground">
+                                {subIndex + 1}. {displayName}
+                              </span>
+                              <DurationSelector
+                                value={exerciseSettings[sub.id]?.durationSeconds || 60}
+                                onChange={(v) => handleDurationChange(sub.id, v)}
+                                compact
+                              />
+                            </div>
+                            {hasAlt && (
+                              <div className="flex rounded-lg bg-muted p-0.5 ml-4">
+                                <button
+                                  onClick={() => setExerciseChoices((prev) => ({ ...prev, [sub.id]: "main" }))}
+                                  className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+                                    choice === "main"
+                                      ? "bg-primary text-primary-foreground shadow-sm"
+                                      : "text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {sub.name}
+                                </button>
+                                <button
+                                  onClick={() => setExerciseChoices((prev) => ({ ...prev, [sub.id]: "alternative" }))}
+                                  className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+                                    choice === "alternative"
+                                      ? "bg-primary text-primary-foreground shadow-sm"
+                                      : "text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {sub.alternative!.name}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </CardContent>
                 )}
@@ -227,7 +266,7 @@ export function CircuitSetup({
 
       <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4">
         <Button
-          onClick={() => onStart(variant, exerciseSettings)}
+          onClick={() => onStart(variant, exerciseSettings, exerciseChoices)}
           className="w-full h-14 text-lg font-semibold"
         >
           <Play className="mr-2 h-5 w-5" />

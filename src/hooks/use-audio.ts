@@ -2,6 +2,19 @@
 
 import { useCallback, useRef } from "react"
 
+function expandSpeechText(text: string): string {
+  return text
+    .replace(/^Alt\.\s/g, "Alternating ")
+    .replace(/\bBW\b/g, "Bodyweight")
+    .replace(/\b1 1\/2\b/g, "One and a Half")
+}
+
+export function estimateSpeechSeconds(text: string): number {
+  const expanded = expandSpeechText(text)
+  const wordCount = expanded.split(/\s+/).filter(w => w.length > 0).length
+  return Math.ceil(wordCount / 2)
+}
+
 export function useAudio() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -47,15 +60,16 @@ export function useAudio() {
     setTimeout(() => playBeep(784, 0.3), 300)
   }, [playBeep])
 
-  const speak = useCallback((text: string) => {
+  const speak = useCallback((text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-      const spoken = text
-        .replace(/^Alt\.\s/g, "Alternating ")
-        .replace(/\bBW\b/g, "Bodyweight")
-        .replace(/\b1 1\/2\b/g, "One and a Half")
-      const utterance = new SpeechSynthesisUtterance(spoken)
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel()
+      }
+      const utterance = new SpeechSynthesisUtterance(expandSpeechText(text))
       utterance.rate = 0.9
+      if (onEnd) {
+        utterance.onend = () => onEnd()
+      }
       window.speechSynthesis.speak(utterance)
     }
   }, [])

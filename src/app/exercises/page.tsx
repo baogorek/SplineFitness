@@ -1,24 +1,27 @@
 "use client"
 
-import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowLeft, Volume2, Play } from "lucide-react"
+import { ArrowLeft, Volume2, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { circuitWorkoutA, circuitWorkoutB } from "@/data/circuit-workouts"
 import { useAudio } from "@/hooks/use-audio"
 
-interface ExercisesByCategory {
-  [category: string]: string[]
+interface ExerciseEntry {
+  name: string
+  videos: { url: string; label?: string }[]
+  alternativeName?: string
+  alternativeVideos?: { url: string; label?: string }[]
 }
 
-const exerciseVideos: Record<string, { videoId: string; startSeconds: number }> = {
-  "Alt. Single Leg Box Squats": { videoId: "vc1E5CfRfos", startSeconds: 242 },
+interface ExercisesByCategory {
+  [category: string]: ExerciseEntry[]
 }
 
 function getExercisesByCategory(): ExercisesByCategory {
   const grouped: ExercisesByCategory = {}
+  const seen = new Set<string>()
 
   for (const workout of [circuitWorkoutA, circuitWorkoutB]) {
     for (const combo of workout.combos) {
@@ -26,9 +29,17 @@ function getExercisesByCategory(): ExercisesByCategory {
         grouped[combo.category] = []
       }
       for (const ex of combo.subExercises) {
-        if (!grouped[combo.category].includes(ex.name)) {
-          grouped[combo.category].push(ex.name)
+        if (seen.has(ex.id)) continue
+        seen.add(ex.id)
+        const entry: ExerciseEntry = {
+          name: ex.name,
+          videos: ex.videos || [],
         }
+        if (ex.alternative) {
+          entry.alternativeName = ex.alternative.name
+          entry.alternativeVideos = ex.alternative.videos || []
+        }
+        grouped[combo.category].push(entry)
       }
     }
   }
@@ -38,7 +49,6 @@ function getExercisesByCategory(): ExercisesByCategory {
 
 export default function ExercisesPage() {
   const { speak } = useAudio()
-  const [expandedVideo, setExpandedVideo] = useState<string | null>(null)
   const exercisesByCategory = getExercisesByCategory()
 
   return (
@@ -59,7 +69,7 @@ export default function ExercisesPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <p className="text-muted-foreground mb-8">
-          All exercises from the circuit training program. Tap the speaker icon to hear the name.
+          All exercises from the circuit training program. Tap the speaker icon to hear the name, or the link icon for a video demo.
         </p>
 
         <div className="space-y-8">
@@ -71,50 +81,66 @@ export default function ExercisesPage() {
               <Card>
                 <CardContent className="p-0">
                   <ul className="divide-y">
-                    {exercises.map((name) => {
-                      const video = exerciseVideos[name]
-                      const isExpanded = expandedVideo === name
-                      return (
-                        <li key={name} className="flex flex-col">
-                          <div className="flex items-center justify-between px-4 py-3">
-                            <span className="text-foreground">{name}</span>
-                            <div className="flex items-center gap-1">
-                              {video && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  onClick={() => setExpandedVideo(isExpanded ? null : name)}
-                                  aria-label={`${isExpanded ? "Hide" : "Show"} video for ${name}`}
-                                >
-                                  <Play className={`h-4 w-4 ${isExpanded ? "text-primary" : "text-muted-foreground"}`} />
+                    {exercises.map((entry) => (
+                      <li key={entry.name} className="flex flex-col">
+                        <div className="flex items-center justify-between px-4 py-3">
+                          <span className="text-foreground">{entry.name}</span>
+                          <div className="flex items-center gap-1">
+                            {entry.videos.map((video, i) => (
+                              <a
+                                key={i}
+                                href={video.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Watch ${entry.name} ${video.label || "demo"}`}
+                              >
+                                <Button variant="ghost" size="icon-sm">
+                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                              )}
+                              </a>
+                            ))}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => speak(entry.name)}
+                              aria-label={`Speak ${entry.name}`}
+                            >
+                              <Volume2 className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        </div>
+                        {entry.alternativeName && (
+                          <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-t border-border/50">
+                            <span className="text-sm text-muted-foreground">
+                              or: {entry.alternativeName}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {entry.alternativeVideos?.map((video, i) => (
+                                <a
+                                  key={i}
+                                  href={video.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`Watch ${entry.alternativeName} ${video.label || "demo"}`}
+                                >
+                                  <Button variant="ghost" size="icon-sm">
+                                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </a>
+                              ))}
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                onClick={() => speak(name)}
-                                aria-label={`Speak ${name}`}
+                                onClick={() => speak(entry.alternativeName!)}
+                                aria-label={`Speak ${entry.alternativeName}`}
                               >
-                                <Volume2 className="h-4 w-4 text-muted-foreground" />
+                                <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
                               </Button>
                             </div>
                           </div>
-                          {video && isExpanded && (
-                            <div className="px-4 pb-4">
-                              <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-                                <iframe
-                                  className="absolute inset-0 w-full h-full"
-                                  src={`https://www.youtube.com/embed/${video.videoId}?start=${video.startSeconds}&rel=0`}
-                                  title={`${name} demonstration`}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </li>
-                      )
-                    })}
+                        )}
+                      </li>
+                    ))}
                   </ul>
                 </CardContent>
               </Card>

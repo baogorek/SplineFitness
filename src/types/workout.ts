@@ -1,30 +1,41 @@
 export type WorkoutMode = "traditional" | "circuit"
 export type WorkoutVariant = "A" | "B"
-export type ExerciseVariation = "easy" | "standard" | "advanced"
 
 // Circuit Types
+export interface VideoLink {
+  url: string
+  label?: string
+}
+
+export interface SubExerciseAlternative {
+  id: string
+  name: string
+  videos?: VideoLink[]
+}
+
 export interface SubExercise {
   id: string
   name: string
   order: number
+  prepTimeSeconds?: number
+  videos?: VideoLink[]
+  alternative?: SubExerciseAlternative
+  defaultChoice?: "main" | "alternative"
 }
 
 export interface ExercisePreference {
   exerciseId: string
   durationSeconds: number
-  defaultVariation: ExerciseVariation
 }
 
 export interface ExerciseSetting {
   durationSeconds: number
-  variation: ExerciseVariation
 }
 
 export interface ComboCompletionResult {
   comboId: string
   completedWithoutStopping: boolean
   weakLinkExerciseId?: string
-  exerciseVariations: Record<string, ExerciseVariation>
 }
 
 export interface WeakLinkEntry {
@@ -76,12 +87,14 @@ export interface CircuitWorkoutSession {
   completedAt?: string
   rounds: CircuitRoundData[]
   exerciseSettings?: Record<string, ExerciseSetting>
+  exerciseChoices?: Record<string, "main" | "alternative">
   weakLinkPractice?: WeakLinkPractice[]
 }
 
 export interface CircuitSessionProgress {
   variant: WorkoutVariant
   exerciseSettings: Record<string, ExerciseSetting>
+  exerciseChoices: Record<string, "main" | "alternative">
   currentRound: number
   currentComboIndex: number
   rounds: CircuitRoundData[]
