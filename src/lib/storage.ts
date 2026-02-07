@@ -4,7 +4,6 @@ import {
   CircuitWorkoutSession,
   CircuitSessionProgress,
   ExercisePreference,
-  ExerciseVariation,
   ExerciseSetting,
 } from "@/types/workout"
 import { supabase } from "./supabase"
@@ -13,6 +12,7 @@ const STORAGE_KEYS = {
   CURRENT_SESSION: "strength-tracker:current-session",
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
+  EXERCISE_CHOICES: "strength-tracker:exercise-choices",
 } as const
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
@@ -55,6 +55,7 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
     ? {
         rounds: circuitSession.rounds,
         exerciseSettings: circuitSession.exerciseSettings,
+        exerciseChoices: circuitSession.exerciseChoices,
         weakLinkPractice: circuitSession.weakLinkPractice,
       }
     : { exercises: (session as any).exercises }
@@ -123,7 +124,12 @@ export function saveCircuitProgress(progress: CircuitSessionProgress): void {
 export function getCircuitProgress(): CircuitSessionProgress | null {
   if (typeof window === "undefined") return null
   const data = localStorage.getItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
-  return data ? JSON.parse(data) : null
+  if (!data) return null
+  const parsed = JSON.parse(data)
+  if (!parsed.exerciseChoices) {
+    parsed.exerciseChoices = {}
+  }
+  return parsed
 }
 
 export function clearCircuitProgress(): void {
@@ -135,6 +141,25 @@ export function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+}
+
+export function getExerciseChoices(): Record<string, "main" | "alternative"> {
+  if (typeof window === "undefined") return {}
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.EXERCISE_CHOICES)
+    return data ? JSON.parse(data) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveExerciseChoices(choices: Record<string, "main" | "alternative">): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.EXERCISE_CHOICES, JSON.stringify(choices))
+  } catch (error) {
+    console.warn("Error saving exercise choices:", error)
+  }
 }
 
 export async function getExercisePreferences(): Promise<Record<string, ExercisePreference>> {
@@ -156,7 +181,6 @@ export async function getExercisePreferences(): Promise<Record<string, ExerciseP
       prefs[row.exercise_id] = {
         exerciseId: row.exercise_id,
         durationSeconds: row.duration_seconds,
-        defaultVariation: row.default_variation as ExerciseVariation,
       }
     })
     return prefs
@@ -178,7 +202,6 @@ export async function saveExercisePreference(
         user_id: user.id,
         exercise_id: exerciseId,
         duration_seconds: pref.durationSeconds ?? 60,
-        default_variation: pref.defaultVariation ?? 'standard',
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id,exercise_id',
@@ -192,7 +215,6 @@ export async function saveExercisePreference(
     prefs[exerciseId] = {
       exerciseId,
       durationSeconds: pref.durationSeconds ?? prefs[exerciseId]?.durationSeconds ?? 60,
-      defaultVariation: pref.defaultVariation ?? prefs[exerciseId]?.defaultVariation ?? 'standard',
     }
     saveLocalExercisePreferences(prefs)
   }
@@ -208,7 +230,6 @@ export async function saveBulkExercisePreferences(
       user_id: user.id,
       exercise_id: exerciseId,
       duration_seconds: setting.durationSeconds,
-      default_variation: setting.variation,
       updated_at: new Date().toISOString(),
     }))
 
@@ -225,7 +246,6 @@ export async function saveBulkExercisePreferences(
       prefs[exerciseId] = {
         exerciseId,
         durationSeconds: setting.durationSeconds,
-        defaultVariation: setting.variation,
       }
     })
     saveLocalExercisePreferences(prefs)

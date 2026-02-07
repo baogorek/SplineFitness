@@ -5,38 +5,36 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, ArrowRight } from "lucide-react"
-import { Combo, ExerciseVariation, ComboCompletionResult } from "@/types/workout"
-import { VariationSelector } from "./variation-selector"
+import { Combo, ComboCompletionResult, SubExercise } from "@/types/workout"
 
 interface ComboCompletionModalProps {
   combo: Combo
-  defaultVariations?: Record<string, ExerciseVariation>
-  onSave: (result: ComboCompletionResult, savePreferences: boolean) => void
+  exerciseChoices?: Record<string, "main" | "alternative">
+  onSave: (result: ComboCompletionResult) => void
+}
+
+function resolveExerciseName(
+  sub: SubExercise,
+  exerciseChoices?: Record<string, "main" | "alternative">
+): string {
+  if (sub.alternative && exerciseChoices?.[sub.id] === "alternative") {
+    return sub.alternative.name
+  }
+  if (sub.alternative && sub.defaultChoice === "alternative" && !exerciseChoices?.[sub.id]) {
+    return sub.alternative.name
+  }
+  return sub.name
 }
 
 export function ComboCompletionModal({
   combo,
-  defaultVariations,
+  exerciseChoices,
   onSave,
 }: ComboCompletionModalProps) {
   const [completedWithoutStopping, setCompletedWithoutStopping] = useState<
     boolean | null
   >(null)
   const [weakLinkExerciseId, setWeakLinkExerciseId] = useState<string | null>(null)
-  const [variations, setVariations] = useState<Record<string, ExerciseVariation>>(
-    () =>
-      Object.fromEntries(
-        combo.subExercises.map((sub) => [
-          sub.id,
-          defaultVariations?.[sub.id] || "standard",
-        ])
-      )
-  )
-  const [savePreferences, setSavePreferences] = useState(false)
-
-  const handleVariationChange = (exerciseId: string, variation: ExerciseVariation) => {
-    setVariations((prev) => ({ ...prev, [exerciseId]: variation }))
-  }
 
   const handleSubmit = () => {
     if (completedWithoutStopping === null) return
@@ -44,14 +42,13 @@ export function ComboCompletionModal({
     const result: ComboCompletionResult = {
       comboId: combo.id,
       completedWithoutStopping,
-      exerciseVariations: variations,
     }
 
     if (!completedWithoutStopping && weakLinkExerciseId) {
       result.weakLinkExerciseId = weakLinkExerciseId
     }
 
-    onSave(result, savePreferences)
+    onSave(result)
   }
 
   const canSubmit =
@@ -144,45 +141,13 @@ export function ComboCompletionModal({
                           : "text-muted-foreground"
                       }`}
                     >
-                      {sub.name}
+                      {resolveExerciseName(sub, exerciseChoices)}
                     </span>
                   </button>
                 ))}
               </div>
             </div>
           )}
-
-          <div className="space-y-3 pt-2 border-t border-border">
-            <p className="text-sm font-medium text-foreground">
-              What variation did you use?
-            </p>
-            {combo.subExercises.map((sub) => (
-              <div key={sub.id} className="space-y-1.5">
-                <span className="text-xs text-muted-foreground">{sub.name}</span>
-                <VariationSelector
-                  value={variations[sub.id]}
-                  onChange={(v) => handleVariationChange(sub.id, v)}
-                  defaultVariation={defaultVariations?.[sub.id]}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="save-prefs"
-              checked={savePreferences}
-              onChange={(e) => setSavePreferences(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            <label
-              htmlFor="save-prefs"
-              className="text-sm text-muted-foreground cursor-pointer"
-            >
-              Remember my variation choices
-            </label>
-          </div>
 
           <Button
             onClick={handleSubmit}

@@ -3,8 +3,8 @@
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Circle, Play, Clock } from "lucide-react"
-import { Combo, ExerciseSetting, ComboCompletionResult } from "@/types/workout"
+import { CheckCircle2, Circle, Play, Clock, ExternalLink } from "lucide-react"
+import { Combo, ExerciseSetting, ComboCompletionResult, SubExercise, VideoLink } from "@/types/workout"
 import { cn } from "@/lib/utils"
 
 interface ComboCardProps {
@@ -13,8 +13,22 @@ interface ComboCardProps {
   isActive: boolean
   isCompleted: boolean
   exerciseSettings?: Record<string, ExerciseSetting>
+  exerciseChoices?: Record<string, "main" | "alternative">
   completionResult?: ComboCompletionResult
   onClick?: () => void
+}
+
+function resolveExercise(
+  sub: SubExercise,
+  exerciseChoices?: Record<string, "main" | "alternative">
+): { name: string; videos?: VideoLink[] } {
+  const choice = exerciseChoices?.[sub.id]
+  if (sub.alternative) {
+    if (choice === "alternative" || (!choice && sub.defaultChoice === "alternative")) {
+      return { name: sub.alternative.name, videos: sub.alternative.videos }
+    }
+  }
+  return { name: sub.name, videos: sub.videos }
 }
 
 export function ComboCard({
@@ -23,6 +37,7 @@ export function ComboCard({
   isActive,
   isCompleted,
   exerciseSettings,
+  exerciseChoices,
   completionResult,
   onClick,
 }: ComboCardProps) {
@@ -94,37 +109,53 @@ export function ComboCard({
 
       <CardContent className="px-4 pb-3">
         <div className="space-y-1.5">
-          {combo.subExercises.map((sub, subIndex) => (
-            <div key={sub.id} className="flex items-center gap-2">
-              <Circle
-                className={cn(
-                  "h-2 w-2 flex-shrink-0",
-                  isCompleted
-                    ? "fill-green-600 text-green-600"
-                    : isActive
-                      ? "fill-primary text-primary"
-                      : "fill-muted text-muted"
-                )}
-              />
-              <span
-                className={cn(
-                  "text-sm flex-1",
-                  isCompleted
-                    ? "text-muted-foreground"
-                    : isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                )}
-              >
-                {sub.name}
-              </span>
-              {exerciseSettings?.[sub.id] && exerciseSettings[sub.id].durationSeconds !== 60 && (
-                <span className="text-xs text-muted-foreground font-mono">
-                  {exerciseSettings[sub.id].durationSeconds}s
+          {combo.subExercises.map((sub) => {
+            const resolved = resolveExercise(sub, exerciseChoices)
+            const videoUrl = resolved.videos?.[0]?.url
+            return (
+              <div key={sub.id} className="flex items-center gap-2">
+                <Circle
+                  className={cn(
+                    "h-2 w-2 flex-shrink-0",
+                    isCompleted
+                      ? "fill-green-600 text-green-600"
+                      : isActive
+                        ? "fill-primary text-primary"
+                        : "fill-muted text-muted"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-sm flex-1",
+                    isCompleted
+                      ? "text-muted-foreground"
+                      : isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                  )}
+                >
+                  {resolved.name}
                 </span>
-              )}
-            </div>
-          ))}
+                {videoUrl && (
+                  <a
+                    href={videoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-shrink-0 p-1 rounded hover:bg-muted transition-colors"
+                    aria-label={`Watch ${resolved.name} demo`}
+                  >
+                    <ExternalLink className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                  </a>
+                )}
+                {exerciseSettings?.[sub.id] && exerciseSettings[sub.id].durationSeconds !== 60 && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {exerciseSettings[sub.id].durationSeconds}s
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       </CardContent>
     </Card>
