@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Share, EllipsisVertical, X, Plus } from "lucide-react"
+import { Share, Ellipsis, EllipsisVertical, X, SquarePlus } from "lucide-react"
 
 type Platform = "ios" | "android" | null
 
@@ -62,7 +62,7 @@ export function PwaInstallBanner() {
             <span className="flex items-center gap-1.5">
               <span className="font-medium">1.</span>
               Tap{" "}
-              <EllipsisVertical className="inline h-4 w-4 text-slate-500" />
+              <Ellipsis className="inline h-4 w-4 text-slate-500" />
               in Safari
             </span>
             <span className="flex items-center gap-1.5">
@@ -73,7 +73,13 @@ export function PwaInstallBanner() {
             </span>
             <span className="flex items-center gap-1.5">
               <span className="font-medium">3.</span>
-              <Plus className="inline h-4 w-4 text-slate-500" />
+              Tap{" "}
+              <Ellipsis className="inline h-4 w-4 text-slate-500" />
+              More
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium">4.</span>
+              <SquarePlus className="inline h-4 w-4 text-slate-500" />
               Add to Home Screen
             </span>
           </div>
