@@ -14,6 +14,7 @@ import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
 import { getCircuitProgress } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
+import { PwaInstallBanner } from "./pwa-install-banner"
 
 type AppMode = WorkoutMode | "history" | "booking"
 
@@ -141,6 +142,8 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             className="mx-auto"
           />
         </div>
+
+        <PwaInstallBanner />
 
         {/* Workout mode cards */}
         <div className="w-full max-w-3xl">
