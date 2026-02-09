@@ -159,7 +159,11 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         lastAnnouncedExerciseRef.current = currentExerciseIndex
         lastAnnouncedCueRef.current = ""
         const prepTime = currentExercise?.prepTimeSeconds || 0
-        audio.speak("Go!")
+        audio.playCountdownGo()
+        if (currentExercise) {
+          const name = resolveExerciseName(currentExercise, exerciseChoices)
+          audio.speak(name)
+        }
         if (prepTime === 0) {
           return
         }
@@ -185,9 +189,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       if (nextExercise) {
         const nextName = resolveExerciseName(nextExercise, exerciseChoices)
         const nextPrepTime = nextExercise.prepTimeSeconds || 0
-        announcement = nextPrepTime > 0 ? `Move to ${nextName} in` : `${nextName} in`
+        announcement = nextPrepTime > 0 ? `Move to ${nextName} in 5` : `${nextName} in 5`
       } else {
-        announcement = "Finish in"
+        announcement = "Finish in 5"
       }
       const announceAt = estimateSpeechSeconds(announcement) + 5
 
@@ -203,8 +207,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         audio.speak(announcement)
       } else if (secondsLeftInExercise >= 1 && secondsLeftInExercise <= 5 && lastAnnouncedCueRef.current !== cueKey) {
         lastAnnouncedCueRef.current = cueKey
-        const countdownWords = ["one", "two", "three", "four", "five"]
-        audio.speak(countdownWords[secondsLeftInExercise - 1])
+        audio.playCountdownTick()
       }
     },
     onComplete: () => {
@@ -223,31 +226,20 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         const cueKey = `transition-countdown-${remainingSeconds}`
         if (lastAnnouncedCueRef.current !== cueKey) {
           lastAnnouncedCueRef.current = cueKey
-          const countdownWords = ["one", "two", "three", "four", "five"]
-          audio.speak(countdownWords[remainingSeconds - 1])
-        }
-        return
-      }
-      if (!resumeAfterTransitionRef.current) return
-      const elapsed = transitionDuration - remainingSeconds
-      if (elapsed > 0 && elapsed % 3 === 1) {
-        const cueKey = `transition-word-${elapsed}`
-        if (lastAnnouncedCueRef.current !== cueKey) {
-          if (!window.speechSynthesis.speaking) {
-            lastAnnouncedCueRef.current = cueKey
-            audio.speak("transition")
-          }
+          audio.playCountdownTick()
         }
       }
     },
     onComplete: () => {
       lastAnnouncedCueRef.current = ""
       if (resumeAfterTransitionRef.current) {
-        audio.speak("Go!")
+        audio.playCountdownGo()
+        audio.speak(transitionExerciseName)
         setPhase("timing")
         comboTimer.start()
       } else {
-        audio.speak("Go!")
+        audio.playCountdownGo()
+        audio.speak(transitionExerciseName)
         setPhase("timing")
         isFirstComboRef.current = false
         comboTimer.start()
@@ -327,7 +319,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     if (firstExercise) {
       const name = resolveExerciseName(firstExercise, exerciseChoices)
       setTransitionExerciseName(name)
-      const announcement = `${name} in`
+      const announcement = `${name} in 5`
       audio.speak(announcement)
       const nameSeconds = estimateSpeechSeconds(announcement)
       setTransitionDuration(5 + nameSeconds)

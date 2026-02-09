@@ -2,6 +2,7 @@ import {
   WorkoutSession,
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
+  IntervalWorkoutSession,
   CircuitSessionProgress,
   ExercisePreference,
   ExerciseSetting,
@@ -49,6 +50,7 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
   if (!user) return null
 
   const isCircuit = session.mode === 'circuit'
+  const isInterval = session.mode === 'interval'
   const circuitSession = session as CircuitWorkoutSession
 
   const sessionData = isCircuit
@@ -58,6 +60,12 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
         exerciseChoices: circuitSession.exerciseChoices,
         weakLinkPractice: circuitSession.weakLinkPractice,
       }
+    : isInterval
+    ? {
+        totalSets: (session as IntervalWorkoutSession).totalSets,
+        completedSets: (session as IntervalWorkoutSession).completedSets,
+        totalTimeSeconds: (session as IntervalWorkoutSession).totalTimeSeconds,
+      }
     : { exercises: (session as any).exercises }
 
   const { data, error } = await supabase
@@ -65,8 +73,8 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
     .insert({
       user_id: user.id,
       mode: session.mode,
-      workout_id: session.workoutId,
-      variant: session.variant,
+      workout_id: isInterval ? '4x4-interval' : (session as CircuitWorkoutSession).workoutId,
+      variant: isInterval ? null : (session as CircuitWorkoutSession).variant,
       started_at: session.startedAt,
       completed_at: session.completedAt || new Date().toISOString(),
       data: sessionData,

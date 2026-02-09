@@ -1,4 +1,4 @@
-export type WorkoutMode = "traditional" | "circuit"
+export type WorkoutMode = "traditional" | "circuit" | "interval"
 export type WorkoutVariant = "A" | "B"
 
 // Circuit Types
@@ -104,6 +104,21 @@ export interface CircuitSessionProgress {
   savedAt: string
 }
 
+// Interval Types
+export interface IntervalSpeechCue {
+  elapsedSeconds: number
+  text: string
+}
+
+export interface IntervalWorkoutSession {
+  mode: "interval"
+  startedAt: string
+  completedAt?: string
+  totalSets: number
+  completedSets: number
+  totalTimeSeconds: number
+}
+
 // Traditional Types
 export interface TraditionalSetData {
   id: number
@@ -140,7 +155,7 @@ export interface TraditionalWorkoutSession {
 
 // Unified Types
 export type WorkoutDefinition = CircuitWorkoutDefinition | TraditionalWorkoutDefinition
-export type WorkoutSession = CircuitWorkoutSession | TraditionalWorkoutSession
+export type WorkoutSession = CircuitWorkoutSession | TraditionalWorkoutSession | IntervalWorkoutSession
 
 export interface WorkoutHistoryEntry {
   id: string

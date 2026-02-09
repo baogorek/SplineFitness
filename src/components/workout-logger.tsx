@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { WorkoutMode } from "@/types/workout"
 import { CircuitWorkout } from "./circuit/circuit-workout"
 import { TraditionalWorkout } from "./traditional/traditional-workout"
+import { IntervalWorkout } from "./interval/interval-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
@@ -20,14 +21,26 @@ const workoutModes = [
   {
     id: "circuit" as const,
     icon: Timer,
-    title: "Circuit",
-    subtitle: "Timed combos",
-    description: "Athlean-X style rounds with rest periods",
+    title: "Resistance",
+    subtitle: "Low equipment",
+    description: "Timed combo rounds with bodyweight exercises",
     color: "bg-orange-500",
     lightBg: "bg-orange-50",
     border: "border-orange-200",
     hoverBorder: "hover:border-orange-300",
     iconColor: "text-orange-600",
+  },
+  {
+    id: "interval" as const,
+    icon: HeartPulse,
+    title: "4x4 Interval",
+    subtitle: "High intensity",
+    description: "4-minute intervals with physiology coaching",
+    color: "bg-red-500",
+    lightBg: "bg-red-50",
+    border: "border-red-200",
+    hoverBorder: "hover:border-red-300",
+    iconColor: "text-red-600",
   },
   {
     id: "traditional" as const,
@@ -132,11 +145,11 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
         {/* Workout mode cards */}
         <div className="w-full max-w-3xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {workoutModes.map((mode) => (
+            {workoutModes.map((mode, index) => (
               <button
                 key={mode.id}
                 onClick={() => onSelectMode(mode.id)}
-                className={`group relative rounded-2xl bg-white border-2 ${mode.border} ${mode.hoverBorder} p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1`}
+                className={`group relative rounded-2xl bg-white border-2 ${mode.border} ${mode.hoverBorder} p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1 ${index === workoutModes.length - 1 && workoutModes.length % 2 !== 0 ? "sm:col-span-2" : ""}`}
               >
                 {/* Colored accent bar */}
                 <div className={`absolute top-0 left-6 right-6 h-1 ${mode.color} rounded-b-full`} />
@@ -229,6 +242,10 @@ export function WorkoutLogger() {
 
   if (mode === "circuit") {
     return <CircuitWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "interval") {
+    return <IntervalWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "traditional") {

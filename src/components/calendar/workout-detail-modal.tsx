@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { X, Timer, Dumbbell, Clock } from "lucide-react"
-import { WorkoutHistoryEntry, CircuitWorkoutSession, TraditionalWorkoutSession } from "@/types/workout"
+import { WorkoutHistoryEntry, WorkoutSession } from "@/types/workout"
 import { formatDisplayDate } from "./calendar-utils"
 
 interface WorkoutDetailModalProps {
@@ -14,7 +14,7 @@ interface WorkoutDetailModalProps {
   onClose: () => void
 }
 
-function WorkoutDataView({ session }: { session: CircuitWorkoutSession | TraditionalWorkoutSession }) {
+function WorkoutDataView({ session }: { session: WorkoutSession }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground uppercase tracking-wider">Full Data</p>
@@ -50,11 +50,17 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
               <div className="flex items-center gap-2">
                 {entry.session.mode === "circuit" ? (
                   <Timer className="h-4 w-4 text-primary" />
+                ) : entry.session.mode === "interval" ? (
+                  <Timer className="h-4 w-4 text-red-500" />
                 ) : (
                   <Dumbbell className="h-4 w-4 text-blue-500" />
                 )}
                 <Badge variant="outline">
-                  {entry.session.mode === "circuit" ? "Circuit" : "Traditional"} {entry.session.variant}
+                  {entry.session.mode === "circuit"
+                    ? `Resistance ${entry.session.variant}`
+                    : entry.session.mode === "interval"
+                    ? "4x4 Interval"
+                    : `Traditional ${entry.session.variant}`}
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
                   <Clock className="h-3 w-3" />
