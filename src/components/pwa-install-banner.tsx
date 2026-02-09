@@ -54,34 +54,32 @@ export function PwaInstallBanner() {
         </button>
 
         <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
-          Add to home screen
+          Steps to add to home screen
         </p>
 
         {platform === "ios" ? (
-          <div className="flex items-start gap-3 text-sm text-slate-600">
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <div className="flex flex-col gap-1.5 text-sm text-slate-600">
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">1.</span>
               Tap{" "}
               <Share className="inline h-4 w-4 text-blue-500" />
               in Safari
             </span>
-            <span className="text-slate-300">→</span>
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">2.</span>
               <Plus className="inline h-4 w-4 text-slate-500" />
               Add to Home Screen
             </span>
           </div>
         ) : (
-          <div className="flex items-start gap-3 text-sm text-slate-600">
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <div className="flex flex-col gap-1.5 text-sm text-slate-600">
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">1.</span>
               Tap{" "}
               <EllipsisVertical className="inline h-4 w-4 text-slate-500" />
               in Chrome
             </span>
-            <span className="text-slate-300">→</span>
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className="flex items-center gap-1.5">
               <span className="font-medium">2.</span>
               Add to Home Screen
             </span>
