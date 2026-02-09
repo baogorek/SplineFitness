@@ -7,6 +7,8 @@ function expandSpeechText(text: string): string {
     .replace(/^Alt\.\s/g, "Alternating ")
     .replace(/\bBW\b/g, "Bodyweight")
     .replace(/\b1 1\/2\b/g, "One and a Half")
+    .replace(/\bVO2\b/g, "V O 2")
+    .replace(/\bATP-PCr\b/g, "A T P phosphocreatine")
 }
 
 export function estimateSpeechSeconds(text: string): number {
@@ -60,6 +62,15 @@ export function useAudio() {
     setTimeout(() => playBeep(784, 0.3), 300)
   }, [playBeep])
 
+  const playCountdownTick = useCallback(() => {
+    playBeep(660, 0.12)
+  }, [playBeep])
+
+  const playCountdownGo = useCallback(() => {
+    playBeep(880, 0.15)
+    setTimeout(() => playBeep(1100, 0.25), 120)
+  }, [playBeep])
+
   const speak = useCallback((text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       if (window.speechSynthesis.speaking) {
@@ -77,6 +88,8 @@ export function useAudio() {
   return {
     playMinuteBeep,
     playCompleteSound,
+    playCountdownTick,
+    playCountdownGo,
     speak,
   }
 }

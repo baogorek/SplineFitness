@@ -7,10 +7,11 @@ interface RoundTimerProps {
   formattedTime: string
   isRunning: boolean
   round: number
+  label?: string
   className?: string
 }
 
-export function RoundTimer({ formattedTime, isRunning, round, className }: RoundTimerProps) {
+export function RoundTimer({ formattedTime, isRunning, round, label, className }: RoundTimerProps) {
   return (
     <div
       className={cn(
@@ -26,7 +27,7 @@ export function RoundTimer({ formattedTime, isRunning, round, className }: Round
           )}
         />
         <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-          Round {round}
+          {label || `Round ${round}`}
         </span>
       </div>
       <div className="flex items-center gap-2 ml-auto">
