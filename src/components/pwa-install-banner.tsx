@@ -53,25 +53,39 @@ export function PwaInstallBanner() {
           <X className="h-4 w-4" />
         </button>
 
-        <p className="text-sm font-medium text-slate-700 mb-1">
-          Install Spline Fitness
+        <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
+          Add to home screen
         </p>
 
         {platform === "ios" ? (
-          <p className="text-sm text-slate-500">
-            Tap{" "}
-            <Share className="inline h-4 w-4 -mt-0.5 text-blue-500" />{" "}
-            <span className="font-medium">Share</span>, then{" "}
-            <Plus className="inline h-4 w-4 -mt-0.5 text-slate-600" />{" "}
-            <span className="font-medium">Add to Home Screen</span>
-          </p>
+          <div className="flex items-start gap-3 text-sm text-slate-600">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium">1.</span>
+              Tap{" "}
+              <Share className="inline h-4 w-4 text-blue-500" />
+              in Safari
+            </span>
+            <span className="text-slate-300">→</span>
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium">2.</span>
+              <Plus className="inline h-4 w-4 text-slate-500" />
+              Add to Home Screen
+            </span>
+          </div>
         ) : (
-          <p className="text-sm text-slate-500">
-            Tap{" "}
-            <EllipsisVertical className="inline h-4 w-4 -mt-0.5 text-slate-600" />{" "}
-            <span className="font-medium">menu</span>, then{" "}
-            <span className="font-medium">Add to Home Screen</span>
-          </p>
+          <div className="flex items-start gap-3 text-sm text-slate-600">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium">1.</span>
+              Tap{" "}
+              <EllipsisVertical className="inline h-4 w-4 text-slate-500" />
+              in Chrome
+            </span>
+            <span className="text-slate-300">→</span>
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium">2.</span>
+              Add to Home Screen
+            </span>
+          </div>
         )}
       </div>
     </div>
