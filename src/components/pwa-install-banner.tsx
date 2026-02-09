@@ -62,11 +62,17 @@ export function PwaInstallBanner() {
             <span className="flex items-center gap-1.5">
               <span className="font-medium">1.</span>
               Tap{" "}
-              <Share className="inline h-4 w-4 text-blue-500" />
+              <EllipsisVertical className="inline h-4 w-4 text-slate-500" />
               in Safari
             </span>
             <span className="flex items-center gap-1.5">
               <span className="font-medium">2.</span>
+              Tap{" "}
+              <Share className="inline h-4 w-4 text-blue-500" />
+              Share
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium">3.</span>
               <Plus className="inline h-4 w-4 text-slate-500" />
               Add to Home Screen
             </span>
