@@ -94,7 +94,12 @@ export function ComboCompletionModal({
                 <span className="font-medium">Yes!</span>
               </button>
               <button
-                onClick={() => setCompletedWithoutStopping(false)}
+                onClick={() => {
+                  setCompletedWithoutStopping(false)
+                  if (combo.subExercises.length === 1) {
+                    setWeakLinkExerciseId(combo.subExercises[0].id)
+                  }
+                }}
                 className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
                   completedWithoutStopping === false
                     ? "border-amber-500 bg-amber-500/10 text-amber-500"

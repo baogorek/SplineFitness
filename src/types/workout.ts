@@ -100,6 +100,7 @@ export interface CircuitSessionProgress {
   rounds: CircuitRoundData[]
   currentRoundResults: ComboCompletionResult[]
   weakLinks: WeakLinkEntry[]
+  roundTimerSeconds: number
   startedAt: string
   savedAt: string
 }

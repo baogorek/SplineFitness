@@ -77,6 +77,10 @@ export function useTimer(options: UseTimerOptions = {}) {
     setElapsedSeconds(0)
     lastMinuteRef.current = 0
   }, [])
+  const resetTo = useCallback((seconds: number) => {
+    setElapsedSeconds(seconds)
+    lastMinuteRef.current = Math.floor(seconds / 60)
+  }, [])
 
   const remainingSeconds = useMemo(() => {
     if (!targetSeconds) return 0
@@ -90,6 +94,7 @@ export function useTimer(options: UseTimerOptions = {}) {
     start,
     pause,
     reset,
+    resetTo,
     formattedTime,
   }
 }

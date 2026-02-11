@@ -31,7 +31,7 @@ export function useAudio() {
   }, [])
 
   const playBeep = useCallback(
-    (frequency: number, duration: number) => {
+    (frequency: number, duration: number, gain: number = 0.3) => {
       const ctx = getAudioContext()
       if (!ctx) return
 
@@ -43,7 +43,7 @@ export function useAudio() {
       oscillator.frequency.value = frequency
       oscillator.type = "sine"
 
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime)
+      gainNode.gain.setValueAtTime(gain, ctx.currentTime)
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration)
 
       oscillator.start()
@@ -57,18 +57,24 @@ export function useAudio() {
   }, [playBeep])
 
   const playCompleteSound = useCallback(() => {
-    playBeep(523, 0.15)
-    setTimeout(() => playBeep(659, 0.15), 150)
-    setTimeout(() => playBeep(784, 0.3), 300)
+    playBeep(523, 0.15, 0.5)
+    setTimeout(() => playBeep(659, 0.15, 0.5), 150)
+    setTimeout(() => playBeep(784, 0.3, 0.5), 300)
   }, [playBeep])
 
   const playCountdownTick = useCallback(() => {
-    playBeep(660, 0.12)
+    playBeep(660, 0.25, 0.6)
   }, [playBeep])
 
   const playCountdownGo = useCallback(() => {
     playBeep(880, 0.15)
     setTimeout(() => playBeep(1100, 0.25), 120)
+  }, [playBeep])
+
+  const playExerciseStartChime = useCallback(() => {
+    playBeep(784, 0.2, 0.5)
+    setTimeout(() => playBeep(988, 0.2, 0.5), 120)
+    setTimeout(() => playBeep(1319, 0.3, 0.5), 240)
   }, [playBeep])
 
   const speak = useCallback((text: string, onEnd?: () => void) => {
@@ -90,6 +96,7 @@ export function useAudio() {
     playCompleteSound,
     playCountdownTick,
     playCountdownGo,
+    playExerciseStartChime,
     speak,
   }
 }
