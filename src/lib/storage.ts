@@ -3,6 +3,7 @@ import {
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
   IntervalWorkoutSession,
+  SitWorkoutSession,
   CircuitSessionProgress,
   ExercisePreference,
   ExerciseSetting,
@@ -51,6 +52,7 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
 
   const isCircuit = session.mode === 'circuit'
   const isInterval = session.mode === 'interval'
+  const isSit = session.mode === 'sit'
   const circuitSession = session as CircuitWorkoutSession
 
   const sessionData = isCircuit
@@ -66,15 +68,28 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
         completedSets: (session as IntervalWorkoutSession).completedSets,
         totalTimeSeconds: (session as IntervalWorkoutSession).totalTimeSeconds,
       }
+    : isSit
+    ? {
+        totalTimeSeconds: (session as SitWorkoutSession).totalTimeSeconds,
+        sprintTimes: (session as SitWorkoutSession).sprintTimes,
+        bestSprintTimeSeconds: (session as SitWorkoutSession).bestSprintTimeSeconds,
+        phasesCompleted: (session as SitWorkoutSession).phasesCompleted,
+        endedEarly: (session as SitWorkoutSession).endedEarly,
+      }
     : { exercises: (session as any).exercises }
+
+  const workoutId = isInterval ? '4x4-interval'
+    : isSit ? 'sit-sprint'
+    : (session as CircuitWorkoutSession).workoutId
+  const variant = (isInterval || isSit) ? null : (session as CircuitWorkoutSession).variant
 
   const { data, error } = await supabase
     .from('workout_sessions')
     .insert({
       user_id: user.id,
       mode: session.mode,
-      workout_id: isInterval ? '4x4-interval' : (session as CircuitWorkoutSession).workoutId,
-      variant: isInterval ? null : (session as CircuitWorkoutSession).variant,
+      workout_id: workoutId,
+      variant: variant,
       started_at: session.startedAt,
       completed_at: session.completedAt || new Date().toISOString(),
       data: sessionData,

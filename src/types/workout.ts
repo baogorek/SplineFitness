@@ -1,4 +1,4 @@
-export type WorkoutMode = "traditional" | "circuit" | "interval"
+export type WorkoutMode = "traditional" | "circuit" | "interval" | "sit"
 export type WorkoutVariant = "A" | "B"
 
 // Circuit Types
@@ -154,9 +154,26 @@ export interface TraditionalWorkoutSession {
   exercises: TraditionalExercise[]
 }
 
+// SIT Types
+export interface SprintRecord {
+  sprintNumber: number
+  timeSeconds: number
+}
+
+export interface SitWorkoutSession {
+  mode: "sit"
+  startedAt: string
+  completedAt?: string
+  totalTimeSeconds: number
+  sprintTimes: SprintRecord[]
+  bestSprintTimeSeconds: number | null
+  phasesCompleted: number
+  endedEarly: boolean
+}
+
 // Unified Types
 export type WorkoutDefinition = CircuitWorkoutDefinition | TraditionalWorkoutDefinition
-export type WorkoutSession = CircuitWorkoutSession | TraditionalWorkoutSession | IntervalWorkoutSession
+export type WorkoutSession = CircuitWorkoutSession | TraditionalWorkoutSession | IntervalWorkoutSession | SitWorkoutSession
 
 export interface WorkoutHistoryEntry {
   id: string

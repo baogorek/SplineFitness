@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Timer, Dumbbell, Clock } from "lucide-react"
+import { X, Timer, Dumbbell, Clock, Zap } from "lucide-react"
 import { WorkoutHistoryEntry, WorkoutSession } from "@/types/workout"
 import { formatDisplayDate } from "./calendar-utils"
 
@@ -52,6 +52,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                   <Timer className="h-4 w-4 text-primary" />
                 ) : entry.session.mode === "interval" ? (
                   <Timer className="h-4 w-4 text-red-500" />
+                ) : entry.session.mode === "sit" ? (
+                  <Zap className="h-4 w-4 text-green-500" />
                 ) : (
                   <Dumbbell className="h-4 w-4 text-blue-500" />
                 )}
@@ -60,6 +62,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                     ? `Resistance ${entry.session.variant}`
                     : entry.session.mode === "interval"
                     ? "4x4 Interval"
+                    : entry.session.mode === "sit"
+                    ? "SIT Sprint"
                     : `Traditional ${entry.session.variant}`}
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">

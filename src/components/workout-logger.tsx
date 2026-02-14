@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { WorkoutMode } from "@/types/workout"
 import { CircuitWorkout } from "./circuit/circuit-workout"
 import { TraditionalWorkout } from "./traditional/traditional-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
+import { SitWorkout } from "./sit/sit-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
@@ -42,6 +43,18 @@ const workoutModes = [
     border: "border-red-200",
     hoverBorder: "hover:border-red-300",
     iconColor: "text-red-600",
+  },
+  {
+    id: "sit" as const,
+    icon: Zap,
+    title: "SIT Sprint",
+    subtitle: "All-out effort",
+    description: "Sprint interval training with ATP recovery tracking",
+    color: "bg-green-500",
+    lightBg: "bg-green-50",
+    border: "border-green-200",
+    hoverBorder: "hover:border-green-300",
+    iconColor: "text-green-600",
   },
   {
     id: "traditional" as const,
@@ -249,6 +262,10 @@ export function WorkoutLogger() {
 
   if (mode === "interval") {
     return <IntervalWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "sit") {
+    return <SitWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "traditional") {
