@@ -35,6 +35,10 @@ export function useAudio() {
       const ctx = getAudioContext()
       if (!ctx) return
 
+      if (ctx.state === "suspended") {
+        ctx.resume()
+      }
+
       const oscillator = ctx.createOscillator()
       const gainNode = ctx.createGain()
 

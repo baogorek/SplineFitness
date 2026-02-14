@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Activity, ArrowLeft, Volume2, Zap } from "lucide-react"
+import { Activity, ArrowLeft, Calendar, Volume2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
@@ -17,7 +17,7 @@ import {
 } from "@/types/workout"
 import { circuitWorkouts } from "@/data/circuit-workouts"
 import { useTimer } from "@/hooks/use-timer"
-import { useAudio, estimateSpeechSeconds } from "@/hooks/use-audio"
+import { useAudio } from "@/hooks/use-audio"
 import {
   saveWorkoutSession,
   getExercisePreferences,
@@ -73,6 +73,43 @@ function getEffectiveTransitionDuration(sub: SubExercise): number {
   return Math.max(MIN_TRANSITION_SECONDS, sub.prepTimeSeconds || 0)
 }
 
+function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: string): string {
+  const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
+  const totalTime = session.rounds.reduce((acc, r) => acc + r.totalTimeSeconds, 0)
+  const allResults = session.rounds.flatMap((r) => r.comboResults)
+  const completionRate = Math.round(
+    (allResults.filter((r) => r.completedWithoutStopping).length / allResults.length) * 100
+  )
+  const mins = Math.floor(totalTime / 60)
+  const secs = (totalTime % 60).toString().padStart(2, "0")
+
+  const lines = [
+    `Rounds: ${session.rounds.length}`,
+    `Total Time: ${mins}:${secs}`,
+    `Completion Rate: ${completionRate}%`,
+  ]
+  if (session.weakLinkPractice && session.weakLinkPractice.length > 0) {
+    lines.push("", "Weak Link Practice:")
+    session.weakLinkPractice.forEach((r) => {
+      lines.push(`  ${r.exerciseName} (${r.practiceTimeSeconds}s)`)
+    })
+  }
+  lines.push("", "Session Data:", JSON.stringify(session))
+
+  let details = lines.join("\n")
+  if (details.length > 1500) {
+    details = details.slice(0, 1497) + "..."
+  }
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: workoutName,
+    dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
+    details,
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
 export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [phase, setPhase] = useState<Phase>("setup")
   const [activeWorkout, setActiveWorkout] = useState<WorkoutVariant>("A")
@@ -96,6 +133,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const workoutStartRef = useRef<string | null>(null)
   const isFirstComboRef = useRef(true)
   const resumeAfterTransitionRef = useRef(false)
+  const transitionExerciseDurationRef = useRef(60)
 
   const { signInWithGoogle } = useAuth()
 
@@ -169,6 +207,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         if (currentExercise) {
           const name = resolveExerciseName(currentExercise, exerciseChoices)
           setTransitionExerciseName(name)
+          transitionExerciseDurationRef.current = exerciseSettings[currentExercise.id]?.durationSeconds || 60
         }
         const effectiveDuration = getEffectiveTransitionDuration(currentExercise)
         setTransitionDuration(effectiveDuration)
@@ -212,17 +251,16 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const transitionTimer = useTimer({
     targetSeconds: transitionDuration,
-    onTick: (remainingSeconds) => {
-      const cueKey = `transition-countdown-${remainingSeconds}`
-      if (remainingSeconds >= 1 && remainingSeconds <= 3 && lastAnnouncedCueRef.current !== cueKey) {
-        lastAnnouncedCueRef.current = cueKey
-        audio.playCountdownTick()
-      }
-    },
+    onTick: () => {},
     onComplete: () => {
       lastAnnouncedCueRef.current = ""
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
       audio.playExerciseStartChime()
-      setTimeout(() => audio.speak(transitionExerciseName), 500)
+      setTimeout(() => {
+        audio.speak(`Go! ${transitionExerciseName}, ${transitionExerciseDurationRef.current} seconds`)
+      }, 500)
       if (resumeAfterTransitionRef.current) {
         setPhase("timing")
         comboTimer.start()
@@ -306,25 +344,22 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     lastAnnouncedExerciseRef.current = -1
     lastAnnouncedCueRef.current = ""
     resumeAfterTransitionRef.current = false
-    setTransitionDuration(4)
+    setTransitionDuration(5)
     const firstExercise = currentCombo?.subExercises[0]
     if (firstExercise) {
       const name = resolveExerciseName(firstExercise, exerciseChoices)
       setTransitionExerciseName(name)
-      const announcement = `Get ready. ${name}`
-      audio.speak(announcement)
-      const speechMs = estimateSpeechSeconds(announcement) * 1000
+      transitionExerciseDurationRef.current = exerciseSettings[firstExercise.id]?.durationSeconds || 60
       transitionTimer.reset()
       setPhase("transition")
-      setTimeout(() => {
-        transitionTimer.start()
-      }, speechMs)
+      transitionTimer.start()
+      audio.speak("Get ready")
     } else {
       setPhase("transition")
       transitionTimer.reset()
       transitionTimer.start()
     }
-  }, [transitionTimer, currentCombo, audio, exerciseChoices])
+  }, [transitionTimer, currentCombo, audio, exerciseChoices, exerciseSettings])
 
   const handleSaveComboResult = useCallback(
     (result: ComboCompletionResult) => {
@@ -579,6 +614,18 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                 ))}
               </ul>
             </div>
+          )}
+
+          {completedSessionData && (
+            <a
+              href={buildGoogleCalendarUrl(completedSessionData, `${workout.name} ${activeWorkout}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
+            >
+              <Calendar className="h-4 w-4" />
+              Add to Google Calendar
+            </a>
           )}
 
           {FEATURES.AUTH_ENABLED ? (
