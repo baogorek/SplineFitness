@@ -67,7 +67,7 @@ function resolveExerciseName(
   return sub.name
 }
 
-const MIN_TRANSITION_SECONDS = 3
+const MIN_TRANSITION_SECONDS = 5
 
 function getEffectiveTransitionDuration(sub: SubExercise): number {
   return Math.max(MIN_TRANSITION_SECONDS, sub.prepTimeSeconds || 0)
@@ -143,6 +143,23 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const audio = useAudio()
 
+  const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+
+  const clearCountdownTimeouts = useCallback(() => {
+    countdownTimeoutsRef.current.forEach(clearTimeout)
+    countdownTimeoutsRef.current = []
+  }, [])
+
+  useEffect(() => {
+    const activePhases: Phase[] = ["ready", "transition", "timing", "input"]
+    if (activePhases.includes(phase)) {
+      audio.startKeepalive()
+    } else {
+      audio.stopKeepalive()
+    }
+    return () => { audio.stopKeepalive() }
+  }, [phase, audio])
+
   const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(null)
 
   useEffect(() => {
@@ -214,7 +231,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         transitionTimer.reset()
         transitionTimer.start()
         setPhase("transition")
+        audio.playCompleteSound()
         audio.speak("Transition")
+        startTransitionCountdown(effectiveDuration)
         return
       }
 
@@ -233,7 +252,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           const nextExercise = currentCombo.subExercises[currentExerciseIndex + 1]
           const nextName = resolveExerciseName(nextExercise, exerciseChoices)
           const nextTransition = getEffectiveTransitionDuration(nextExercise)
-          audio.speak(`Next exercise is ${nextName}. Transition time ${nextTransition} seconds.`)
+          audio.speak(`15 seconds left. You will have ${nextTransition} seconds to transition to ${nextName}.`)
         }
       } else if (secondsLeftInExercise >= 1 && secondsLeftInExercise <= 5 && lastAnnouncedCueRef.current !== cueKey) {
         lastAnnouncedCueRef.current = cueKey
@@ -253,6 +272,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     targetSeconds: transitionDuration,
     onTick: () => {},
     onComplete: () => {
+      clearCountdownTimeouts()
       lastAnnouncedCueRef.current = ""
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel()
@@ -340,11 +360,56 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     []
   )
 
+  const startTransitionCountdown = useCallback((durationSeconds: number) => {
+    clearCountdownTimeouts()
+    const tick = 1000 / speedMultiplier
+    const timeouts: NodeJS.Timeout[] = []
+    for (let remaining = Math.min(5, durationSeconds); remaining >= 1; remaining--) {
+      const delay = (durationSeconds - remaining) * tick
+      timeouts.push(setTimeout(() => audio.playCountdownTick(), delay))
+    }
+    countdownTimeoutsRef.current = timeouts
+  }, [audio, speedMultiplier, clearCountdownTimeouts])
+
+  const handlePauseTransition = useCallback(() => {
+    transitionTimer.pause()
+    clearCountdownTimeouts()
+  }, [transitionTimer, clearCountdownTimeouts])
+
+  const handleResumeTransition = useCallback(() => {
+    transitionTimer.start()
+    startTransitionCountdown(transitionTimer.remainingSeconds)
+  }, [transitionTimer, startTransitionCountdown])
+
+  const handleSkipTransition = useCallback(() => {
+    transitionTimer.pause()
+    clearCountdownTimeouts()
+    lastAnnouncedCueRef.current = ""
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+    audio.playExerciseStartChime()
+    setTimeout(() => {
+      audio.speak(`Go! ${transitionExerciseName}, ${transitionExerciseDurationRef.current} seconds`)
+    }, 500)
+    if (resumeAfterTransitionRef.current) {
+      setPhase("timing")
+      comboTimer.start()
+    } else {
+      setPhase("timing")
+      isFirstComboRef.current = false
+      comboTimer.start()
+      if (!roundTimer.isRunning) {
+        roundTimer.start()
+      }
+    }
+  }, [transitionTimer, clearCountdownTimeouts, audio, transitionExerciseName, comboTimer, roundTimer])
+
   const handleStartCombo = useCallback(() => {
     lastAnnouncedExerciseRef.current = -1
     lastAnnouncedCueRef.current = ""
     resumeAfterTransitionRef.current = false
-    setTransitionDuration(5)
+    setTransitionDuration(8)
     const firstExercise = currentCombo?.subExercises[0]
     if (firstExercise) {
       const name = resolveExerciseName(firstExercise, exerciseChoices)
@@ -353,13 +418,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       transitionTimer.reset()
       setPhase("transition")
       transitionTimer.start()
-      audio.speak("Get ready")
+      audio.speak("Get ready for " + name)
+      startTransitionCountdown(8)
     } else {
       setPhase("transition")
       transitionTimer.reset()
       transitionTimer.start()
     }
-  }, [transitionTimer, currentCombo, audio, exerciseChoices, exerciseSettings])
+  }, [transitionTimer, currentCombo, audio, exerciseChoices, exerciseSettings, startTransitionCountdown])
 
   const handleSaveComboResult = useCallback(
     (result: ComboCompletionResult) => {
@@ -618,7 +684,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
           {completedSessionData && (
             <a
-              href={buildGoogleCalendarUrl(completedSessionData, `${workout.name} ${activeWorkout}`)}
+              href={buildGoogleCalendarUrl(completedSessionData, workout.name)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
@@ -778,6 +844,29 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               <p className="text-lg font-semibold text-primary">
                 {resumeAfterTransitionRef.current ? `Next: ${transitionExerciseName}` : transitionExerciseName}
               </p>
+              <div className="flex items-center gap-3">
+                {transitionTimer.isRunning ? (
+                  <button
+                    onClick={handlePauseTransition}
+                    className="px-4 py-2 rounded-full text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                  >
+                    Not Ready
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleResumeTransition}
+                    className="px-4 py-2 rounded-full text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                  >
+                    Resume
+                  </button>
+                )}
+                <button
+                  onClick={handleSkipTransition}
+                  className="px-4 py-2 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Start Now
+                </button>
+              </div>
             </div>
           )}
 

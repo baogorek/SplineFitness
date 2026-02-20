@@ -35,23 +35,27 @@ export function useAudio() {
       const ctx = getAudioContext()
       if (!ctx) return
 
-      if (ctx.state === "suspended") {
-        ctx.resume()
+      const doPlay = () => {
+        const oscillator = ctx.createOscillator()
+        const gainNode = ctx.createGain()
+
+        oscillator.connect(gainNode)
+        gainNode.connect(ctx.destination)
+        oscillator.frequency.value = frequency
+        oscillator.type = "sine"
+
+        gainNode.gain.setValueAtTime(gain, ctx.currentTime)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration)
+
+        oscillator.start()
+        oscillator.stop(ctx.currentTime + duration)
       }
 
-      const oscillator = ctx.createOscillator()
-      const gainNode = ctx.createGain()
-
-      oscillator.connect(gainNode)
-      gainNode.connect(ctx.destination)
-      oscillator.frequency.value = frequency
-      oscillator.type = "sine"
-
-      gainNode.gain.setValueAtTime(gain, ctx.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration)
-
-      oscillator.start()
-      oscillator.stop(ctx.currentTime + duration)
+      if (ctx.state === "suspended") {
+        ctx.resume().then(doPlay)
+      } else {
+        doPlay()
+      }
     },
     [getAudioContext]
   )
@@ -81,6 +85,33 @@ export function useAudio() {
     setTimeout(() => playBeep(1319, 0.3, 0.5), 240)
   }, [playBeep])
 
+  const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const startKeepalive = useCallback(() => {
+    if (keepaliveRef.current) return
+    keepaliveRef.current = setInterval(() => {
+      const ctx = getAudioContext()
+      if (!ctx) return
+      if (ctx.state === "suspended") {
+        ctx.resume()
+      }
+      const osc = ctx.createOscillator()
+      const g = ctx.createGain()
+      osc.connect(g)
+      g.connect(ctx.destination)
+      g.gain.setValueAtTime(0.001, ctx.currentTime)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.05)
+    }, 15000)
+  }, [getAudioContext])
+
+  const stopKeepalive = useCallback(() => {
+    if (keepaliveRef.current) {
+      clearInterval(keepaliveRef.current)
+      keepaliveRef.current = null
+    }
+  }, [])
+
   const speak = useCallback((text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       if (window.speechSynthesis.speaking) {
@@ -102,5 +133,7 @@ export function useAudio() {
     playCountdownGo,
     playExerciseStartChime,
     speak,
+    startKeepalive,
+    stopKeepalive,
   }
 }
