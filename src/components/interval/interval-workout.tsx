@@ -1,12 +1,16 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { ArrowLeft, Volume2, Zap, HeartPulse } from "lucide-react"
+import { ArrowLeft, Calendar, Volume2, Zap, HeartPulse } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
 import { RoundTimer } from "@/components/circuit/round-timer"
 import { IntervalTimer } from "./interval-timer"
+import { saveWorkoutSession } from "@/lib/storage"
+import { IntervalWorkoutSession } from "@/types/workout"
+import { useAuth } from "@/components/auth-provider"
+import { FEATURES } from "@/lib/feature-flags"
 import {
   INTERVAL_SPEECH_CUES,
   INTERVAL_COMPLETE_CUE,
@@ -24,10 +28,14 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [phase, setPhase] = useState<IntervalPhase>("ready")
   const [currentSet, setCurrentSet] = useState(1)
   const [testMode, setTestMode] = useState(false)
+  const [completedSessionData, setCompletedSessionData] = useState<IntervalWorkoutSession | null>(null)
+  const [savedToHistory, setSavedToHistory] = useState(false)
 
   const audio = useAudio()
+  const { signInWithGoogle } = useAuth()
   const spokenCuesRef = useRef<Set<number>>(new Set())
   const workoutStartedRef = useRef(false)
+  const startedAtRef = useRef<string>("")
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
 
   const speedMultiplier = testMode ? 12 : 1
@@ -45,12 +53,25 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
         }
       }
     },
-    onComplete: () => {
+    onComplete: async () => {
       audio.speak(INTERVAL_COMPLETE_CUE)
       spokenCuesRef.current.clear()
       intervalTimer.reset()
       if (currentSet >= TOTAL_SETS) {
         workoutTimer.pause()
+        const session: IntervalWorkoutSession = {
+          mode: "interval",
+          startedAt: startedAtRef.current,
+          completedAt: new Date().toISOString(),
+          totalSets: TOTAL_SETS,
+          completedSets: TOTAL_SETS,
+          totalTimeSeconds: workoutTimer.elapsedSeconds,
+        }
+        setCompletedSessionData(session)
+        if (FEATURES.AUTH_ENABLED) {
+          const result = await saveWorkoutSession(session)
+          setSavedToHistory(result !== null)
+        }
         setPhase("complete")
       } else {
         setCurrentSet((prev) => prev + 1)
@@ -76,6 +97,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const handleStartSet = useCallback(() => {
     if (!workoutStartedRef.current) {
       workoutStartedRef.current = true
+      startedAtRef.current = new Date().toISOString()
       workoutTimer.start()
     }
     spokenCuesRef.current.clear()
@@ -110,6 +132,33 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     audio.speak("Oxidative system approaching VO2 max.")
   }
 
+  const buildGoogleCalendarUrl = (session: IntervalWorkoutSession): string => {
+    const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
+    const mins = Math.floor(session.totalTimeSeconds / 60)
+    const secs = (session.totalTimeSeconds % 60).toString().padStart(2, "0")
+
+    const lines = [
+      `Sets: ${session.completedSets}/${session.totalSets}`,
+      `Total Time: ${mins}:${secs}`,
+      "",
+      "Session Data:",
+      JSON.stringify(session),
+    ]
+
+    let details = lines.join("\n")
+    if (details.length > 1500) {
+      details = details.slice(0, 1497) + "..."
+    }
+
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: "4x4 Interval Training",
+      dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
+      details,
+    })
+    return `https://calendar.google.com/calendar/render?${params.toString()}`
+  }
+
   if (phase === "complete") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -140,6 +189,35 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               </p>
             </div>
           </div>
+
+          {completedSessionData && (
+            <a
+              href={buildGoogleCalendarUrl(completedSessionData)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
+            >
+              <Calendar className="h-4 w-4" />
+              Add to Google Calendar
+            </a>
+          )}
+
+          {FEATURES.AUTH_ENABLED && (
+            savedToHistory ? (
+              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
+                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
+                <p className="text-sm text-amber-600 font-medium">
+                  Sign in to save your workouts and track progress over time
+                </p>
+                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
+                  Sign in with Google
+                </Button>
+              </div>
+            )
+          )}
 
           <button
             onClick={onModeChange}
