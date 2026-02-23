@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
 import { useWakeLock } from "@/hooks/use-wake-lock"
+import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
 import { SitPhaseDisplay } from "./sit-phase-display"
 import { SprintReady, SprintActive, SprintRecovery } from "./sit-sprint-cycle"
@@ -16,13 +17,14 @@ import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
 import {
   SitPhase,
+  GENERAL_WARMUP_SECONDS,
   TISSUE_PREP_SETS,
   TISSUE_PREP_WORK_SECONDS,
   TISSUE_PREP_REST_SECONDS,
   NEURAL_HOLD_SECONDS,
   NEURAL_SWITCH_SECONDS,
   WASHOUT_SECONDS,
-  SPRINT_RECOVERY_SECONDS,
+  computeSprintRecovery,
   PHASE_LABELS,
   PHASE_SPEECH_CUES,
   WASHOUT_MIDPOINT_CUE,
@@ -44,6 +46,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [showFlowRunCheck, setShowFlowRunCheck] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<SitWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
+  const [warmupCountdown, setWarmupCountdown] = useState(5)
+  const [sprintCountdownValue, setSprintCountdownValue] = useState<number | null>(null)
 
   const audio = useAudio()
   const { signInWithGoogle } = useAuth()
@@ -53,36 +57,69 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const washoutCueFiredRef = useRef(false)
   const phasesCompletedRef = useRef(0)
+  const generalWarmupCueFiredRef = useRef(false)
+  const lastTickRemainingRef = useRef<number>(-1)
 
   const speedMultiplier = testMode ? 12 : 1
 
   useWakeLock(phase !== "ready" && phase !== "complete")
+  useNavigationGuard(phase !== "ready" && phase !== "complete")
+
+  useEffect(() => {
+    const keepalivePhases: SitPhase[] = [
+      "general-warmup", "tissue-prep-work", "tissue-prep-rest",
+      "neural-left", "neural-switch", "neural-right",
+      "washout", "sprint-recovery",
+    ]
+    if (keepalivePhases.includes(phase)) {
+      audio.startKeepalive()
+    } else {
+      audio.stopKeepalive()
+    }
+    return () => { audio.stopKeepalive() }
+  }, [phase, audio])
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
 
+  const lastSprintTime = useMemo(() => {
+    if (sprintHistory.length === 0) return 0
+    return sprintHistory[sprintHistory.length - 1].timeSeconds
+  }, [sprintHistory])
+
   const phaseTargetSeconds = useMemo(() => {
     switch (phase) {
+      case "general-warmup": return GENERAL_WARMUP_SECONDS
       case "tissue-prep-work": return TISSUE_PREP_WORK_SECONDS
       case "tissue-prep-rest": return TISSUE_PREP_REST_SECONDS
       case "neural-left":
       case "neural-right": return NEURAL_HOLD_SECONDS
       case "neural-switch": return NEURAL_SWITCH_SECONDS
       case "washout": return WASHOUT_SECONDS
-      case "sprint-recovery": return SPRINT_RECOVERY_SECONDS
+      case "sprint-recovery": return lastSprintTime > 0 ? computeSprintRecovery(lastSprintTime) : 180
       default: return 0
     }
-  }, [phase])
+  }, [phase, lastSprintTime])
 
   const phaseTimer = useTimer({
     targetSeconds: phaseTargetSeconds || undefined,
     onTick: (remaining) => {
+      if (phase === "general-warmup") {
+        if (remaining === 15 && !generalWarmupCueFiredRef.current) {
+          generalWarmupCueFiredRef.current = true
+          audio.speak("Pogo hops in 15 seconds. No rest.")
+        }
+        if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
+          lastTickRemainingRef.current = remaining
+          audio.playCountdownTick()
+        }
+      }
       if (phase === "washout" && !washoutCueFiredRef.current) {
         const halfwayRemaining = Math.floor(WASHOUT_SECONDS / 2)
         if (remaining <= halfwayRemaining) {
           washoutCueFiredRef.current = true
           phaseTimer.pause()
           workoutTimer.pause()
-          audio.speak("Did you do your flow run?")
+          audio.speak(WASHOUT_MIDPOINT_CUE)
           setShowFlowRunCheck(true)
         }
       }
@@ -99,14 +136,14 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [])
 
   const transitionTo = useCallback((nextPhase: SitPhase) => {
+    phaseTimer.pause()
     phaseTimer.reset()
     setPhase(nextPhase)
   }, [phaseTimer])
 
-  // Start phase timer when phase changes to a timed phase
   useEffect(() => {
     const timedPhases: SitPhase[] = [
-      "tissue-prep-work", "tissue-prep-rest",
+      "general-warmup", "tissue-prep-work", "tissue-prep-rest",
       "neural-left", "neural-switch", "neural-right",
       "washout", "sprint-recovery",
     ]
@@ -123,6 +160,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const handlePhaseComplete = useCallback(() => {
     switch (phase) {
+      case "general-warmup":
+        generalWarmupCueFiredRef.current = false
+        lastTickRemainingRef.current = -1
+        transitionTo("tissue-prep-work")
+        break
       case "tissue-prep-work":
         transitionTo("tissue-prep-rest")
         break
@@ -160,23 +202,42 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const handleStartWorkout = useCallback(() => {
     workoutStartedRef.current = true
     startedAtRef.current = new Date().toISOString()
-    workoutTimer.start()
-    transitionTo("tissue-prep-work")
-  }, [workoutTimer, transitionTo])
+
+    clearCountdownTimeouts()
+    setWarmupCountdown(5)
+    setPhase("warmup-countdown")
+    const tick = 1000 / speedMultiplier
+
+    audio.speak("Get ready for jumping jacks")
+
+    const timeouts = [
+      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(4) }, tick * 1),
+      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(3) }, tick * 2),
+      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(2) }, tick * 3),
+      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(1) }, tick * 4),
+      setTimeout(() => {
+        audio.playCountdownGo()
+        workoutTimer.start()
+        transitionTo("general-warmup")
+      }, tick * 5),
+    ]
+    countdownTimeoutsRef.current = timeouts
+  }, [workoutTimer, transitionTo, audio, speedMultiplier, clearCountdownTimeouts])
 
   const startSprintCountdown = useCallback(() => {
     clearCountdownTimeouts()
     const tick = 1000 / speedMultiplier
 
     audio.speak(`Sprint ${sprintNumber}`)
+    setSprintCountdownValue(3)
 
-    // 3-2-1-GO: punchy countdown for max neural drive at launch
     const timeouts = [
-      setTimeout(() => audio.playCountdownTick(), tick * 1),
-      setTimeout(() => audio.playCountdownTick(), tick * 2),
-      setTimeout(() => audio.playCountdownTick(), tick * 3),
+      setTimeout(() => { audio.playCountdownTick(); setSprintCountdownValue(3) }, tick * 1),
+      setTimeout(() => { audio.playCountdownTick(); setSprintCountdownValue(2) }, tick * 2),
+      setTimeout(() => { audio.playCountdownTick(); setSprintCountdownValue(1) }, tick * 3),
       setTimeout(() => {
         audio.playCountdownGo()
+        setSprintCountdownValue(null)
         sprintStartRef.current = performance.now()
         setPhase("sprint-active")
       }, tick * 4),
@@ -192,15 +253,14 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     const newBest = bestTime === null ? elapsed : Math.min(bestTime, elapsed)
     setBestTime(newBest)
 
-    // Performance drop check (after 2+ sprints)
     if (sprintHistory.length >= 1 && bestTime !== null) {
       const drop = (elapsed - bestTime) / bestTime
       if (drop > 0.05) {
         setPendingDropTime(elapsed)
         setShowDropModal(true)
+        phaseTimer.pause()
         phaseTimer.reset()
         setPhase("sprint-recovery")
-        phaseTimer.start()
         setSprintNumber((n) => n + 1)
         return
       }
@@ -253,10 +313,31 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const handleFlowRunConfirm = useCallback(() => {
     setShowFlowRunCheck(false)
-    audio.speak("Good. Two minutes remaining. Begin mental preparation for sprints.")
+    audio.speak("Good. Final minute. Mental preparation for sprints.")
     phaseTimer.start()
     workoutTimer.start()
   }, [audio, phaseTimer, workoutTimer])
+
+  const handleSkipWashout = useCallback(() => {
+    handlePhaseComplete()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, tissuePrepSet])
+
+  const handleSkipRecovery = useCallback(() => {
+    transitionTo("sprint-ready")
+  }, [transitionTo])
+
+  const handleDiscardLastSprint = useCallback(() => {
+    if (sprintHistory.length === 0) return
+    const updated = sprintHistory.slice(0, -1)
+    setSprintHistory(updated)
+    const newBest = updated.length > 0
+      ? Math.min(...updated.map((s) => s.timeSeconds))
+      : null
+    setBestTime(newBest)
+    setSprintNumber((n) => n - 1)
+    transitionTo("sprint-ready")
+  }, [sprintHistory, transitionTo])
 
   const handleTestAudio = () => {
     audio.speak("Phosphocreatine resynthesis active.")
@@ -397,9 +478,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     )
   }
 
-  // Determine if we're in a timed warmup phase
   const isTimedPhase = [
-    "tissue-prep-work", "tissue-prep-rest",
+    "general-warmup", "tissue-prep-work", "tissue-prep-rest",
     "neural-left", "neural-switch", "neural-right",
     "washout",
   ].includes(phase)
@@ -477,6 +557,18 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
             </div>
           )}
 
+          {phase === "warmup-countdown" && (
+            <div className="flex flex-col items-center gap-6 py-12">
+              <p className="text-sm font-semibold uppercase tracking-wider text-green-600">
+                Get Ready
+              </p>
+              <span className="text-8xl font-mono font-bold text-foreground tabular-nums">
+                {warmupCountdown}
+              </span>
+              <p className="text-lg text-muted-foreground">Jumping Jacks</p>
+            </div>
+          )}
+
           {isTimedPhase && !showFlowRunCheck && (
             <SitPhaseDisplay
               phase={phase}
@@ -487,6 +579,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               tissuePrepSet={tissuePrepSet}
               onPause={() => { phaseTimer.pause(); workoutTimer.pause() }}
               onResume={() => { phaseTimer.start(); workoutTimer.start() }}
+              onSkip={phase === "washout" ? handleSkipWashout : undefined}
             />
           )}
 
@@ -496,22 +589,33 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
                 <Zap className="h-10 w-10 text-green-600" />
               </div>
               <h2 className="text-2xl font-bold text-foreground text-center">
-                Did you do your flow run?
+                Time for your flow run!
               </h2>
               <p className="text-sm text-muted-foreground text-center max-w-xs">
-                Run at ~50% effort for 30-60 seconds to prime neuromuscular patterns before sprinting.
+                Run at ~50% effort for 30-60 seconds to prime neuromuscular patterns.
               </p>
               <Button
                 size="lg"
                 onClick={handleFlowRunConfirm}
                 className="h-16 px-12 text-xl font-bold bg-green-500 hover:bg-green-600 text-white"
               >
-                Yes / Resume
+                Done — Resume
               </Button>
             </div>
           )}
 
-          {phase === "sprint-ready" && (
+          {phase === "sprint-ready" && sprintCountdownValue !== null && (
+            <div className="flex flex-col items-center gap-6 py-12">
+              <p className="text-sm font-semibold uppercase tracking-wider text-green-600">
+                Sprint {sprintNumber}
+              </p>
+              <span className="text-8xl font-mono font-bold text-foreground tabular-nums">
+                {sprintCountdownValue}
+              </span>
+            </div>
+          )}
+
+          {phase === "sprint-ready" && sprintCountdownValue === null && (
             <SprintReady
               sprintNumber={sprintNumber}
               onGo={startSprintCountdown}
@@ -523,8 +627,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
             <SprintRecovery
               formattedTime={phaseTimer.formattedTime}
               recoveryElapsed={phaseTimer.elapsedSeconds}
+              recoveryTargetSeconds={phaseTargetSeconds}
               sprintHistory={sprintHistory}
               bestTime={bestTime}
+              onSkipRecovery={handleSkipRecovery}
+              onDiscardLast={handleDiscardLastSprint}
             />
           )}
         </div>

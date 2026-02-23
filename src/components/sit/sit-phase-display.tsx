@@ -13,6 +13,7 @@ interface SitPhaseDisplayProps {
   tissuePrepSet?: number
   onPause: () => void
   onResume: () => void
+  onSkip?: () => void
 }
 
 export function SitPhaseDisplay({
@@ -24,6 +25,7 @@ export function SitPhaseDisplay({
   tissuePrepSet,
   onPause,
   onResume,
+  onSkip,
 }: SitPhaseDisplayProps) {
   const progress = targetSeconds > 0 ? Math.min((elapsedSeconds / targetSeconds) * 100, 100) : 0
   const label = PHASE_LABELS[phase] || phase
@@ -87,6 +89,17 @@ export function SitPhaseDisplay({
           </Button>
         )}
       </div>
+
+      {onSkip && (
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={onSkip}
+          className="h-12 px-8 text-base font-semibold border-green-500 text-green-600 hover:bg-green-50"
+        >
+          I'm Ready
+        </Button>
+      )}
     </div>
   )
 }

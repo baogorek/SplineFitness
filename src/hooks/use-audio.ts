@@ -86,6 +86,8 @@ export function useAudio() {
   }, [playBeep])
 
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const touchHandlerRef = useRef<(() => void) | null>(null)
+  const visibilityHandlerRef = useRef<(() => void) | null>(null)
 
   const startKeepalive = useCallback(() => {
     if (keepaliveRef.current) return
@@ -103,12 +105,38 @@ export function useAudio() {
       osc.start()
       osc.stop(ctx.currentTime + 0.05)
     }, 15000)
+
+    const resumeAudio = () => {
+      const ctx = getAudioContext()
+      if (ctx && ctx.state === "suspended") {
+        ctx.resume()
+      }
+    }
+
+    touchHandlerRef.current = resumeAudio
+    document.addEventListener("touchstart", resumeAudio, { passive: true })
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        resumeAudio()
+      }
+    }
+    visibilityHandlerRef.current = handleVisibility
+    document.addEventListener("visibilitychange", handleVisibility)
   }, [getAudioContext])
 
   const stopKeepalive = useCallback(() => {
     if (keepaliveRef.current) {
       clearInterval(keepaliveRef.current)
       keepaliveRef.current = null
+    }
+    if (touchHandlerRef.current) {
+      document.removeEventListener("touchstart", touchHandlerRef.current)
+      touchHandlerRef.current = null
+    }
+    if (visibilityHandlerRef.current) {
+      document.removeEventListener("visibilitychange", visibilityHandlerRef.current)
+      visibilityHandlerRef.current = null
     }
   }, [])
 

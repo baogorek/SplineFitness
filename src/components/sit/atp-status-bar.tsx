@@ -1,13 +1,14 @@
 "use client"
 
-import { ATP_STAGES, ATP_FULL_LABEL, ATP_FULL_COLOR, SPRINT_RECOVERY_SECONDS } from "@/data/sit-cues"
+import { ATP_STAGES, ATP_FULL_LABEL, ATP_FULL_COLOR } from "@/data/sit-cues"
 
 interface AtpStatusBarProps {
   elapsedSeconds: number
+  targetSeconds?: number
 }
 
-export function AtpStatusBar({ elapsedSeconds }: AtpStatusBarProps) {
-  const progress = Math.min((elapsedSeconds / SPRINT_RECOVERY_SECONDS) * 100, 100)
+export function AtpStatusBar({ elapsedSeconds, targetSeconds = 240 }: AtpStatusBarProps) {
+  const progress = Math.min((elapsedSeconds / targetSeconds) * 100, 100)
 
   let currentColor = ATP_FULL_COLOR
   let currentLabel = ATP_FULL_LABEL

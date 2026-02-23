@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { SprintRecord } from "@/types/workout"
 import { AtpStatusBar } from "./atp-status-bar"
-import { SPRINT_RECOVERY_SECONDS } from "@/data/sit-cues"
 
 interface SprintReadyProps {
   sprintNumber: number
@@ -18,17 +17,17 @@ export function SprintReady({ sprintNumber, onGo, onEndWorkout }: SprintReadyPro
       <p className="text-sm font-semibold uppercase tracking-wider text-green-600">
         Sprint {sprintNumber}
       </p>
-      <p className="text-sm text-muted-foreground">
-        Press GO when ready. A 5-second countdown will begin.
+      <p className="text-sm text-muted-foreground text-center max-w-xs">
+        Press Ready to start a 4-second countdown. Hold phone in one hand. Place other hand on the ground in sprinter's stance.
       </p>
       <Button
         size="lg"
         onClick={onGo}
         className="h-16 px-12 text-2xl font-bold bg-green-500 hover:bg-green-600 text-white"
       >
-        GO
+        Ready
       </Button>
-      <Button variant="outline" size="sm" onClick={onEndWorkout}>
+      <Button variant="secondary" size="default" onClick={onEndWorkout}>
         End Workout
       </Button>
     </div>
@@ -82,15 +81,21 @@ export function SprintActive({ onStop }: SprintActiveProps) {
 interface SprintRecoveryProps {
   formattedTime: string
   recoveryElapsed: number
+  recoveryTargetSeconds?: number
   sprintHistory: SprintRecord[]
   bestTime: number | null
+  onSkipRecovery?: () => void
+  onDiscardLast?: () => void
 }
 
 export function SprintRecovery({
   formattedTime,
   recoveryElapsed,
+  recoveryTargetSeconds,
   sprintHistory,
   bestTime,
+  onSkipRecovery,
+  onDiscardLast,
 }: SprintRecoveryProps) {
   return (
     <div className="flex flex-col items-center gap-6 py-6 px-4">
@@ -102,8 +107,18 @@ export function SprintRecovery({
       </span>
 
       <div className="w-full max-w-sm">
-        <AtpStatusBar elapsedSeconds={recoveryElapsed} />
+        <AtpStatusBar elapsedSeconds={recoveryElapsed} targetSeconds={recoveryTargetSeconds} />
       </div>
+
+      {onSkipRecovery && (
+        <Button
+          size="lg"
+          onClick={onSkipRecovery}
+          className="h-14 px-10 text-lg font-bold bg-green-500 hover:bg-green-600 text-white"
+        >
+          I'm Ready
+        </Button>
+      )}
 
       <div className="w-full max-w-sm space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -125,6 +140,17 @@ export function SprintRecovery({
           </div>
         ))}
       </div>
+
+      {onDiscardLast && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onDiscardLast}
+          className="text-destructive border-destructive/50 hover:bg-destructive/10"
+        >
+          Discard Last Sprint
+        </Button>
+      )}
     </div>
   )
 }

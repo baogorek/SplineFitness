@@ -22,45 +22,67 @@ export function useTimer(options: UseTimerOptions = {}) {
   const onCompleteRef = useRef(onComplete)
   const onTickRef = useRef(onTick)
 
+  const startTimeRef = useRef<number>(0)
+  const pausedAccumulatorRef = useRef<number>(0)
+  const completedRef = useRef(false)
+
   onMinuteMarkRef.current = onMinuteMark
   onCompleteRef.current = onComplete
   onTickRef.current = onTick
 
-  useEffect(() => {
-    if (isRunning) {
-      const intervalMs = Math.max(50, 1000 / speedMultiplier)
-      intervalRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => {
-          const next = prev + 1
+  const recalculate = useCallback(() => {
+    if (!startTimeRef.current) return
 
-          const currentMinute = Math.floor(next / 60)
-          if (currentMinute > lastMinuteRef.current) {
-            lastMinuteRef.current = currentMinute
-            onMinuteMarkRef.current?.(currentMinute)
-          }
+    const realSeconds = pausedAccumulatorRef.current + (Date.now() - startTimeRef.current) / 1000
+    const newElapsed = Math.floor(realSeconds * speedMultiplier)
 
-          if (targetSeconds) {
-            const remaining = targetSeconds - next
-            onTickRef.current?.(remaining)
+    setElapsedSeconds(newElapsed)
 
-            if (next >= targetSeconds) {
-              setIsRunning(false)
-              onCompleteRef.current?.(next)
-            }
-          }
-
-          return next
-        })
-      }, intervalMs)
+    const currentMinute = Math.floor(newElapsed / 60)
+    if (currentMinute > lastMinuteRef.current) {
+      lastMinuteRef.current = currentMinute
+      onMinuteMarkRef.current?.(currentMinute)
     }
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
+    if (targetSeconds) {
+      const remaining = Math.max(0, targetSeconds - newElapsed)
+      onTickRef.current?.(remaining)
+
+      if (newElapsed >= targetSeconds && !completedRef.current) {
+        completedRef.current = true
+        setIsRunning(false)
+        onCompleteRef.current?.(newElapsed)
       }
     }
-  }, [isRunning, targetSeconds, speedMultiplier])
+  }, [targetSeconds, speedMultiplier])
+
+  useEffect(() => {
+    if (isRunning) {
+      startTimeRef.current = Date.now()
+      completedRef.current = false
+      const intervalMs = Math.max(50, 1000 / speedMultiplier)
+      intervalRef.current = setInterval(recalculate, intervalMs)
+
+      const handleVisibility = () => {
+        if (document.visibilityState === "visible") {
+          recalculate()
+        }
+      }
+      document.addEventListener("visibilitychange", handleVisibility)
+
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
+        document.removeEventListener("visibilitychange", handleVisibility)
+        if (startTimeRef.current) {
+          pausedAccumulatorRef.current += (Date.now() - startTimeRef.current) / 1000
+          startTimeRef.current = 0
+        }
+      }
+    }
+  }, [isRunning, targetSeconds, speedMultiplier, recalculate])
 
   const formattedTime = useMemo(() => {
     const displaySeconds = countUp
@@ -76,11 +98,17 @@ export function useTimer(options: UseTimerOptions = {}) {
   const reset = useCallback(() => {
     setElapsedSeconds(0)
     lastMinuteRef.current = 0
+    pausedAccumulatorRef.current = 0
+    startTimeRef.current = 0
+    completedRef.current = false
   }, [])
   const resetTo = useCallback((seconds: number) => {
     setElapsedSeconds(seconds)
     lastMinuteRef.current = Math.floor(seconds / 60)
-  }, [])
+    pausedAccumulatorRef.current = seconds / speedMultiplier
+    startTimeRef.current = 0
+    completedRef.current = false
+  }, [speedMultiplier])
 
   const remainingSeconds = useMemo(() => {
     if (!targetSeconds) return 0

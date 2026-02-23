@@ -25,6 +25,11 @@ export function WeakLinkTimer({
   const currentExercise = exercises[currentIndex]
   const isLastExercise = currentIndex === exercises.length - 1
 
+  useEffect(() => {
+    audio.startKeepalive()
+    return () => { audio.stopKeepalive() }
+  }, [audio])
+
   const timer = useTimer({
     targetSeconds: durationSeconds,
     onTick: (remainingSeconds) => {

@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { ArrowLeft, Calendar, Volume2, Zap, HeartPulse } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
+import { useWakeLock } from "@/hooks/use-wake-lock"
+import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
 import { IntervalTimer } from "./interval-timer"
 import { saveWorkoutSession } from "@/lib/storage"
@@ -32,6 +34,9 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [savedToHistory, setSavedToHistory] = useState(false)
 
   const audio = useAudio()
+  useWakeLock(phase !== "complete")
+  useNavigationGuard(phase !== "complete")
+
   const { signInWithGoogle } = useAuth()
   const spokenCuesRef = useRef<Set<number>>(new Set())
   const workoutStartedRef = useRef(false)
@@ -93,6 +98,15 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     countdownTimeoutsRef.current.forEach(clearTimeout)
     countdownTimeoutsRef.current = []
   }, [])
+
+  useEffect(() => {
+    if (phase === "countdown" || phase === "interval") {
+      audio.startKeepalive()
+    } else {
+      audio.stopKeepalive()
+    }
+    return () => { audio.stopKeepalive() }
+  }, [phase, audio])
 
   const handleStartSet = useCallback(() => {
     if (!workoutStartedRef.current) {

@@ -18,6 +18,9 @@ import {
 import { circuitWorkouts } from "@/data/circuit-workouts"
 import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
+import { useWakeLock } from "@/hooks/use-wake-lock"
+import { useNavigationGuard } from "@/hooks/use-navigation-guard"
+import { scheduleCountdownTicks } from "@/lib/countdown-utils"
 import {
   saveWorkoutSession,
   getExercisePreferences,
@@ -142,6 +145,8 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const speedMultiplier = testMode ? 12 : 1
 
   const audio = useAudio()
+  useWakeLock(phase !== "setup" && phase !== "resume-prompt" && phase !== "workout-complete")
+  useNavigationGuard(phase !== "setup" && phase !== "resume-prompt" && phase !== "workout-complete")
 
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
 
@@ -362,13 +367,11 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const startTransitionCountdown = useCallback((durationSeconds: number) => {
     clearCountdownTimeouts()
-    const tick = 1000 / speedMultiplier
-    const timeouts: NodeJS.Timeout[] = []
-    for (let remaining = Math.min(5, durationSeconds); remaining >= 1; remaining--) {
-      const delay = (durationSeconds - remaining) * tick
-      timeouts.push(setTimeout(() => audio.playCountdownTick(), delay))
-    }
-    countdownTimeoutsRef.current = timeouts
+    countdownTimeoutsRef.current = scheduleCountdownTicks(
+      audio.playCountdownTick,
+      durationSeconds,
+      speedMultiplier,
+    )
   }, [audio, speedMultiplier, clearCountdownTimeouts])
 
   const handlePauseTransition = useCallback(() => {
