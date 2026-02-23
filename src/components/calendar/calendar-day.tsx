@@ -15,6 +15,7 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
   const hasWorkouts = workouts.length > 0
   const circuitWorkouts = workouts.filter((w) => w.session.mode === "circuit")
   const traditionalWorkouts = workouts.filter((w) => w.session.mode === "traditional")
+  const coachedWorkouts = workouts.filter((w) => w.session.mode === "coached")
 
   return (
     <button
@@ -37,6 +38,9 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
           )}
           {traditionalWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          )}
+          {coachedWorkouts.length > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
           )}
         </div>
       )}

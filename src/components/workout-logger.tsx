@@ -10,6 +10,7 @@ import { CircuitWorkout } from "./circuit/circuit-workout"
 import { TraditionalWorkout } from "./traditional/traditional-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
 import { SitWorkout } from "./sit/sit-workout"
+import { CoachedWorkout } from "./coached/coached-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
@@ -55,6 +56,18 @@ const workoutModes = [
     border: "border-green-200",
     hoverBorder: "hover:border-green-300",
     iconColor: "text-green-600",
+  },
+  {
+    id: "coached" as const,
+    icon: BookOpen,
+    title: "Coached Lifting",
+    subtitle: "Dumbbell programs",
+    description: "Phase-based coached workouts with dumbbells & kettlebells",
+    color: "bg-purple-500",
+    lightBg: "bg-purple-50",
+    border: "border-purple-200",
+    hoverBorder: "hover:border-purple-300",
+    iconColor: "text-purple-600",
   },
   {
     id: "traditional" as const,
@@ -266,6 +279,10 @@ export function WorkoutLogger() {
 
   if (mode === "sit") {
     return <SitWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "coached") {
+    return <CoachedWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "traditional") {
