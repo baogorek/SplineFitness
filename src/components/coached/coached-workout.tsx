@@ -1,11 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { ArrowLeft, ChevronRight } from "lucide-react"
+import { ArrowLeft, ChevronRight, Check } from "lucide-react"
 import { CoachedWorkoutDefinition, CoachedWorkoutSession } from "@/types/workout"
 import { COACHED_WORKOUTS } from "@/data/coached-workouts"
 import { saveWorkoutSession, formatTime } from "@/lib/storage"
-import { CoachedPhaseCard } from "./coached-phase-card"
+import { useWakeLock } from "@/hooks/use-wake-lock"
+import { useNavigationGuard } from "@/hooks/use-navigation-guard"
+import { useAudio } from "@/hooks/use-audio"
+import { CoachedActivePhase } from "./coached-active-phase"
 import { CoachedCompletion } from "./coached-completion"
 
 type Phase = "select" | "active" | "complete"
@@ -49,15 +52,27 @@ function WorkoutSelector({ onSelect, onBack }: { onSelect: (w: CoachedWorkoutDef
 export function CoachedWorkout({ onModeChange }: CoachedWorkoutProps) {
   const [phase, setPhase] = useState<Phase>("select")
   const [workout, setWorkout] = useState<CoachedWorkoutDefinition | null>(null)
-  const [expandedPhase, setExpandedPhase] = useState<string | null>(null)
-  const [completedPhases, setCompletedPhases] = useState<Set<string>>(new Set())
-  const [completedExercises, setCompletedExercises] = useState<Set<string>>(new Set())
+  const [activePhaseIndex, setActivePhaseIndex] = useState(0)
+  const [completedPhaseIds, setCompletedPhaseIds] = useState<Set<string>>(new Set())
   const [startedAt, setStartedAt] = useState("")
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [completedSession, setCompletedSession] = useState<CoachedWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const phaseRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const activePhaseRef = useRef<HTMLDivElement | null>(null)
+
+  const isActive = phase === "active"
+  useWakeLock(isActive)
+  useNavigationGuard(isActive)
+
+  const { startKeepalive, stopKeepalive } = useAudio()
+
+  useEffect(() => {
+    if (isActive) {
+      startKeepalive()
+      return () => stopKeepalive()
+    }
+  }, [isActive, startKeepalive, stopKeepalive])
 
   useEffect(() => {
     return () => {
@@ -69,83 +84,47 @@ export function CoachedWorkout({ onModeChange }: CoachedWorkoutProps) {
     setWorkout(w)
     setPhase("active")
     setStartedAt(new Date().toISOString())
-    setExpandedPhase(w.phases[0].id)
-    setCompletedPhases(new Set())
-    setCompletedExercises(new Set())
+    setActivePhaseIndex(0)
+    setCompletedPhaseIds(new Set())
     setElapsedSeconds(0)
     timerRef.current = setInterval(() => {
       setElapsedSeconds((s) => s + 1)
     }, 1000)
   }
 
-  const toggleExercise = useCallback((exerciseId: string) => {
-    setCompletedExercises((prev) => {
-      const next = new Set(prev)
-      if (next.has(exerciseId)) {
-        next.delete(exerciseId)
-      } else {
-        next.add(exerciseId)
-      }
-      return next
-    })
-  }, [])
-
-  const markPhaseDone = useCallback((phaseId: string) => {
+  const handlePhaseComplete = useCallback(() => {
     if (!workout) return
-    setCompletedPhases((prev) => {
-      const next = new Set(prev)
-      next.add(phaseId)
 
-      // Mark all exercises in this phase as done too
-      const p = workout.phases.find((ph) => ph.id === phaseId)
-      if (p) {
-        setCompletedExercises((prevEx) => {
-          const nextEx = new Set(prevEx)
-          for (const item of p.items) {
-            if (item.type === "exercise") {
-              nextEx.add(item.exercise.id)
-            } else {
-              for (const ex of item.superset.exercises) {
-                nextEx.add(ex.id)
-              }
-            }
-          }
-          return nextEx
-        })
+    const currentPhase = workout.phases[activePhaseIndex]
+    const nextCompleted = new Set(completedPhaseIds)
+    nextCompleted.add(currentPhase.id)
+    setCompletedPhaseIds(nextCompleted)
+
+    const nextIndex = activePhaseIndex + 1
+    if (nextIndex >= workout.phases.length) {
+      if (timerRef.current) clearInterval(timerRef.current)
+      const now = new Date().toISOString()
+      const session: CoachedWorkoutSession = {
+        mode: "coached",
+        workoutId: workout.id,
+        workoutName: workout.shortName,
+        startedAt,
+        completedAt: now,
+        totalTimeSeconds: elapsedSeconds,
+        phasesCompleted: Array.from(nextCompleted),
       }
-
-      const allDone = workout.phases.every((ph) => next.has(ph.id))
-      if (allDone) {
-        if (timerRef.current) clearInterval(timerRef.current)
-        const now = new Date().toISOString()
-        const session: CoachedWorkoutSession = {
-          mode: "coached",
-          workoutId: workout.id,
-          workoutName: workout.shortName,
-          startedAt,
-          completedAt: now,
-          totalTimeSeconds: elapsedSeconds,
-          phasesCompleted: Array.from(next),
-        }
-        setCompletedSession(session)
-        setPhase("complete")
-        saveWorkoutSession(session).then((entry) => {
-          if (entry) setSavedToHistory(true)
-        })
-      } else {
-        const currentIndex = workout.phases.findIndex((ph) => ph.id === phaseId)
-        const nextPhase = workout.phases.find((ph, i) => i > currentIndex && !next.has(ph.id))
-        if (nextPhase) {
-          setExpandedPhase(nextPhase.id)
-          setTimeout(() => {
-            phaseRefs.current[nextPhase.id]?.scrollIntoView({ behavior: "smooth", block: "start" })
-          }, 100)
-        }
-      }
-
-      return next
-    })
-  }, [workout, startedAt, elapsedSeconds])
+      setCompletedSession(session)
+      setPhase("complete")
+      saveWorkoutSession(session).then((entry) => {
+        if (entry) setSavedToHistory(true)
+      })
+    } else {
+      setActivePhaseIndex(nextIndex)
+      setTimeout(() => {
+        activePhaseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 100)
+    }
+  }, [workout, activePhaseIndex, completedPhaseIds, startedAt, elapsedSeconds])
 
   if (phase === "complete" && completedSession) {
     return (
@@ -169,7 +148,7 @@ export function CoachedWorkout({ onModeChange }: CoachedWorkoutProps) {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-bold text-foreground truncate">{workout.shortName}</h1>
-          <p className="text-xs text-muted-foreground">{completedPhases.size}/{workout.phases.length} phases</p>
+          <p className="text-xs text-muted-foreground">{completedPhaseIds.size}/{workout.phases.length} phases</p>
         </div>
         <div className="text-right">
           <p className="text-lg font-mono font-bold text-foreground">{formatTime(elapsedSeconds)}</p>
@@ -177,19 +156,61 @@ export function CoachedWorkout({ onModeChange }: CoachedWorkoutProps) {
       </header>
 
       <div className="p-4 space-y-3 max-w-lg mx-auto pb-8">
-        {workout.phases.map((p) => (
-          <div key={p.id} ref={(el) => { phaseRefs.current[p.id] = el }}>
-            <CoachedPhaseCard
-              phase={p}
-              isExpanded={expandedPhase === p.id}
-              isDone={completedPhases.has(p.id)}
-              completedExercises={completedExercises}
-              onToggleExercise={toggleExercise}
-              onToggle={() => setExpandedPhase(expandedPhase === p.id ? null : p.id)}
-              onMarkDone={() => markPhaseDone(p.id)}
-            />
-          </div>
-        ))}
+        {workout.phases.map((p, i) => {
+          const isDone = completedPhaseIds.has(p.id)
+          const isActivePhase = i === activePhaseIndex
+
+          if (isDone) {
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-3 rounded-xl bg-green-600/10 border border-green-600/20 px-4 py-3"
+              >
+                <div className="h-7 w-7 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+                  <Check className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-green-600">
+                  Phase {p.phaseNumber}: {p.name}
+                </span>
+              </div>
+            )
+          }
+
+          if (isActivePhase) {
+            return (
+              <div
+                key={p.id}
+                ref={activePhaseRef}
+                className="rounded-xl border-2 border-purple-500 bg-card overflow-hidden"
+              >
+                <div className="px-4 py-3 border-b border-border bg-purple-500/5">
+                  <h2 className="text-sm font-bold text-purple-400">
+                    Phase {p.phaseNumber}: {p.name}
+                  </h2>
+                  {p.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
+                  )}
+                </div>
+                <CoachedActivePhase
+                  phase={p}
+                  onPhaseComplete={handlePhaseComplete}
+                />
+              </div>
+            )
+          }
+
+          return (
+            <div
+              key={p.id}
+              className="flex items-center gap-3 rounded-xl bg-muted/30 border border-border px-4 py-3 opacity-50"
+            >
+              <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-muted-foreground">{p.phaseNumber}</span>
+              </div>
+              <span className="text-sm font-medium text-muted-foreground">{p.name}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
