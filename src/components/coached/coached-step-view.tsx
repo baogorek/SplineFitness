@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ExternalLink, ChevronDown, ChevronUp, Pause, Play, SkipForward, Check } from "lucide-react"
+import { ExternalLink, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward, Check } from "lucide-react"
 import { CoachedExercise } from "@/types/workout"
 import { CoachedStep } from "@/lib/flatten-phase"
 
@@ -12,6 +12,9 @@ interface CoachedStepViewProps {
   onPause: () => void
   onResume: () => void
   onDone: () => void
+  onBack: () => void
+  onSkip: () => void
+  canGoBack: boolean
   nextStepPreview: string | null
   stepIndex: number
   totalSteps: number
@@ -45,6 +48,28 @@ function getNextPreviewText(nextStepPreview: string | null): string {
   return nextStepPreview
 }
 
+function NavRow({ onBack, onSkip, canGoBack }: { onBack: () => void; onSkip: () => void; canGoBack: boolean }) {
+  return (
+    <div className="flex gap-3">
+      <button
+        onClick={onBack}
+        disabled={!canGoBack}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <SkipBack className="h-3.5 w-3.5" />
+        Back
+      </button>
+      <button
+        onClick={onSkip}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-sm font-medium transition-colors"
+      >
+        Skip
+        <SkipForward className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
 export function CoachedStepView({
   step,
   formattedTime,
@@ -52,6 +77,9 @@ export function CoachedStepView({
   onPause,
   onResume,
   onDone,
+  onBack,
+  onSkip,
+  canGoBack,
   nextStepPreview,
   stepIndex,
   totalSteps,
@@ -81,6 +109,8 @@ export function CoachedStepView({
           <SkipForward className="h-4 w-4" />
           Skip Rest
         </button>
+
+        <NavRow onBack={onBack} onSkip={onSkip} canGoBack={canGoBack} />
 
         <div className="text-xs text-muted-foreground mt-4">
           <span className="opacity-60">Next up:</span>{" "}
@@ -170,6 +200,8 @@ export function CoachedStepView({
           Done
         </button>
       )}
+
+      <NavRow onBack={onBack} onSkip={onSkip} canGoBack={canGoBack} />
 
       {hasDetails && (
         <div className="w-full max-w-sm">

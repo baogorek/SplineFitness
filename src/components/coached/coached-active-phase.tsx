@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { Play } from "lucide-react"
+import { Play, Pause, SkipBack, SkipForward } from "lucide-react"
 import { CoachedPhase } from "@/types/workout"
 import { flattenPhase, CoachedStep } from "@/lib/flatten-phase"
 import { useTimer } from "@/hooks/use-timer"
@@ -61,6 +61,24 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
     countdownTimeoutsRef.current = []
   }, [])
 
+  const [transitionPaused, setTransitionPaused] = useState(false)
+
+  const goBack = useCallback(() => {
+    if (stepIndexRef.current <= 0) return
+    clearCountdownTimeouts()
+    setStepIndex(stepIndexRef.current - 1)
+  }, [clearCountdownTimeouts])
+
+  const skipStep = useCallback(() => {
+    clearCountdownTimeouts()
+    const nextIndex = stepIndexRef.current + 1
+    if (nextIndex >= steps.length) {
+      onPhaseComplete()
+    } else {
+      setStepIndex(nextIndex)
+    }
+  }, [steps.length, onPhaseComplete, clearCountdownTimeouts])
+
   const advanceStep = useCallback(() => {
     playCompleteSound()
     clearCountdownTimeouts()
@@ -104,11 +122,26 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
   const skipTransition = useCallback(() => {
     transitionTimer.pause()
     transitionTimer.reset()
+    setTransitionPaused(false)
     onTransitionCompleteRef.current()
   }, [transitionTimer])
 
+  const pauseTransition = useCallback(() => {
+    transitionTimer.pause()
+    clearCountdownTimeouts()
+    setTransitionPaused(true)
+  }, [transitionTimer, clearCountdownTimeouts])
+
+  const resumeTransition = useCallback(() => {
+    const remaining = transitionTimer.remainingSeconds
+    countdownTimeoutsRef.current = scheduleCountdownTicks(playCountdownTick, remaining, 1, 5)
+    transitionTimer.start()
+    setTransitionPaused(false)
+  }, [transitionTimer, playCountdownTick])
+
   // Step change effect
   useEffect(() => {
+    setTransitionPaused(false)
     transitionTimer.pause()
     transitionTimer.reset()
     exerciseTimer.pause()
@@ -173,13 +206,50 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
             {transitionTimer.formattedTime}
           </div>
 
-          <button
-            onClick={skipTransition}
-            className="flex items-center gap-2 px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors"
-          >
-            <Play className="h-4 w-4" />
-            Start Now
-          </button>
+          {transitionPaused ? (
+            <button
+              onClick={resumeTransition}
+              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors"
+            >
+              <Play className="h-4 w-4" />
+              Resume
+            </button>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={pauseTransition}
+                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-medium transition-colors"
+              >
+                <Pause className="h-4 w-4" />
+                Pause
+              </button>
+              <button
+                onClick={skipTransition}
+                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-colors"
+              >
+                <Play className="h-4 w-4" />
+                Start Now
+              </button>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={goBack}
+              disabled={stepIndex === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <SkipBack className="h-3.5 w-3.5" />
+              Back
+            </button>
+            <button
+              onClick={skipStep}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-sm font-medium transition-colors"
+            >
+              Skip
+              <SkipForward className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           {hasDetails && (
             <div className="w-full max-w-sm text-left space-y-2 text-xs bg-muted/30 rounded-lg p-3">
@@ -219,6 +289,9 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
         onPause={exerciseTimer.pause}
         onResume={exerciseTimer.start}
         onDone={advanceStep}
+        onBack={goBack}
+        onSkip={skipStep}
+        canGoBack={stepIndex > 0}
         nextStepPreview={nextStepPreview}
         stepIndex={stepIndex}
         totalSteps={steps.length}

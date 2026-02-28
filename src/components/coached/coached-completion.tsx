@@ -1,6 +1,6 @@
 "use client"
 
-import { BookOpen, Calendar } from "lucide-react"
+import { BookOpen, Calendar, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CoachedWorkoutSession } from "@/types/workout"
 import { useAuth } from "@/components/auth-provider"
@@ -36,6 +36,23 @@ function buildGoogleCalendarUrl(session: CoachedWorkoutSession): string {
     details,
   })
   return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+function buildMailtoUrl(session: CoachedWorkoutSession): string {
+  const mins = Math.floor(session.totalTimeSeconds / 60)
+  const secs = (session.totalTimeSeconds % 60).toString().padStart(2, "0")
+  const date = new Date(session.startedAt).toLocaleDateString()
+
+  const subject = `Coached Lifting: ${session.workoutName}`
+  const body = [
+    `Workout: ${session.workoutName}`,
+    `Date: ${date}`,
+    `Phases Completed: ${session.phasesCompleted.length}/5`,
+    `Total Time: ${mins}:${secs}`,
+  ].join("\n")
+
+  const params = new URLSearchParams({ subject, body })
+  return `mailto:?${params.toString()}`
 }
 
 export function CoachedCompletion({ session, savedToHistory, onBack }: CoachedCompletionProps) {
@@ -77,6 +94,14 @@ export function CoachedCompletion({ session, savedToHistory, onBack }: CoachedCo
         >
           <Calendar className="h-4 w-4" />
           Add to Google Calendar
+        </a>
+
+        <a
+          href={buildMailtoUrl(session)}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-muted text-foreground font-medium hover:bg-muted/80 transition-colors w-full"
+        >
+          <Mail className="h-4 w-4" />
+          Email Workout Log
         </a>
 
         {FEATURES.AUTH_ENABLED && (
