@@ -214,6 +214,9 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               <Calendar className="h-4 w-4" />
               Add to Google Calendar
             </a>
+            <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+              Remember to tap Save in Google Calendar!
+            </p>
           )}
 
           {FEATURES.AUTH_ENABLED && (

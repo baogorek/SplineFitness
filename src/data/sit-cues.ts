@@ -68,6 +68,24 @@ export const PHASE_TOASTS: Record<string, string> = {
 export const WASHOUT_MIDPOINT_CUE =
   "Time for your flow run. Run at 50% effort for 30 to 60 seconds."
 
+export const WASHOUT_HEADSUP_CUE = "Flow run in 10 seconds."
+
+export const NEXT_UP_CUES: Record<string, string> = {
+  "tissue-prep-rest->neural-left": "Next up: Left leg glute bridge. Near maximal effort.",
+  "neural-right->washout": "Next up: Easy walking for 3 minutes.",
+}
+
+export function getNextPhaseLabel(phase: SitPhase, tissuePrepSet: number): string | null {
+  switch (phase) {
+    case "tissue-prep-rest":
+      return tissuePrepSet >= TISSUE_PREP_SETS ? "Left Leg Glute Bridge" : null
+    case "neural-right":
+      return "Active Recovery Walkout"
+    default:
+      return null
+  }
+}
+
 export interface AtpStage {
   maxSeconds: number
   label: string

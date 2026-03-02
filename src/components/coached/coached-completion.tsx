@@ -95,6 +95,9 @@ export function CoachedCompletion({ session, savedToHistory, onBack }: CoachedCo
           <Calendar className="h-4 w-4" />
           Add to Google Calendar
         </a>
+        <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+          Remember to tap Save in Google Calendar!
+        </p>
 
         <a
           href={buildMailtoUrl(session)}

@@ -11,6 +11,7 @@ interface SitPhaseDisplayProps {
   targetSeconds: number
   isRunning: boolean
   tissuePrepSet?: number
+  nextUpLabel?: string
   onPause: () => void
   onResume: () => void
   onSkip?: () => void
@@ -23,6 +24,7 @@ export function SitPhaseDisplay({
   targetSeconds,
   isRunning,
   tissuePrepSet,
+  nextUpLabel,
   onPause,
   onResume,
   onSkip,
@@ -64,6 +66,14 @@ export function SitPhaseDisplay({
       {toast && (
         <div className="mx-4 max-w-sm rounded-lg border border-green-200 bg-green-50 p-3">
           <p className="text-xs text-green-800 leading-relaxed">{toast}</p>
+        </div>
+      )}
+
+      {nextUpLabel && progress >= 75 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2">
+          <p className="text-xs font-semibold text-blue-700">
+            Next up: {nextUpLabel}
+          </p>
         </div>
       )}
 

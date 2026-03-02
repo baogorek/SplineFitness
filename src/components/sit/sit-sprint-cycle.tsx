@@ -86,6 +86,7 @@ interface SprintRecoveryProps {
   bestTime: number | null
   onSkipRecovery?: () => void
   onDiscardLast?: () => void
+  onEndWorkout?: () => void
 }
 
 export function SprintRecovery({
@@ -96,7 +97,10 @@ export function SprintRecovery({
   bestTime,
   onSkipRecovery,
   onDiscardLast,
+  onEndWorkout,
 }: SprintRecoveryProps) {
+  const [showEndConfirm, setShowEndConfirm] = useState(false)
+
   return (
     <div className="flex flex-col items-center gap-6 py-6 px-4">
       <p className="text-sm font-semibold uppercase tracking-wider text-green-600">
@@ -141,15 +145,43 @@ export function SprintRecovery({
         ))}
       </div>
 
-      {onDiscardLast && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onDiscardLast}
-          className="text-destructive border-destructive/50 hover:bg-destructive/10"
-        >
-          Discard Last Sprint
-        </Button>
+      <div className="flex items-center gap-2">
+        {onDiscardLast && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDiscardLast}
+            className="text-destructive border-destructive/50 hover:bg-destructive/10"
+          >
+            Discard Last Sprint
+          </Button>
+        )}
+
+        {onEndWorkout && !showEndConfirm && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowEndConfirm(true)}
+          >
+            End Workout
+          </Button>
+        )}
+      </div>
+
+      {showEndConfirm && onEndWorkout && (
+        <div className="w-full max-w-sm rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <p className="text-sm text-amber-800 text-center">
+            End workout now? Your {sprintHistory.length} sprint{sprintHistory.length !== 1 ? "s" : ""} will be saved.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => setShowEndConfirm(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={onEndWorkout} className="bg-amber-600 hover:bg-amber-700 text-white">
+              End Workout
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )

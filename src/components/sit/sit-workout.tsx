@@ -28,6 +28,9 @@ import {
   PHASE_LABELS,
   PHASE_SPEECH_CUES,
   WASHOUT_MIDPOINT_CUE,
+  WASHOUT_HEADSUP_CUE,
+  NEXT_UP_CUES,
+  getNextPhaseLabel,
 } from "@/data/sit-cues"
 
 interface SitWorkoutProps {
@@ -56,6 +59,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const sprintStartRef = useRef<number>(0)
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const washoutCueFiredRef = useRef(false)
+  const washoutHeadsUpFiredRef = useRef(false)
+  const nextUpCueFiredRef = useRef(false)
   const phasesCompletedRef = useRef(0)
   const generalWarmupCueFiredRef = useRef(false)
   const lastTickRemainingRef = useRef<number>(-1)
@@ -113,14 +118,28 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           audio.playCountdownTick()
         }
       }
-      if (phase === "washout" && !washoutCueFiredRef.current) {
-        const halfwayRemaining = Math.floor(WASHOUT_SECONDS / 2)
-        if (remaining <= halfwayRemaining) {
-          washoutCueFiredRef.current = true
-          phaseTimer.pause()
-          workoutTimer.pause()
-          audio.speak(WASHOUT_MIDPOINT_CUE)
-          setShowFlowRunCheck(true)
+      if (phase === "washout") {
+        if (!washoutHeadsUpFiredRef.current && remaining === Math.floor(WASHOUT_SECONDS / 2) + 10) {
+          washoutHeadsUpFiredRef.current = true
+          audio.speak(WASHOUT_HEADSUP_CUE)
+        }
+        if (!washoutCueFiredRef.current) {
+          const halfwayRemaining = Math.floor(WASHOUT_SECONDS / 2)
+          if (remaining <= halfwayRemaining) {
+            washoutCueFiredRef.current = true
+            phaseTimer.pause()
+            workoutTimer.pause()
+            audio.speak(WASHOUT_MIDPOINT_CUE)
+            setShowFlowRunCheck(true)
+          }
+        }
+      }
+      if ((phase === "tissue-prep-rest" || phase === "neural-right") && !nextUpCueFiredRef.current && remaining === 10) {
+        const cueKey = phase === "tissue-prep-rest" ? "tissue-prep-rest->neural-left" : "neural-right->washout"
+        const shouldFire = phase === "neural-right" || tissuePrepSet >= TISSUE_PREP_SETS
+        if (shouldFire && NEXT_UP_CUES[cueKey]) {
+          nextUpCueFiredRef.current = true
+          audio.speak(NEXT_UP_CUES[cueKey])
         }
       }
     },
@@ -138,6 +157,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const transitionTo = useCallback((nextPhase: SitPhase) => {
     phaseTimer.pause()
     phaseTimer.reset()
+    nextUpCueFiredRef.current = false
     setPhase(nextPhase)
   }, [phaseTimer])
 
@@ -186,6 +206,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       case "neural-right":
         phasesCompletedRef.current = 2
         washoutCueFiredRef.current = false
+        washoutHeadsUpFiredRef.current = false
         transitionTo("washout")
         break
       case "washout":
@@ -431,6 +452,9 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               <Calendar className="h-4 w-4" />
               Add to Google Calendar
             </a>
+            <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+              Remember to tap Save in Google Calendar!
+            </p>
           )}
 
           {FEATURES.AUTH_ENABLED && (
@@ -577,6 +601,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               targetSeconds={phaseTargetSeconds}
               isRunning={phaseTimer.isRunning}
               tissuePrepSet={tissuePrepSet}
+              nextUpLabel={getNextPhaseLabel(phase as SitPhase, tissuePrepSet) ?? undefined}
               onPause={() => { phaseTimer.pause(); workoutTimer.pause() }}
               onResume={() => { phaseTimer.start(); workoutTimer.start() }}
               onSkip={phase === "washout" ? handleSkipWashout : undefined}
@@ -591,6 +616,9 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               <h2 className="text-2xl font-bold text-foreground text-center">
                 Time for your flow run!
               </h2>
+              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">
+                Timer paused
+              </p>
               <p className="text-sm text-muted-foreground text-center max-w-xs">
                 Run at ~50% effort for 30-60 seconds to prime neuromuscular patterns.
               </p>
@@ -632,6 +660,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               bestTime={bestTime}
               onSkipRecovery={handleSkipRecovery}
               onDiscardLast={handleDiscardLastSprint}
+              onEndWorkout={() => saveAndComplete(false)}
             />
           )}
         </div>

@@ -33,18 +33,61 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
     return []
   }
 
-  return data.map(row => ({
-    id: row.id,
-    session: {
+  return data.map(row => {
+    const base = {
       mode: row.mode,
-      workoutId: row.workout_id,
-      variant: row.variant,
       startedAt: row.started_at,
       completedAt: row.completed_at,
-      ...(row.mode === 'circuit' ? { rounds: row.data.rounds } : { exercises: row.data.exercises }),
-    } as WorkoutSession,
-    completedAt: row.completed_at,
-  }))
+    }
+    let sessionData: Record<string, unknown>
+    switch (row.mode) {
+      case 'circuit':
+        sessionData = {
+          workoutId: row.workout_id,
+          variant: row.variant,
+          rounds: row.data.rounds,
+          exerciseSettings: row.data.exerciseSettings,
+          exerciseChoices: row.data.exerciseChoices,
+          weakLinkPractice: row.data.weakLinkPractice,
+        }
+        break
+      case 'interval':
+        sessionData = {
+          totalSets: row.data.totalSets,
+          completedSets: row.data.completedSets,
+          totalTimeSeconds: row.data.totalTimeSeconds,
+        }
+        break
+      case 'sit':
+        sessionData = {
+          totalTimeSeconds: row.data.totalTimeSeconds,
+          sprintTimes: row.data.sprintTimes,
+          bestSprintTimeSeconds: row.data.bestSprintTimeSeconds,
+          phasesCompleted: row.data.phasesCompleted,
+          endedEarly: row.data.endedEarly,
+        }
+        break
+      case 'coached':
+        sessionData = {
+          workoutId: row.workout_id,
+          workoutName: row.data.workoutName,
+          totalTimeSeconds: row.data.totalTimeSeconds,
+          phasesCompleted: row.data.phasesCompleted,
+        }
+        break
+      default:
+        sessionData = {
+          workoutId: row.workout_id,
+          variant: row.variant,
+          exercises: row.data.exercises,
+        }
+    }
+    return {
+      id: row.id,
+      session: { ...base, ...sessionData } as WorkoutSession,
+      completedAt: row.completed_at,
+    }
+  })
 }
 
 export async function saveWorkoutSession(session: WorkoutSession): Promise<WorkoutHistoryEntry | null> {
