@@ -76,6 +76,26 @@ function getEffectiveTransitionDuration(sub: SubExercise): number {
   return Math.max(MIN_TRANSITION_SECONDS, sub.prepTimeSeconds || 0)
 }
 
+function buildCompactConfig(session: CircuitWorkoutSession): string {
+  const durations = Object.values(session.exerciseSettings || {}).map(s => s.durationSeconds)
+  const durationCounts = new Map<number, number>()
+  durations.forEach(d => durationCounts.set(d, (durationCounts.get(d) || 0) + 1))
+  let mostCommon = 60
+  let maxCount = 0
+  durationCounts.forEach((count, duration) => {
+    if (count > maxCount) { maxCount = count; mostCommon = duration }
+  })
+
+  const choices: Record<string, string> = {}
+  if (session.exerciseChoices) {
+    Object.entries(session.exerciseChoices).forEach(([id, choice]) => {
+      if (choice === "alternative") choices[id] = "alternative"
+    })
+  }
+
+  return JSON.stringify({ v: session.variant, d: mostCommon, c: choices })
+}
+
 function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: string): string {
   const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
   const totalTime = session.rounds.reduce((acc, r) => acc + r.totalTimeSeconds, 0)
@@ -97,6 +117,7 @@ function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: str
       lines.push(`  ${r.exerciseName} (${r.practiceTimeSeconds}s)`)
     })
   }
+  lines.push("", `Config: ${buildCompactConfig(session)}`)
   lines.push("", "Session Data:", JSON.stringify(session))
 
   let details = lines.join("\n")
@@ -695,6 +716,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               <Calendar className="h-4 w-4" />
               Add to Google Calendar
             </a>
+            <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+              Remember to tap Save in Google Calendar!
+            </p>
           )}
 
           {FEATURES.AUTH_ENABLED ? (

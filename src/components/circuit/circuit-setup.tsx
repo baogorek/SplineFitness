@@ -12,6 +12,64 @@ import { circuitWorkouts } from "@/data/circuit-workouts"
 import { AttributionBanner } from "./attribution-banner"
 import { DurationSelector, GlobalDurationControl } from "./duration-selector"
 
+const VALID_DURATIONS = [30, 45, 60, 75, 90, 105, 120]
+
+function snapToValidDuration(d: number): number {
+  return VALID_DURATIONS.reduce((closest, val) =>
+    Math.abs(val - d) < Math.abs(closest - d) ? val : closest
+  )
+}
+
+interface CompactConfig {
+  v: WorkoutVariant
+  d: number
+  c: Record<string, "alternative">
+}
+
+function parseConfig(input: string): CompactConfig | null {
+  const trimmed = input.trim()
+
+  const configMatch = trimmed.match(/Config:\s*(\{.*\})/)
+  if (configMatch) {
+    try {
+      const parsed = JSON.parse(configMatch[1])
+      if (parsed.v && parsed.d !== undefined) {
+        return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {} }
+      }
+    } catch { /* not valid JSON */ }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed)
+
+    if (parsed.v && parsed.d !== undefined) {
+      return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {} }
+    }
+
+    if (parsed.mode === "circuit") {
+      const durations = Object.values(parsed.exerciseSettings || {}).map(
+        (s: Record<string, number>) => s.durationSeconds
+      )
+      const durationCounts = new Map<number, number>()
+      durations.forEach((d: number) => durationCounts.set(d, (durationCounts.get(d) || 0) + 1))
+      let mostCommon = 60
+      let maxCount = 0
+      durationCounts.forEach((count, duration) => {
+        if (count > maxCount) { maxCount = count; mostCommon = duration }
+      })
+      const choices: Record<string, "alternative"> = {}
+      if (parsed.exerciseChoices) {
+        Object.entries(parsed.exerciseChoices).forEach(([id, choice]) => {
+          if (choice === "alternative") choices[id] = "alternative"
+        })
+      }
+      return { v: parsed.variant, d: snapToValidDuration(mostCommon), c: choices }
+    }
+  } catch { /* not valid JSON */ }
+
+  return null
+}
+
 interface CircuitSetupProps {
   onBack: () => void
   onStart: (
@@ -39,6 +97,10 @@ export function CircuitSetup({
     Record<string, "main" | "alternative">
   >({})
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set())
+  const [configExpanded, setConfigExpanded] = useState(false)
+  const [configText, setConfigText] = useState("")
+  const [configStatus, setConfigStatus] = useState<string | null>(null)
+  const [configError, setConfigError] = useState(false)
 
   const workout = circuitWorkouts[variant]
 
@@ -91,6 +153,30 @@ export function CircuitSetup({
       }
       return next
     })
+  }
+
+  const handleApplyConfig = () => {
+    const config = parseConfig(configText)
+    if (!config) {
+      setConfigStatus("Could not parse config")
+      setConfigError(true)
+      return
+    }
+    setVariant(config.v)
+    handleSetAllDurations(config.d)
+    setExerciseChoices(prev => {
+      const updated = { ...prev }
+      Object.keys(updated).forEach(key => { updated[key] = "main" })
+      Object.entries(config.c).forEach(([id]) => { updated[id] = "alternative" })
+      return updated
+    })
+    setConfigStatus("Config applied!")
+    setConfigError(false)
+    setTimeout(() => {
+      setConfigExpanded(false)
+      setConfigStatus(null)
+      setConfigText("")
+    }, 1500)
   }
 
   const totalTimeSeconds = useMemo(() => {
@@ -149,6 +235,44 @@ export function CircuitSetup({
           >
             Workout B
           </button>
+        </div>
+
+        <div className="rounded-lg border border-border">
+          <button
+            onClick={() => setConfigExpanded(!configExpanded)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Load Previous Config
+            {configExpanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+          {configExpanded && (
+            <div className="px-4 pb-4 space-y-3">
+              <textarea
+                value={configText}
+                onChange={(e) => { setConfigText(e.target.value); setConfigStatus(null) }}
+                placeholder="Paste calendar event text or config JSON..."
+                className="w-full h-24 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleApplyConfig}
+                  disabled={!configText.trim()}
+                  className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply
+                </button>
+                {configStatus && (
+                  <span className={`text-sm font-medium ${configError ? "text-red-500" : "text-green-500"}`}>
+                    {configStatus}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <Card>
