@@ -134,7 +134,7 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
 
   const resumeTransition = useCallback(() => {
     const remaining = transitionTimer.remainingSeconds
-    countdownTimeoutsRef.current = scheduleCountdownTicks(playCountdownTick, remaining, 1, 5)
+    countdownTimeoutsRef.current = scheduleCountdownTicks(playCountdownTick, remaining, 1)
     transitionTimer.start()
     setTransitionPaused(false)
   }, [transitionTimer, playCountdownTick])
@@ -156,7 +156,7 @@ export function CoachedActivePhase({ phase, onPhaseComplete }: CoachedActivePhas
 
     if (stepIsTimed && !stepIsRest) {
       setStepPhase("transition")
-      countdownTimeoutsRef.current = scheduleCountdownTicks(playCountdownTick, TRANSITION_SECONDS, 1, 5)
+      countdownTimeoutsRef.current = scheduleCountdownTicks(playCountdownTick, TRANSITION_SECONDS, 1)
       transitionTimer.start()
     } else if (stepIsRest) {
       setStepPhase("active")

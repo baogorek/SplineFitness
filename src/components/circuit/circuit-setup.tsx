@@ -48,7 +48,7 @@ function parseConfig(input: string): CompactConfig | null {
 
     if (parsed.mode === "circuit") {
       const durations = Object.values(parsed.exerciseSettings || {}).map(
-        (s: Record<string, number>) => s.durationSeconds
+        (s: unknown) => (s as { durationSeconds: number }).durationSeconds
       )
       const durationCounts = new Map<number, number>()
       durations.forEach((d: number) => durationCounts.set(d, (durationCounts.get(d) || 0) + 1))

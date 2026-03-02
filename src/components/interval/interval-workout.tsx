@@ -205,18 +205,20 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
           </div>
 
           {completedSessionData && (
-            <a
-              href={buildGoogleCalendarUrl(completedSessionData)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
-            >
-              <Calendar className="h-4 w-4" />
-              Add to Google Calendar
-            </a>
-            <p className="text-center text-sm font-semibold text-amber-500 mt-1">
-              Remember to tap Save in Google Calendar!
-            </p>
+            <>
+              <a
+                href={buildGoogleCalendarUrl(completedSessionData)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
+              >
+                <Calendar className="h-4 w-4" />
+                Add to Google Calendar
+              </a>
+              <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+                Remember to tap Save in Google Calendar!
+              </p>
+            </>
           )}
 
           {FEATURES.AUTH_ENABLED && (
