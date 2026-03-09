@@ -2,20 +2,20 @@ import { CoachedWorkoutDefinition } from "@/types/workout"
 
 export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
   {
-    id: "joyces-workout",
-    name: "Joyce's Workout (Regression/Recovery)",
-    shortName: "Joyce's Workout",
+    id: "foundation",
+    name: "Foundation (Regression/Recovery)",
+    shortName: "Foundation",
     description: "Lighter version with safer exercise substitutions to protect the core. Designed for hernia recovery / diastasis recti repair.",
     phases: [
       {
-        id: "joyce-p1",
+        id: "foundation-p1",
         name: "Warm Up & Stabilize",
         phaseNumber: 1,
         items: [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-step-jacks",
+              id: "foundation-step-jacks",
               name: "Step-Jacks (No Jumping)",
               durationSeconds: 120,
               why: "Get the tissues warm without the high impact of jumping.",
@@ -26,7 +26,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-hip-circles",
+              id: "foundation-hip-circles",
               name: "Hip Circles",
               sets: 2,
               reps: "8-10 each direction",
@@ -38,13 +38,13 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "superset",
             superset: {
-              id: "joyce-mcgill",
+              id: "foundation-mcgill",
               label: "Spine — McGill Big 3 (Modified)",
               rounds: 1,
               instruction: "Non-negotiable. Stabilize the core.",
               exercises: [
                 {
-                  id: "joyce-bird-dog",
+                  id: "foundation-bird-dog",
                   name: "Bird Dog",
                   sets: 4,
                   durationSeconds: 10,
@@ -52,7 +52,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
                   cue: "\"Tray of drinks on your lower back.\" Anti-Rotation.",
                 },
                 {
-                  id: "joyce-side-plank",
+                  id: "foundation-side-plank",
                   name: "Side Plank",
                   sets: 3,
                   durationSeconds: 10,
@@ -60,7 +60,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
                   cue: "\"String pulling hips to the sky.\" Lateral Stability.",
                 },
                 {
-                  id: "joyce-dead-bug",
+                  id: "foundation-dead-bug",
                   name: "Dead Bug (Regression)",
                   sets: 8,
                   durationSeconds: 3,
@@ -73,7 +73,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-glute-bridge",
+              id: "foundation-glute-bridge",
               name: "Glute Bridge (Isometric)",
               reps: "3 reps",
               holdSeconds: 10,
@@ -84,7 +84,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-kb-halo",
+              id: "foundation-kb-halo",
               name: "Kettlebell Halo",
               reps: "10 reps / direction",
               perSide: true,
@@ -96,7 +96,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-kb-rack-hold",
+              id: "foundation-kb-rack-hold",
               name: "KB Rack Hold",
               sets: 2,
               durationSeconds: 10,
@@ -108,21 +108,21 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
         ],
       },
       {
-        id: "joyce-p2",
+        id: "foundation-p2",
         name: "Resistance Training",
         phaseNumber: 2,
         items: [
           {
             type: "superset",
             superset: {
-              id: "joyce-block-a",
+              id: "foundation-block-a",
               label: "Block A: Anterior Chain (Squat & Push)",
               rounds: 3,
               restBetweenRoundsSeconds: 90,
               instruction: "Perform A1 & A2 back-to-back. Rest 90 seconds. Repeat 3 times.",
               exercises: [
                 {
-                  id: "joyce-goblet-squat",
+                  id: "foundation-goblet-squat",
                   name: "Dumbbell Goblet Squat (Light)",
                   sets: 3,
                   reps: "8-10",
@@ -131,7 +131,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
                   cue: "\"Elbows inside knees at the bottom. Chest tall like a soldier.\"",
                 },
                 {
-                  id: "joyce-seated-press",
+                  id: "foundation-seated-press",
                   name: "Seated High-Incline DB Press",
                   sets: 3,
                   reps: "8-10",
@@ -145,14 +145,14 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "superset",
             superset: {
-              id: "joyce-block-b",
+              id: "foundation-block-b",
               label: "Block B: Posterior Chain (Hinge & Pull)",
               rounds: 3,
               restBetweenRoundsSeconds: 90,
               instruction: "Perform B1 & B2 back-to-back. Rest 90 seconds. Repeat 3 times.",
               exercises: [
                 {
-                  id: "joyce-rdl",
+                  id: "foundation-rdl",
                   name: "Dumbbell Romanian Deadlift (RDL)",
                   sets: 3,
                   reps: "10-12",
@@ -160,7 +160,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
                   cue: "\"Shave your legs with the dumbbells. Push your hips back until you feel a stretch in the hamstrings. Squeeze glutes to stand.\"",
                 },
                 {
-                  id: "joyce-tripod-row",
+                  id: "foundation-tripod-row",
                   name: "Tripod Row (Hernia-Safe)",
                   sets: 3,
                   reps: "10-12 per side",
@@ -175,7 +175,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
         ],
       },
       {
-        id: "joyce-p3",
+        id: "foundation-p3",
         name: "Finisher",
         phaseNumber: 3,
         description: "Carries to build dynamic endurance with strict safety parameters.",
@@ -183,7 +183,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-elevated-pushup",
+              id: "foundation-elevated-pushup",
               name: "Hands-Elevated Pushup",
               sets: 2,
               note: "Substitution for Standard Pushup. Place hands on a sturdy bench, couch arm, or countertop.",
@@ -194,24 +194,24 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "superset",
             superset: {
-              id: "joyce-carry-pull",
+              id: "foundation-carry-pull",
               label: "Carry & Pull Superset",
               rounds: 3,
               instruction: "Perform 1a, 1b, and 1c back-to-back with minimal rest.",
               exercises: [
                 {
-                  id: "joyce-suitcase-carry-l",
+                  id: "foundation-suitcase-carry-l",
                   name: "Suitcase Carry (Left Hand)",
                   durationSeconds: 30,
                   note: "Watch for coning. If you lean sideways, the weight is too heavy.",
                 },
                 {
-                  id: "joyce-suitcase-carry-r",
+                  id: "foundation-suitcase-carry-r",
                   name: "Suitcase Carry (Right Hand)",
                   durationSeconds: 30,
                 },
                 {
-                  id: "joyce-face-pull",
+                  id: "foundation-face-pull",
                   name: "Face Pull (or Band Pull-Apart)",
                   reps: "15",
                   cue: "\"Pull the rope/band to your forehead. Keep elbows high. Squeeze the back of your shoulders.\"",
@@ -222,14 +222,14 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
         ],
       },
       {
-        id: "joyce-p4",
+        id: "foundation-p4",
         name: "The Flush (Walking)",
         phaseNumber: 4,
         items: [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-walking",
+              id: "foundation-walking",
               name: "Walking",
               durationSeconds: 180,
               why: "Walking is the #1 driver of lymphatic drainage. Acts as a manual pump to clear fluid and inflammation before sitting down.",
@@ -239,7 +239,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
         ],
       },
       {
-        id: "joyce-p5",
+        id: "foundation-p5",
         name: "Stretching",
         phaseNumber: 5,
         description: "Restoring length to compressed tissues.",
@@ -247,7 +247,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-childs-pose",
+              id: "foundation-childs-pose",
               name: "Child's Pose",
               durationSeconds: 45,
               note: "Substitution for Dead Hang.",
@@ -257,7 +257,7 @@ export const COACHED_WORKOUTS: CoachedWorkoutDefinition[] = [
           {
             type: "exercise",
             exercise: {
-              id: "joyce-couch-stretch",
+              id: "foundation-couch-stretch",
               name: "Couch Stretch",
               durationSeconds: 60,
               perSide: true,
