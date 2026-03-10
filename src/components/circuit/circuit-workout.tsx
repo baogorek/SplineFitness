@@ -118,7 +118,13 @@ function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: str
     })
   }
   lines.push("", `Config: ${buildCompactConfig(session)}`)
-  lines.push("", "Session Data:", JSON.stringify(session))
+  lines.push("", "Per-Round Breakdown:")
+  session.rounds.forEach((round) => {
+    const rMins = Math.floor(round.totalTimeSeconds / 60)
+    const rSecs = (round.totalTimeSeconds % 60).toString().padStart(2, "0")
+    const completed = round.comboResults.filter((r) => r.completedWithoutStopping).length
+    lines.push(`  Round ${round.round}: ${rMins}:${rSecs} — ${completed}/${round.comboResults.length} completed`)
+  })
 
   let details = lines.join("\n")
   if (details.length > 1500) {

@@ -28,7 +28,6 @@ export function IntervalTimer({
   onReset,
 }: IntervalTimerProps) {
   const progress = Math.min((elapsedSeconds / targetSeconds) * 100, 100)
-  const currentMinute = Math.floor(elapsedSeconds / 60)
 
   return (
     <div className="flex flex-col items-center gap-6 py-8">
@@ -64,12 +63,12 @@ export function IntervalTimer({
       </div>
 
       <div className="flex items-center gap-2">
-        {Array.from({ length: Math.ceil(targetSeconds / 60) }, (_, i) => i + 1).map((minute) => (
+        {Array.from({ length: totalSets }, (_, i) => i + 1).map((set) => (
           <div
-            key={minute}
+            key={set}
             className={cn(
               "h-2 w-12 rounded-full transition-colors duration-300",
-              currentMinute >= minute ? "bg-red-500" : "bg-muted"
+              set < currentSet ? "bg-red-500" : set === currentSet ? "bg-red-500 animate-pulse" : "bg-muted"
             )}
           />
         ))}

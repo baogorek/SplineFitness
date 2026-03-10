@@ -118,6 +118,8 @@ export interface IntervalWorkoutSession {
   totalSets: number
   completedSets: number
   totalTimeSeconds: number
+  setNotes?: Record<number, string>
+  endedEarly?: boolean
 }
 
 // Traditional Types

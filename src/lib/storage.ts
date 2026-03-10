@@ -56,6 +56,8 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
           totalSets: row.data.totalSets,
           completedSets: row.data.completedSets,
           totalTimeSeconds: row.data.totalTimeSeconds,
+          setNotes: row.data.setNotes,
+          endedEarly: row.data.endedEarly,
         }
         break
       case 'sit':
@@ -112,6 +114,8 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
         totalSets: (session as IntervalWorkoutSession).totalSets,
         completedSets: (session as IntervalWorkoutSession).completedSets,
         totalTimeSeconds: (session as IntervalWorkoutSession).totalTimeSeconds,
+        setNotes: (session as IntervalWorkoutSession).setNotes,
+        endedEarly: (session as IntervalWorkoutSession).endedEarly,
       }
     : isSit
     ? {

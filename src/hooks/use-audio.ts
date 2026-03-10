@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef } from "react"
+import { useCallback, useMemo, useRef } from "react"
 
 function expandSpeechText(text: string): string {
   return text
@@ -9,6 +9,7 @@ function expandSpeechText(text: string): string {
     .replace(/\b1 1\/2\b/g, "One and a Half")
     .replace(/\bVO2\b/g, "V O 2")
     .replace(/\bATP-PCr\b/g, "A T P phosphocreatine")
+    .replace(/\bEPOC\b/g, "ee pock")
 }
 
 export function estimateSpeechSeconds(text: string): number {
@@ -21,7 +22,7 @@ export function useAudio() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const getAudioContext = useCallback(() => {
-    if (!audioContextRef.current) {
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       if (AudioContextClass) {
         audioContextRef.current = new AudioContextClass()
@@ -49,6 +50,10 @@ export function useAudio() {
 
         oscillator.start()
         oscillator.stop(ctx.currentTime + duration)
+        oscillator.onended = () => {
+          oscillator.disconnect()
+          gainNode.disconnect()
+        }
       }
 
       if (ctx.state === "suspended") {
@@ -91,12 +96,7 @@ export function useAudio() {
 
   const startKeepalive = useCallback(() => {
     if (keepaliveRef.current) return
-    keepaliveRef.current = setInterval(() => {
-      const ctx = getAudioContext()
-      if (!ctx) return
-      if (ctx.state === "suspended") {
-        ctx.resume()
-      }
+    const playSilent = (ctx: AudioContext) => {
       const osc = ctx.createOscillator()
       const g = ctx.createGain()
       osc.connect(g)
@@ -104,6 +104,20 @@ export function useAudio() {
       g.gain.setValueAtTime(0.001, ctx.currentTime)
       osc.start()
       osc.stop(ctx.currentTime + 0.05)
+      osc.onended = () => {
+        osc.disconnect()
+        g.disconnect()
+      }
+    }
+
+    keepaliveRef.current = setInterval(() => {
+      const ctx = getAudioContext()
+      if (!ctx) return
+      if (ctx.state === "suspended") {
+        ctx.resume().then(() => playSilent(ctx))
+      } else {
+        playSilent(ctx)
+      }
     }, 15000)
 
     const resumeAudio = () => {
@@ -154,7 +168,7 @@ export function useAudio() {
     }
   }, [])
 
-  return {
+  return useMemo(() => ({
     playMinuteBeep,
     playCompleteSound,
     playCountdownTick,
@@ -163,5 +177,5 @@ export function useAudio() {
     speak,
     startKeepalive,
     stopKeepalive,
-  }
+  }), [playMinuteBeep, playCompleteSound, playCountdownTick, playCountdownGo, playExerciseStartChime, speak, startKeepalive, stopKeepalive])
 }
