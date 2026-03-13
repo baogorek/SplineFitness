@@ -5,19 +5,19 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { AlertTriangle } from "lucide-react"
 
 interface PerformanceDropModalProps {
-  currentTime: number
-  bestTime: number
+  shortMA: number
+  longMA: number
   onContinue: () => void
   onEndWorkout: () => void
 }
 
 export function PerformanceDropModal({
-  currentTime,
-  bestTime,
+  shortMA,
+  longMA,
   onContinue,
   onEndWorkout,
 }: PerformanceDropModalProps) {
-  const dropPercent = (((currentTime - bestTime) / bestTime) * 100).toFixed(1)
+  const dropPercent = (((shortMA - longMA) / longMA) * 100).toFixed(1)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -30,16 +30,16 @@ export function PerformanceDropModal({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-center">
             <div className="rounded-lg bg-green-50 p-3">
-              <p className="text-xs text-muted-foreground">Best Sprint</p>
-              <p className="text-xl font-mono font-bold text-green-600">{bestTime.toFixed(1)}s</p>
+              <p className="text-xs text-muted-foreground">Session Avg</p>
+              <p className="text-xl font-mono font-bold text-green-600">{longMA.toFixed(1)}s</p>
             </div>
             <div className="rounded-lg bg-red-50 p-3">
-              <p className="text-xs text-muted-foreground">This Sprint</p>
-              <p className="text-xl font-mono font-bold text-red-600">{currentTime.toFixed(1)}s</p>
+              <p className="text-xs text-muted-foreground">Recent Avg</p>
+              <p className="text-xl font-mono font-bold text-red-600">{shortMA.toFixed(1)}s</p>
             </div>
           </div>
           <p className="text-sm text-center text-muted-foreground">
-            Your coordination is compromised due to acidity. Risk of hamstring strain is high. Recommended: End Workout Now.
+            Your last 2 sprints averaged {dropPercent}% slower than your session average. Risk of hamstring strain is high. Recommended: End Workout Now.
           </p>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={onContinue}>

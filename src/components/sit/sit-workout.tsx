@@ -45,6 +45,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [bestTime, setBestTime] = useState<number | null>(null)
   const [showDropModal, setShowDropModal] = useState(false)
   const [pendingDropTime, setPendingDropTime] = useState<number | null>(null)
+  const [pendingShortMA, setPendingShortMA] = useState<number | null>(null)
+  const [pendingLongMA, setPendingLongMA] = useState<number | null>(null)
   const [testMode, setTestMode] = useState(false)
   const [showFlowRunCheck, setShowFlowRunCheck] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<SitWorkoutSession | null>(null)
@@ -63,6 +65,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const nextUpCueFiredRef = useRef(false)
   const phasesCompletedRef = useRef(0)
   const generalWarmupCueFiredRef = useRef(false)
+  const neuralHoldCueFiredRef = useRef(false)
   const lastTickRemainingRef = useRef<number>(-1)
 
   const speedMultiplier = testMode ? 12 : 1
@@ -74,7 +77,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     const keepalivePhases: SitPhase[] = [
       "general-warmup", "tissue-prep-work", "tissue-prep-rest",
       "neural-left", "neural-switch", "neural-right",
-      "washout", "sprint-recovery",
+      "washout", "sprint-ready", "sprint-active", "sprint-recovery",
     ]
     if (keepalivePhases.includes(phase)) {
       audio.startKeepalive()
@@ -112,6 +115,16 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
         if (remaining === 15 && !generalWarmupCueFiredRef.current) {
           generalWarmupCueFiredRef.current = true
           audio.speak("Pogo hops in 15 seconds. No rest.")
+        }
+        if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
+          lastTickRemainingRef.current = remaining
+          audio.playCountdownTick()
+        }
+      }
+      if (phase === "neural-left" || phase === "neural-right") {
+        if (remaining === 15 && !neuralHoldCueFiredRef.current) {
+          neuralHoldCueFiredRef.current = true
+          audio.speak("15 seconds")
         }
         if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
           lastTickRemainingRef.current = remaining
@@ -158,6 +171,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     phaseTimer.pause()
     phaseTimer.reset()
     nextUpCueFiredRef.current = false
+    neuralHoldCueFiredRef.current = false
+    lastTickRemainingRef.current = -1
     setPhase(nextPhase)
   }, [phaseTimer])
 
@@ -270,14 +285,20 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     const elapsed = (performance.now() - sprintStartRef.current) / 1000
     const record: SprintRecord = { sprintNumber, timeSeconds: elapsed }
 
-    setSprintHistory((prev) => [...prev, record])
+    const updatedHistory = [...sprintHistory, record]
+    setSprintHistory(updatedHistory)
     const newBest = bestTime === null ? elapsed : Math.min(bestTime, elapsed)
     setBestTime(newBest)
 
-    if (sprintHistory.length >= 1 && bestTime !== null) {
-      const drop = (elapsed - bestTime) / bestTime
+    if (updatedHistory.length >= 3) {
+      const times = updatedHistory.map((s) => s.timeSeconds)
+      const longMA = times.reduce((a, b) => a + b, 0) / times.length
+      const shortMA = (times[times.length - 1] + times[times.length - 2]) / 2
+      const drop = (shortMA - longMA) / longMA
       if (drop > 0.05) {
         setPendingDropTime(elapsed)
+        setPendingShortMA(shortMA)
+        setPendingLongMA(longMA)
         setShowDropModal(true)
         phaseTimer.pause()
         phaseTimer.reset()
@@ -324,11 +345,15 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const handleDropContinue = useCallback(() => {
     setShowDropModal(false)
     setPendingDropTime(null)
+    setPendingShortMA(null)
+    setPendingLongMA(null)
   }, [])
 
   const handleDropEnd = useCallback(() => {
     setShowDropModal(false)
     setPendingDropTime(null)
+    setPendingShortMA(null)
+    setPendingLongMA(null)
     saveAndComplete(true)
   }, [saveAndComplete])
 
@@ -492,10 +517,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     return (
       <div className="min-h-screen flex flex-col">
         <SprintActive onStop={handleSprintStop} />
-        {showDropModal && pendingDropTime !== null && bestTime !== null && (
+        {showDropModal && pendingShortMA !== null && pendingLongMA !== null && (
           <PerformanceDropModal
-            currentTime={pendingDropTime}
-            bestTime={bestTime}
+            shortMA={pendingShortMA}
+            longMA={pendingLongMA}
             onContinue={handleDropContinue}
             onEndWorkout={handleDropEnd}
           />
@@ -668,10 +693,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
         </div>
       </div>
 
-      {showDropModal && pendingDropTime !== null && bestTime !== null && (
+      {showDropModal && pendingShortMA !== null && pendingLongMA !== null && (
         <PerformanceDropModal
-          currentTime={pendingDropTime}
-          bestTime={bestTime}
+          shortMA={pendingShortMA}
+          longMA={pendingLongMA}
           onContinue={handleDropContinue}
           onEndWorkout={handleDropEnd}
         />
