@@ -88,6 +88,7 @@ export interface CircuitWorkoutSession {
   rounds: CircuitRoundData[]
   exerciseSettings?: Record<string, ExerciseSetting>
   exerciseChoices?: Record<string, "main" | "alternative">
+  exerciseEquipment?: Record<string, string>
   weakLinkPractice?: WeakLinkPractice[]
 }
 
@@ -100,6 +101,7 @@ export interface CircuitSessionProgress {
   rounds: CircuitRoundData[]
   currentRoundResults: ComboCompletionResult[]
   weakLinks: WeakLinkEntry[]
+  exerciseEquipment?: Record<string, string>
   roundTimerSeconds: number
   startedAt: string
   savedAt: string

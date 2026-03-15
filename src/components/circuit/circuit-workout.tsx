@@ -29,6 +29,8 @@ import {
   clearCircuitProgress,
   getExerciseChoices,
   saveExerciseChoices,
+  getExerciseEquipment,
+  saveExerciseEquipment,
 } from "@/lib/storage"
 import { ComboCard } from "./combo-card"
 import { ComboTimer } from "./combo-timer"
@@ -93,7 +95,11 @@ function buildCompactConfig(session: CircuitWorkoutSession): string {
     })
   }
 
-  return JSON.stringify({ v: session.variant, d: mostCommon, c: choices })
+  const config: Record<string, unknown> = { v: session.variant, d: mostCommon, c: choices }
+  if (session.exerciseEquipment && Object.keys(session.exerciseEquipment).length > 0) {
+    config.e = session.exerciseEquipment
+  }
+  return JSON.stringify(config)
 }
 
 function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: string): string {
@@ -149,6 +155,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [currentRoundResults, setCurrentRoundResults] = useState<ComboCompletionResult[]>([])
   const [exerciseSettings, setExerciseSettings] = useState<Record<string, ExerciseSetting>>({})
   const [exerciseChoices, setExerciseChoices] = useState<Record<string, "main" | "alternative">>({})
+  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>({})
   const [savedPreferences, setSavedPreferences] = useState<Record<string, ExercisePreference>>({})
   const [weakLinks, setWeakLinks] = useState<WeakLinkEntry[]>([])
   const [weakLinkPracticeExercises, setWeakLinkPracticeExercises] = useState<WeakLinkEntry[]>([])
@@ -158,6 +165,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [testMode, setTestMode] = useState(false)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [transitionExerciseName, setTransitionExerciseName] = useState("")
+  const [transitionEquipmentNote, setTransitionEquipmentNote] = useState("")
   const [completedSessionData, setCompletedSessionData] = useState<CircuitWorkoutSession | null>(null)
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
@@ -200,6 +208,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     if (Object.keys(savedChoices).length > 0) {
       setExerciseChoices(savedChoices)
     }
+    setExerciseEquipment(getExerciseEquipment())
     const saved = getCircuitProgress()
     if (saved) {
       setPendingResume(saved)
@@ -258,13 +267,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           setTransitionExerciseName(name)
           transitionExerciseDurationRef.current = exerciseSettings[currentExercise.id]?.durationSeconds || 60
         }
+        const equipmentDesc = exerciseEquipment[currentExercise.id]
+        setTransitionEquipmentNote(equipmentDesc ? `${equipmentDesc}` : "")
         const effectiveDuration = getEffectiveTransitionDuration(currentExercise)
         setTransitionDuration(effectiveDuration)
         transitionTimer.reset()
         transitionTimer.start()
         setPhase("transition")
         audio.playCompleteSound()
-        audio.speak("Transition")
+        audio.speak(equipmentDesc ? "Transition. Grab your sand weight" : "Transition")
         startTransitionCountdown(effectiveDuration)
         return
       }
@@ -341,6 +352,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       variant: activeWorkout,
       exerciseSettings,
       exerciseChoices,
+      exerciseEquipment: Object.keys(exerciseEquipment).length > 0 ? exerciseEquipment : undefined,
       currentRound,
       currentComboIndex,
       rounds,
@@ -350,13 +362,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       startedAt: workoutStartRef.current || new Date().toISOString(),
       savedAt: new Date().toISOString(),
     })
-  }, [phase, activeWorkout, exerciseSettings, exerciseChoices, currentRound, currentComboIndex, rounds, currentRoundResults, weakLinks, roundTimer.elapsedSeconds])
+  }, [phase, activeWorkout, exerciseSettings, exerciseChoices, exerciseEquipment, currentRound, currentComboIndex, rounds, currentRoundResults, weakLinks, roundTimer.elapsedSeconds])
 
   const handleResume = useCallback(() => {
     if (!pendingResume) return
     setActiveWorkout(pendingResume.variant)
     setExerciseSettings(pendingResume.exerciseSettings)
     setExerciseChoices(pendingResume.exerciseChoices || {})
+    setExerciseEquipment(pendingResume.exerciseEquipment || getExerciseEquipment())
     setCurrentRound(pendingResume.currentRound)
     setCurrentComboIndex(pendingResume.currentComboIndex)
     setRounds(pendingResume.rounds)
@@ -380,12 +393,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     (
       variant: WorkoutVariant,
       settings: Record<string, ExerciseSetting>,
-      choices: Record<string, "main" | "alternative">
+      choices: Record<string, "main" | "alternative">,
+      equipment: Record<string, string>
     ) => {
       setActiveWorkout(variant)
       setExerciseSettings(settings)
       setExerciseChoices(choices)
+      setExerciseEquipment(equipment)
       saveExerciseChoices(choices)
+      saveExerciseEquipment(equipment)
       workoutStartRef.current = new Date().toISOString()
       setPhase("ready")
     },
@@ -444,11 +460,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     if (firstExercise) {
       const name = resolveExerciseName(firstExercise, exerciseChoices)
       setTransitionExerciseName(name)
+      const equipmentDesc = exerciseEquipment[firstExercise.id]
+      setTransitionEquipmentNote(equipmentDesc ? `${equipmentDesc}` : "")
       transitionExerciseDurationRef.current = exerciseSettings[firstExercise.id]?.durationSeconds || 60
       transitionTimer.reset()
       setPhase("transition")
       transitionTimer.start()
-      audio.speak("Get ready for " + name)
+      const speechText = equipmentDesc ? `Get ready for ${name}. Grab your sand weight` : `Get ready for ${name}`
+      audio.speak(speechText)
       startTransitionCountdown(8)
     } else {
       setPhase("transition")
@@ -530,6 +549,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         rounds: rounds,
         exerciseSettings,
         exerciseChoices,
+        exerciseEquipment: Object.keys(exerciseEquipment).length > 0 ? exerciseEquipment : undefined,
         weakLinkPractice: practiceRecords || weakLinkPracticeRecords,
       }
       clearCircuitProgress()
@@ -541,7 +561,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       }
       setPhase("workout-complete")
     },
-    [workout.id, activeWorkout, rounds, exerciseSettings, exerciseChoices, weakLinkPracticeRecords]
+    [workout.id, activeWorkout, rounds, exerciseSettings, exerciseChoices, exerciseEquipment, weakLinkPracticeRecords]
   )
 
   const handleFinishRound = useCallback(() => {
@@ -879,6 +899,9 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               <p className="text-lg font-semibold text-primary">
                 {resumeAfterTransitionRef.current ? `Next: ${transitionExerciseName}` : transitionExerciseName}
               </p>
+              {transitionEquipmentNote && (
+                <p className="text-sm font-medium text-amber-500">{transitionEquipmentNote}</p>
+              )}
               <div className="flex items-center gap-3">
                 {transitionTimer.isRunning ? (
                   <button
@@ -904,6 +927,18 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               </div>
             </div>
           )}
+
+          {phase === "ready" && currentCombo && (() => {
+            const equippedExercises = currentCombo.subExercises.filter(s => exerciseEquipment[s.id])
+            if (equippedExercises.length === 0) return null
+            return (
+              <div className="rounded-lg bg-amber-500/15 border border-amber-500/30 p-3 mb-3">
+                <p className="text-sm font-medium text-amber-500">
+                  Equipment needed: {equippedExercises.map(s => `${exerciseEquipment[s.id]} for ${resolveExerciseName(s, exerciseChoices)}`).join(", ")}
+                </p>
+              </div>
+            )
+          })()}
 
           {(phase === "timing" || phase === "ready") && (
             <ComboTimer
@@ -935,6 +970,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                     isCompleted={false}
                     exerciseSettings={exerciseSettings}
                     exerciseChoices={exerciseChoices}
+                    exerciseEquipment={exerciseEquipment}
                   />
                 )
               })}

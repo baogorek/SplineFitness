@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
+  EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
 } as const
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
@@ -229,6 +230,25 @@ export function getExerciseChoices(): Record<string, "main" | "alternative"> {
     return data ? JSON.parse(data) : {}
   } catch {
     return {}
+  }
+}
+
+export function getExerciseEquipment(): Record<string, string> {
+  if (typeof window === "undefined") return {}
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.EXERCISE_EQUIPMENT)
+    return data ? JSON.parse(data) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveExerciseEquipment(equipment: Record<string, string>): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.EXERCISE_EQUIPMENT, JSON.stringify(equipment))
+  } catch (error) {
+    console.warn("Error saving exercise equipment:", error)
   }
 }
 

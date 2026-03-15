@@ -9,6 +9,7 @@ import {
   WorkoutVariant,
 } from "@/types/workout"
 import { circuitWorkouts } from "@/data/circuit-workouts"
+import { getExerciseEquipment, saveExerciseEquipment } from "@/lib/storage"
 import { AttributionBanner } from "./attribution-banner"
 import { DurationSelector, GlobalDurationControl } from "./duration-selector"
 
@@ -24,6 +25,7 @@ interface CompactConfig {
   v: WorkoutVariant
   d: number
   c: Record<string, "alternative">
+  e?: Record<string, string>
 }
 
 function parseConfig(input: string): CompactConfig | null {
@@ -34,7 +36,7 @@ function parseConfig(input: string): CompactConfig | null {
     try {
       const parsed = JSON.parse(configMatch[1])
       if (parsed.v && parsed.d !== undefined) {
-        return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {} }
+        return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {}, e: parsed.e }
       }
     } catch { /* not valid JSON */ }
   }
@@ -43,7 +45,7 @@ function parseConfig(input: string): CompactConfig | null {
     const parsed = JSON.parse(trimmed)
 
     if (parsed.v && parsed.d !== undefined) {
-      return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {} }
+      return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {}, e: parsed.e }
     }
 
     if (parsed.mode === "circuit") {
@@ -63,7 +65,7 @@ function parseConfig(input: string): CompactConfig | null {
           if (choice === "alternative") choices[id] = "alternative"
         })
       }
-      return { v: parsed.variant, d: snapToValidDuration(mostCommon), c: choices }
+      return { v: parsed.variant, d: snapToValidDuration(mostCommon), c: choices, e: parsed.exerciseEquipment }
     }
   } catch { /* not valid JSON */ }
 
@@ -75,7 +77,8 @@ interface CircuitSetupProps {
   onStart: (
     variant: WorkoutVariant,
     exerciseSettings: Record<string, ExerciseSetting>,
-    exerciseChoices: Record<string, "main" | "alternative">
+    exerciseChoices: Record<string, "main" | "alternative">,
+    exerciseEquipment: Record<string, string>
   ) => void
   initialVariant?: WorkoutVariant
   savedSettings?: Record<string, ExerciseSetting>
@@ -96,6 +99,7 @@ export function CircuitSetup({
   const [exerciseChoices, setExerciseChoices] = useState<
     Record<string, "main" | "alternative">
   >({})
+  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>({})
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set())
   const [configExpanded, setConfigExpanded] = useState(false)
   const [configText, setConfigText] = useState("")
@@ -122,6 +126,10 @@ export function CircuitSetup({
     setExerciseSettings(allExercises)
     setExerciseChoices(allChoices)
   }, [savedSettings, savedChoices])
+
+  useEffect(() => {
+    setExerciseEquipment(getExerciseEquipment())
+  }, [])
 
   const handleDurationChange = (exerciseId: string, duration: number) => {
     setExerciseSettings((prev) => ({
@@ -170,6 +178,10 @@ export function CircuitSetup({
       Object.entries(config.c).forEach(([id]) => { updated[id] = "alternative" })
       return updated
     })
+    if (config.e && Object.keys(config.e).length > 0) {
+      setExerciseEquipment(config.e)
+      saveExerciseEquipment(config.e)
+    }
     setConfigStatus("Config applied!")
     setConfigError(false)
     setTimeout(() => {
@@ -376,6 +388,28 @@ export function CircuitSetup({
                                 </button>
                               </div>
                             )}
+                            {sub.id === "bw-triceps-extensions" && (
+                              <label className="flex items-center gap-2 ml-4 py-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!exerciseEquipment["bw-triceps-extensions"]}
+                                  onChange={(e) => {
+                                    setExerciseEquipment(prev => {
+                                      const next = { ...prev }
+                                      if (e.target.checked) {
+                                        next["bw-triceps-extensions"] = "Sand weight \u2014 10 lbs"
+                                      } else {
+                                        delete next["bw-triceps-extensions"]
+                                      }
+                                      saveExerciseEquipment(next)
+                                      return next
+                                    })
+                                  }}
+                                  className="h-4 w-4 rounded border-border text-primary accent-primary"
+                                />
+                                <span className="text-xs text-muted-foreground">Sand weight (10 lbs)</span>
+                              </label>
+                            )}
                           </div>
                         )
                       })}
@@ -390,7 +424,7 @@ export function CircuitSetup({
 
       <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4">
         <Button
-          onClick={() => onStart(variant, exerciseSettings, exerciseChoices)}
+          onClick={() => onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)}
           className="w-full h-14 text-lg font-semibold"
         >
           <Play className="mr-2 h-5 w-5" />

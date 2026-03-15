@@ -14,6 +14,7 @@ interface ComboCardProps {
   isCompleted: boolean
   exerciseSettings?: Record<string, ExerciseSetting>
   exerciseChoices?: Record<string, "main" | "alternative">
+  exerciseEquipment?: Record<string, string>
   completionResult?: ComboCompletionResult
   onClick?: () => void
 }
@@ -38,6 +39,7 @@ export function ComboCard({
   isCompleted,
   exerciseSettings,
   exerciseChoices,
+  exerciseEquipment,
   completionResult,
   onClick,
 }: ComboCardProps) {
@@ -136,6 +138,11 @@ export function ComboCard({
                 >
                   {resolved.name}
                 </span>
+                {exerciseEquipment?.[sub.id] && (
+                  <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                    10 lbs
+                  </span>
+                )}
                 {videoUrl && (
                   <a
                     href={videoUrl}
