@@ -48,7 +48,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [pendingShortMA, setPendingShortMA] = useState<number | null>(null)
   const [pendingLongMA, setPendingLongMA] = useState<number | null>(null)
   const [testMode, setTestMode] = useState(false)
-  const [showFlowRunCheck, setShowFlowRunCheck] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<SitWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [warmupCountdown, setWarmupCountdown] = useState(5)
@@ -140,16 +139,13 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           const halfwayRemaining = Math.floor(WASHOUT_SECONDS / 2)
           if (remaining <= halfwayRemaining) {
             washoutCueFiredRef.current = true
-            phaseTimer.pause()
-            workoutTimer.pause()
             audio.speak(WASHOUT_MIDPOINT_CUE)
-            setShowFlowRunCheck(true)
           }
         }
       }
-      if ((phase === "tissue-prep-rest" || phase === "neural-right") && !nextUpCueFiredRef.current && remaining === 10) {
-        const cueKey = phase === "tissue-prep-rest" ? "tissue-prep-rest->neural-left" : "neural-right->washout"
-        const shouldFire = phase === "neural-right" || tissuePrepSet >= TISSUE_PREP_SETS
+      if (phase === "tissue-prep-rest" && !nextUpCueFiredRef.current && remaining === 10) {
+        const cueKey = "tissue-prep-rest->neural-left"
+        const shouldFire = tissuePrepSet >= TISSUE_PREP_SETS
         if (shouldFire && NEXT_UP_CUES[cueKey]) {
           nextUpCueFiredRef.current = true
           audio.speak(NEXT_UP_CUES[cueKey])
@@ -357,13 +353,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     saveAndComplete(true)
   }, [saveAndComplete])
 
-  const handleFlowRunConfirm = useCallback(() => {
-    setShowFlowRunCheck(false)
-    audio.speak("Good. Final minute. Mental preparation for sprints.")
-    phaseTimer.start()
-    workoutTimer.start()
-  }, [audio, phaseTimer, workoutTimer])
-
   const handleSkipWashout = useCallback(() => {
     handlePhaseComplete()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,8 +371,19 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       : null
     setBestTime(newBest)
     setSprintNumber((n) => n - 1)
-    transitionTo("sprint-ready")
+    if (updated.length === 0) {
+      transitionTo("sprint-ready")
+    }
   }, [sprintHistory, transitionTo])
+
+  const handleEditSprint = useCallback((sprintNum: number, newTime: number) => {
+    const updated = sprintHistory.map((s) =>
+      s.sprintNumber === sprintNum ? { ...s, timeSeconds: newTime } : s
+    )
+    setSprintHistory(updated)
+    const newBest = Math.min(...updated.map((s) => s.timeSeconds))
+    setBestTime(newBest)
+  }, [sprintHistory])
 
   const handleTestAudio = () => {
     audio.speak("Phosphocreatine resynthesis active.")
@@ -620,7 +620,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
             </div>
           )}
 
-          {isTimedPhase && !showFlowRunCheck && (
+          {isTimedPhase && (
             <SitPhaseDisplay
               phase={phase}
               formattedTime={phaseTimer.formattedTime}
@@ -628,35 +628,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               targetSeconds={phaseTargetSeconds}
               isRunning={phaseTimer.isRunning}
               tissuePrepSet={tissuePrepSet}
-              nextUpLabel={getNextPhaseLabel(phase as SitPhase, tissuePrepSet) ?? undefined}
+              nextUpLabel={phase === "neural-left" || phase === "neural-right" ? undefined : (getNextPhaseLabel(phase as SitPhase, tissuePrepSet) ?? undefined)}
               onPause={() => { phaseTimer.pause(); workoutTimer.pause() }}
               onResume={() => { phaseTimer.start(); workoutTimer.start() }}
               onSkip={phase === "washout" ? handleSkipWashout : undefined}
             />
-          )}
-
-          {showFlowRunCheck && (
-            <div className="flex flex-col items-center gap-6 py-12">
-              <div className="h-20 w-20 rounded-full bg-green-100 flex items-center justify-center">
-                <Zap className="h-10 w-10 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground text-center">
-                Time for your flow run!
-              </h2>
-              <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">
-                Timer paused
-              </p>
-              <p className="text-sm text-muted-foreground text-center max-w-xs">
-                Run at ~50% effort for 30-60 seconds to prime neuromuscular patterns.
-              </p>
-              <Button
-                size="lg"
-                onClick={handleFlowRunConfirm}
-                className="h-16 px-12 text-xl font-bold bg-green-500 hover:bg-green-600 text-white"
-              >
-                Done — Resume
-              </Button>
-            </div>
           )}
 
           {phase === "sprint-ready" && sprintCountdownValue !== null && (
@@ -687,6 +663,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               bestTime={bestTime}
               onSkipRecovery={handleSkipRecovery}
               onDiscardLast={handleDiscardLastSprint}
+              onEditSprint={handleEditSprint}
               onEndWorkout={() => saveAndComplete(false)}
             />
           )}
