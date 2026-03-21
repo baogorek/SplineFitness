@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { ArrowLeft, Play, Clock, ChevronDown, ChevronUp } from "lucide-react"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { ArrowLeft, Play, Clock, ChevronDown, ChevronUp, CheckCircle2, Circle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
@@ -14,6 +14,8 @@ import { AttributionBanner } from "./attribution-banner"
 import { DurationSelector, GlobalDurationControl } from "./duration-selector"
 
 const VALID_DURATIONS = [30, 45, 60, 75, 90, 105, 120]
+const WEIGHT_ELIGIBLE_EXERCISES = new Set(["one-half-bottomed-out-squats", "bw-triceps-extensions"])
+const WEIGHT_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25]
 
 function snapToValidDuration(d: number): number {
   return VALID_DURATIONS.reduce((closest, val) =>
@@ -105,6 +107,8 @@ export function CircuitSetup({
   const [configText, setConfigText] = useState("")
   const [configStatus, setConfigStatus] = useState<string | null>(null)
   const [configError, setConfigError] = useState(false)
+  const [showChecklist, setShowChecklist] = useState(false)
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
 
   const workout = circuitWorkouts[variant]
 
@@ -128,7 +132,16 @@ export function CircuitSetup({
   }, [savedSettings, savedChoices])
 
   useEffect(() => {
-    setExerciseEquipment(getExerciseEquipment())
+    const stored = getExerciseEquipment()
+    let migrated = false
+    Object.keys(stored).forEach(key => {
+      if (stored[key] && !stored[key].endsWith(" lbs")) {
+        stored[key] = "10 lbs"
+        migrated = true
+      }
+    })
+    if (migrated) saveExerciseEquipment(stored)
+    setExerciseEquipment(stored)
   }, [])
 
   const handleDurationChange = (exerciseId: string, duration: number) => {
@@ -190,6 +203,29 @@ export function CircuitSetup({
       setConfigText("")
     }, 1500)
   }
+
+  const weightedExercises = useMemo(() => {
+    const items: { id: string; name: string; weight: string }[] = []
+    workout.combos.forEach(combo => {
+      combo.subExercises.forEach(sub => {
+        if (exerciseEquipment[sub.id]) {
+          const choice = exerciseChoices[sub.id]
+          const name = sub.alternative && choice === "alternative" ? sub.alternative.name : sub.name
+          items.push({ id: sub.id, name, weight: exerciseEquipment[sub.id] })
+        }
+      })
+    })
+    return items
+  }, [workout.combos, exerciseEquipment, exerciseChoices])
+
+  const handleStartClick = useCallback(() => {
+    if (weightedExercises.length > 0) {
+      setCheckedItems(new Set())
+      setShowChecklist(true)
+    } else {
+      onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)
+    }
+  }, [weightedExercises, variant, exerciseSettings, exerciseChoices, exerciseEquipment, onStart])
 
   const totalTimeSeconds = useMemo(() => {
     return workout.combos.reduce((total, combo) => {
@@ -388,27 +424,46 @@ export function CircuitSetup({
                                 </button>
                               </div>
                             )}
-                            {sub.id === "bw-triceps-extensions" && (
-                              <label className="flex items-center gap-2 ml-4 py-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={!!exerciseEquipment["bw-triceps-extensions"]}
-                                  onChange={(e) => {
-                                    setExerciseEquipment(prev => {
-                                      const next = { ...prev }
-                                      if (e.target.checked) {
-                                        next["bw-triceps-extensions"] = "Sand weight \u2014 10 lbs"
-                                      } else {
-                                        delete next["bw-triceps-extensions"]
-                                      }
-                                      saveExerciseEquipment(next)
-                                      return next
-                                    })
-                                  }}
-                                  className="h-4 w-4 rounded border-border text-primary accent-primary"
-                                />
-                                <span className="text-xs text-muted-foreground">Sand weight (10 lbs)</span>
-                              </label>
+                            {WEIGHT_ELIGIBLE_EXERCISES.has(sub.id) && (
+                              <div className="flex items-center gap-2 ml-4 py-1">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!exerciseEquipment[sub.id]}
+                                    onChange={(e) => {
+                                      setExerciseEquipment(prev => {
+                                        const next = { ...prev }
+                                        if (e.target.checked) {
+                                          next[sub.id] = "10 lbs"
+                                        } else {
+                                          delete next[sub.id]
+                                        }
+                                        saveExerciseEquipment(next)
+                                        return next
+                                      })
+                                    }}
+                                    className="h-4 w-4 rounded border-border text-primary accent-primary"
+                                  />
+                                  <span className="text-xs text-muted-foreground">Add weight</span>
+                                </label>
+                                {exerciseEquipment[sub.id] && (
+                                  <select
+                                    value={exerciseEquipment[sub.id]}
+                                    onChange={(e) => {
+                                      setExerciseEquipment(prev => {
+                                        const next = { ...prev, [sub.id]: e.target.value }
+                                        saveExerciseEquipment(next)
+                                        return next
+                                      })
+                                    }}
+                                    className="h-7 rounded-md border border-border bg-muted/50 px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                  >
+                                    {WEIGHT_OPTIONS.map(w => (
+                                      <option key={w} value={`${w} lbs`}>{w} lbs</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
                             )}
                           </div>
                         )
@@ -424,13 +479,68 @@ export function CircuitSetup({
 
       <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4">
         <Button
-          onClick={() => onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)}
+          onClick={handleStartClick}
           className="w-full h-14 text-lg font-semibold"
         >
           <Play className="mr-2 h-5 w-5" />
           Start Workout
         </Button>
       </div>
+
+      {showChecklist && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
+            <p className="text-sm text-muted-foreground">Confirm your weights are nearby before starting.</p>
+            <div className="space-y-3">
+              {weightedExercises.map(item => {
+                const isChecked = checkedItems.has(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setCheckedItems(prev => {
+                      const next = new Set(prev)
+                      if (next.has(item.id)) next.delete(item.id)
+                      else next.add(item.id)
+                      return next
+                    })}
+                    className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/50"
+                  >
+                    {isChecked ? (
+                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                    ) : (
+                      <Circle className="h-5 w-5 text-muted-foreground shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{item.weight}</div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowChecklist(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowChecklist(false)
+                  onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)
+                }}
+                disabled={checkedItems.size < weightedExercises.length}
+                className="flex-1"
+              >
+                Confirm & Start
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
