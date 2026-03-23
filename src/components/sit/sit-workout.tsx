@@ -115,19 +115,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           generalWarmupCueFiredRef.current = true
           audio.speak("Pogo hops in 15 seconds. No rest.")
         }
-        if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
-          lastTickRemainingRef.current = remaining
-          audio.playCountdownTick()
-        }
       }
       if (phase === "neural-left" || phase === "neural-right") {
         if (remaining === 15 && !neuralHoldCueFiredRef.current) {
           neuralHoldCueFiredRef.current = true
           audio.speak("15 seconds")
-        }
-        if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
-          lastTickRemainingRef.current = remaining
-          audio.playCountdownTick()
         }
       }
       if (phase === "washout") {
@@ -150,6 +142,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           nextUpCueFiredRef.current = true
           audio.speak(NEXT_UP_CUES[cueKey])
         }
+      }
+      if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
+        lastTickRemainingRef.current = remaining
+        audio.playCountdownTick()
       }
     },
     onComplete: () => {

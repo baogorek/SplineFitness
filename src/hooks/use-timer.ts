@@ -33,8 +33,8 @@ export function useTimer(options: UseTimerOptions = {}) {
   const recalculate = useCallback(() => {
     if (!startTimeRef.current) return
 
-    const realSeconds = pausedAccumulatorRef.current + (Date.now() - startTimeRef.current) / 1000
-    const newElapsed = Math.floor(realSeconds * speedMultiplier)
+    const realSinceStart = (Date.now() - startTimeRef.current) / 1000
+    const newElapsed = Math.floor(pausedAccumulatorRef.current + realSinceStart * speedMultiplier)
 
     setElapsedSeconds(newElapsed)
 
@@ -77,7 +77,7 @@ export function useTimer(options: UseTimerOptions = {}) {
         }
         document.removeEventListener("visibilitychange", handleVisibility)
         if (startTimeRef.current) {
-          pausedAccumulatorRef.current += (Date.now() - startTimeRef.current) / 1000
+          pausedAccumulatorRef.current += (Date.now() - startTimeRef.current) / 1000 * speedMultiplier
           startTimeRef.current = 0
         }
       }
@@ -105,7 +105,7 @@ export function useTimer(options: UseTimerOptions = {}) {
   const resetTo = useCallback((seconds: number) => {
     setElapsedSeconds(seconds)
     lastMinuteRef.current = Math.floor(seconds / 60)
-    pausedAccumulatorRef.current = seconds / speedMultiplier
+    pausedAccumulatorRef.current = seconds
     startTimeRef.current = 0
     completedRef.current = false
   }, [speedMultiplier])

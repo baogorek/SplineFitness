@@ -275,7 +275,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         transitionTimer.start()
         setPhase("transition")
         audio.playCompleteSound()
-        audio.speak(equipmentDesc ? "Transition. Grab your weight" : "Transition")
+        audio.speak(equipmentDesc ? "Transition. Grab your equipment" : "Transition")
         startTransitionCountdown(effectiveDuration)
         return
       }
@@ -466,7 +466,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       transitionTimer.reset()
       setPhase("transition")
       transitionTimer.start()
-      const speechText = equipmentDesc ? `Get ready for ${name}. Grab your weight` : `Get ready for ${name}`
+      const speechText = equipmentDesc ? `Get ready for ${name}. Grab your equipment` : `Get ready for ${name}`
       audio.speak(speechText)
       startTransitionCountdown(8)
     } else {

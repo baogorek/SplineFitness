@@ -33,6 +33,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [completedSessionData, setCompletedSessionData] = useState<IntervalWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [currentNote, setCurrentNote] = useState("")
+  const [countdownDisplay, setCountdownDisplay] = useState<string>("")
 
   const audio = useAudio()
   useWakeLock(phase !== "complete")
@@ -100,14 +101,6 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     speedMultiplier,
   })
 
-  const countdownTimer = useTimer({
-    targetSeconds: 7,
-    onComplete: () => {
-      countdownTimer.reset()
-    },
-    speedMultiplier,
-  })
-
   const clearCountdownTimeouts = useCallback(() => {
     countdownTimeoutsRef.current.forEach(clearTimeout)
     countdownTimeoutsRef.current = []
@@ -149,25 +142,23 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     const tick = 1000 / speedMultiplier
 
     audio.speak(`Set ${currentSet}`)
-    countdownTimer.reset()
-    countdownTimer.start()
+    setCountdownDisplay("5")
 
     const timeouts = [
-      setTimeout(() => audio.playCountdownTick(), tick * 2),
-      setTimeout(() => audio.playCountdownTick(), tick * 3),
-      setTimeout(() => audio.playCountdownTick(), tick * 4),
-      setTimeout(() => audio.playCountdownTick(), tick * 5),
-      setTimeout(() => audio.playCountdownTick(), tick * 6),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("4") }, tick * 2),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("3") }, tick * 3),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("2") }, tick * 4),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("1") }, tick * 5),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("GO") }, tick * 6),
       setTimeout(() => {
         audio.playCountdownGo()
-        countdownTimer.reset()
         setPhase("interval")
         intervalTimer.reset()
         intervalTimer.start()
       }, tick * 7),
     ]
     countdownTimeoutsRef.current = timeouts
-  }, [currentSet, audio, countdownTimer, intervalTimer, speedMultiplier, beginSet])
+  }, [currentSet, audio, intervalTimer, speedMultiplier, beginSet])
 
   const handleStartSetImmediate = useCallback(() => {
     beginSet()
@@ -177,9 +168,16 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     intervalTimer.start()
   }, [audio, intervalTimer, beginSet])
 
+  const handleSkipCountdown = useCallback(() => {
+    clearCountdownTimeouts()
+    audio.playCountdownGo()
+    setPhase("interval")
+    intervalTimer.reset()
+    intervalTimer.start()
+  }, [clearCountdownTimeouts, audio, intervalTimer])
+
   const handleEndWorkout = useCallback(async () => {
     clearCountdownTimeouts()
-    countdownTimer.reset()
     intervalTimer.pause()
     intervalTimer.reset()
     workoutTimer.pause()
@@ -195,7 +193,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       setSavedToHistory(result !== null)
     }
     setPhase("complete")
-  }, [phase, currentSet, clearCountdownTimeouts, countdownTimer, intervalTimer, workoutTimer, restTimer, buildSession, saveCurrentNote])
+  }, [phase, currentSet, clearCountdownTimeouts, intervalTimer, workoutTimer, restTimer, buildSession, saveCurrentNote])
 
   const handleTestAudio = () => {
     audio.speak("Oxidative system approaching VO2 max.")
@@ -272,7 +270,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
           {displayedCompletedSets > 0 && (
             <div className="mt-4 text-left">
               <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                Set {displayedCompletedSets} note (optional)
+                Set {displayedCompletedSets} performance (optional)
               </label>
               <input
                 type="text"
@@ -291,7 +289,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                     }
                   }
                 }}
-                placeholder="e.g. HR 178, felt strong"
+                placeholder="e.g. HR 178, RPE 8"
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -404,12 +402,20 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
           {phase === "countdown" && (
             <div className="flex flex-col items-center gap-4 py-8">
               <p className="text-sm text-muted-foreground uppercase tracking-wider">Get Ready</p>
-              <span className="text-6xl font-mono font-bold text-foreground tabular-nums">
-                {countdownTimer.formattedTime}
+              <span className="text-8xl font-mono font-bold text-foreground tabular-nums">
+                {countdownDisplay}
               </span>
               <p className="text-lg font-semibold text-red-500">
                 Set {currentSet} of {TOTAL_SETS}
               </p>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleSkipCountdown}
+                className="h-14 px-6 text-lg font-semibold"
+              >
+                Go Now
+              </Button>
             </div>
           )}
 
@@ -454,13 +460,13 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               {workoutStartedRef.current && currentSet > 1 && (
                 <div className="w-full max-w-xs">
                   <label className="text-xs text-muted-foreground uppercase tracking-wider">
-                    Set {currentSet - 1} note (optional)
+                    Set {currentSet - 1} performance (optional)
                   </label>
                   <input
                     type="text"
                     value={currentNote}
                     onChange={(e) => setCurrentNote(e.target.value)}
-                    placeholder="e.g. HR 178, felt strong"
+                    placeholder="e.g. HR 178, RPE 8"
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>

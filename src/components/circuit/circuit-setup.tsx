@@ -14,8 +14,32 @@ import { AttributionBanner } from "./attribution-banner"
 import { DurationSelector, GlobalDurationControl } from "./duration-selector"
 
 const VALID_DURATIONS = [30, 45, 60, 75, 90, 105, 120]
-const WEIGHT_ELIGIBLE_EXERCISES = new Set(["one-half-bottomed-out-squats", "bw-triceps-extensions"])
 const WEIGHT_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25]
+const PLATFORM_OPTIONS = [6, 9, 12, 15, 18, 21, 24]
+
+type EquipmentConfig = {
+  label: string
+  defaultValue: string
+  options: { value: string; label: string }[]
+}
+
+const EQUIPMENT_EXERCISES: Record<string, EquipmentConfig> = {
+  "alt-single-leg-box-squats": {
+    label: "Platform height",
+    defaultValue: "12 in",
+    options: PLATFORM_OPTIONS.map(h => ({ value: `${h} in`, label: `${h} in` })),
+  },
+  "one-half-bottomed-out-squats": {
+    label: "Add weight",
+    defaultValue: "10 lbs",
+    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
+  },
+  "bw-triceps-extensions": {
+    label: "Add weight",
+    defaultValue: "10 lbs",
+    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
+  },
+}
 
 function snapToValidDuration(d: number): number {
   return VALID_DURATIONS.reduce((closest, val) =>
@@ -135,11 +159,15 @@ export function CircuitSetup({
     const stored = getExerciseEquipment()
     let migrated = false
     Object.keys(stored).forEach(key => {
-      if (stored[key] && !stored[key].endsWith(" lbs")) {
+      if (stored[key] && !stored[key].endsWith(" lbs") && !stored[key].endsWith(" in")) {
         stored[key] = "10 lbs"
         migrated = true
       }
     })
+    if (!stored["alt-single-leg-box-squats"]) {
+      stored["alt-single-leg-box-squats"] = "12 in"
+      migrated = true
+    }
     if (migrated) saveExerciseEquipment(stored)
     setExerciseEquipment(stored)
   }, [])
@@ -424,47 +452,50 @@ export function CircuitSetup({
                                 </button>
                               </div>
                             )}
-                            {WEIGHT_ELIGIBLE_EXERCISES.has(sub.id) && (
-                              <div className="flex items-center gap-2 ml-4 py-1">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!exerciseEquipment[sub.id]}
-                                    onChange={(e) => {
-                                      setExerciseEquipment(prev => {
-                                        const next = { ...prev }
-                                        if (e.target.checked) {
-                                          next[sub.id] = "10 lbs"
-                                        } else {
-                                          delete next[sub.id]
-                                        }
-                                        saveExerciseEquipment(next)
-                                        return next
-                                      })
-                                    }}
-                                    className="h-4 w-4 rounded border-border text-primary accent-primary"
-                                  />
-                                  <span className="text-xs text-muted-foreground">Add weight</span>
-                                </label>
-                                {exerciseEquipment[sub.id] && (
-                                  <select
-                                    value={exerciseEquipment[sub.id]}
-                                    onChange={(e) => {
-                                      setExerciseEquipment(prev => {
-                                        const next = { ...prev, [sub.id]: e.target.value }
-                                        saveExerciseEquipment(next)
-                                        return next
-                                      })
-                                    }}
-                                    className="h-7 rounded-md border border-border bg-muted/50 px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                                  >
-                                    {WEIGHT_OPTIONS.map(w => (
-                                      <option key={w} value={`${w} lbs`}>{w} lbs</option>
-                                    ))}
-                                  </select>
-                                )}
-                              </div>
-                            )}
+                            {EQUIPMENT_EXERCISES[sub.id] && (() => {
+                              const config = EQUIPMENT_EXERCISES[sub.id]
+                              return (
+                                <div className="flex items-center gap-2 ml-4 py-1">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!exerciseEquipment[sub.id]}
+                                      onChange={(e) => {
+                                        setExerciseEquipment(prev => {
+                                          const next = { ...prev }
+                                          if (e.target.checked) {
+                                            next[sub.id] = config.defaultValue
+                                          } else {
+                                            delete next[sub.id]
+                                          }
+                                          saveExerciseEquipment(next)
+                                          return next
+                                        })
+                                      }}
+                                      className="h-4 w-4 rounded border-border text-primary accent-primary"
+                                    />
+                                    <span className="text-xs text-muted-foreground">{config.label}</span>
+                                  </label>
+                                  {exerciseEquipment[sub.id] && (
+                                    <select
+                                      value={exerciseEquipment[sub.id]}
+                                      onChange={(e) => {
+                                        setExerciseEquipment(prev => {
+                                          const next = { ...prev, [sub.id]: e.target.value }
+                                          saveExerciseEquipment(next)
+                                          return next
+                                        })
+                                      }}
+                                      className="h-7 rounded-md border border-border bg-muted/50 px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                    >
+                                      {config.options.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )
                       })}
@@ -491,7 +522,7 @@ export function CircuitSetup({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
-            <p className="text-sm text-muted-foreground">Confirm your weights are nearby before starting.</p>
+            <p className="text-sm text-muted-foreground">Confirm your equipment is ready before starting.</p>
             <div className="space-y-3">
               {weightedExercises.map(item => {
                 const isChecked = checkedItems.has(item.id)
