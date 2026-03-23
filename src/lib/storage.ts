@@ -2,6 +2,7 @@ import {
   WorkoutSession,
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
+  FreeformWorkoutSession,
   IntervalWorkoutSession,
   SitWorkoutSession,
   CoachedWorkoutSession,
@@ -78,6 +79,11 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
           phasesCompleted: row.data.phasesCompleted,
         }
         break
+      case 'freeform':
+        sessionData = {
+          exercises: row.data.exercises,
+        }
+        break
       default:
         sessionData = {
           workoutId: row.workout_id,
@@ -97,13 +103,16 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  const isFreeform = session.mode === 'freeform'
   const isCircuit = session.mode === 'circuit'
   const isInterval = session.mode === 'interval'
   const isSit = session.mode === 'sit'
   const isCoached = session.mode === 'coached'
   const circuitSession = session as CircuitWorkoutSession
 
-  const sessionData = isCircuit
+  const sessionData = isFreeform
+    ? { exercises: (session as FreeformWorkoutSession).exercises }
+    : isCircuit
     ? {
         rounds: circuitSession.rounds,
         exerciseSettings: circuitSession.exerciseSettings,
@@ -134,11 +143,12 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
       }
     : { exercises: (session as any).exercises }
 
-  const workoutId = isInterval ? '4x4-interval'
+  const workoutId = isFreeform ? 'freeform'
+    : isInterval ? '4x4-interval'
     : isSit ? 'sit-sprint'
     : isCoached ? (session as CoachedWorkoutSession).workoutId
     : (session as CircuitWorkoutSession).workoutId
-  const variant = (isInterval || isSit || isCoached) ? null : (session as CircuitWorkoutSession).variant
+  const variant = (isFreeform || isInterval || isSit || isCoached) ? null : (session as CircuitWorkoutSession).variant
 
   const { data, error } = await supabase
     .from('workout_sessions')

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { X, Timer, Dumbbell, Clock, Zap, BookOpen } from "lucide-react"
-import { WorkoutHistoryEntry, WorkoutSession } from "@/types/workout"
+import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession } from "@/types/workout"
 import { formatDisplayDate } from "./calendar-utils"
 
 interface WorkoutDetailModalProps {
@@ -14,10 +14,43 @@ interface WorkoutDetailModalProps {
   onClose: () => void
 }
 
-function WorkoutDataView({ session }: { session: WorkoutSession }) {
+function FreeformDataView({ session }: { session: FreeformWorkoutSession }) {
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">Full Data</p>
+      {session.exercises.map((exercise, i) => (
+        <div key={i} className="space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-foreground">{exercise.name}</span>
+            {exercise.tags?.map((tag) => (
+              <Badge key={tag} variant="outline" className="text-[10px] capitalize">{tag}</Badge>
+            ))}
+          </div>
+          {exercise.sets?.length > 0 && (
+            <div className="pl-2 space-y-0.5">
+              {exercise.sets.map((set) => (
+                <p key={set.id} className="text-xs text-muted-foreground font-mono">
+                  Set {set.id}
+                  {set.weight && ` — ${set.weight} lbs`}
+                  {set.reps && ` x ${set.reps}`}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function WorkoutDataView({ session }: { session: WorkoutSession }) {
+  if (session.mode === "freeform" || (session.mode as string) === "traditional") {
+    const freeformSession = session as FreeformWorkoutSession
+    if (freeformSession.exercises) {
+      return <FreeformDataView session={freeformSession} />
+    }
+  }
+  return (
+    <div className="space-y-3">
       <pre className="rounded-lg bg-muted/50 p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap break-all">
         {JSON.stringify(session, null, 2)}
       </pre>
@@ -68,7 +101,7 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                     ? "SIT Sprint"
                     : entry.session.mode === "coached"
                     ? `Coached: ${entry.session.workoutName}`
-                    : `Traditional ${entry.session.variant}`}
+                    : "Freeform"}
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
                   <Clock className="h-3 w-3" />

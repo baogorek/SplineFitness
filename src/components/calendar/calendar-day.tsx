@@ -14,7 +14,7 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
   const today = isToday(date)
   const hasWorkouts = workouts.length > 0
   const circuitWorkouts = workouts.filter((w) => w.session.mode === "circuit")
-  const traditionalWorkouts = workouts.filter((w) => w.session.mode === "traditional")
+  const freeformWorkouts = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string)
   const coachedWorkouts = workouts.filter((w) => w.session.mode === "coached")
   const sitWorkouts = workouts.filter((w) => w.session.mode === "sit")
 
@@ -37,7 +37,7 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
           {circuitWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-primary" />
           )}
-          {traditionalWorkouts.length > 0 && (
+          {freeformWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
           )}
           {coachedWorkouts.length > 0 && (

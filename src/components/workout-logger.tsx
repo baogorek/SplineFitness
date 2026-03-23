@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { WorkoutMode } from "@/types/workout"
 import { CircuitWorkout } from "./circuit/circuit-workout"
-import { TraditionalWorkout } from "./traditional/traditional-workout"
+import { FreeformWorkout } from "./freeform/freeform-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
 import { SitWorkout } from "./sit/sit-workout"
 import { CoachedWorkout } from "./coached/coached-workout"
@@ -70,11 +70,11 @@ const workoutModes = [
     iconColor: "text-purple-600",
   },
   {
-    id: "traditional" as const,
+    id: "freeform" as const,
     icon: Dumbbell,
-    title: "Traditional",
-    subtitle: "Sets & reps",
-    description: "Classic strength training with weight tracking",
+    title: "Freeform",
+    subtitle: "Log anything",
+    description: "Flexible exercise logging with optional sets & tags",
     color: "bg-blue-500",
     lightBg: "bg-blue-50",
     border: "border-blue-200",
@@ -285,8 +285,8 @@ export function WorkoutLogger() {
     return <CoachedWorkout onModeChange={handleModeChange} />
   }
 
-  if (mode === "traditional") {
-    return <TraditionalWorkout onModeChange={handleModeChange} />
+  if (mode === "freeform") {
+    return <FreeformWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "history") {

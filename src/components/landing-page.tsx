@@ -18,8 +18,8 @@ const features = [
   },
   {
     icon: Dumbbell,
-    title: "Traditional Lifting",
-    description: "Track sets, reps, and weight for strength training sessions",
+    title: "Freeform Logging",
+    description: "Flexible exercise logging with optional sets and tags",
   },
   {
     icon: Calendar,

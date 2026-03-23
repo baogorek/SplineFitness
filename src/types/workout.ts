@@ -1,4 +1,4 @@
-export type WorkoutMode = "traditional" | "circuit" | "interval" | "sit" | "coached"
+export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "coached"
 export type WorkoutVariant = "A" | "B"
 
 // Circuit Types
@@ -124,38 +124,25 @@ export interface IntervalWorkoutSession {
   endedEarly?: boolean
 }
 
-// Traditional Types
-export interface TraditionalSetData {
+// Freeform Types
+export interface FreeformSetData {
   id: number
   weight: string
   reps: string
-  rpe: string
 }
 
-export interface TraditionalExercise {
+export interface FreeformExercise {
   id: string
   name: string
-  muscleGroup: string
-  prescribedSets: number
-  prescribedReps: number
-  restPeriod: string
-  sets: TraditionalSetData[]
+  tags: string[]
+  sets: FreeformSetData[]
 }
 
-export interface TraditionalWorkoutDefinition {
-  id: string
-  variant: WorkoutVariant
-  name: string
-  exercises: TraditionalExercise[]
-}
-
-export interface TraditionalWorkoutSession {
-  mode: "traditional"
-  workoutId: string
-  variant: WorkoutVariant
+export interface FreeformWorkoutSession {
+  mode: "freeform"
   startedAt: string
   completedAt?: string
-  exercises: TraditionalExercise[]
+  exercises: FreeformExercise[]
 }
 
 // SIT Types
@@ -217,8 +204,8 @@ export interface CoachedWorkoutSession {
 }
 
 // Unified Types
-export type WorkoutDefinition = CircuitWorkoutDefinition | TraditionalWorkoutDefinition
-export type WorkoutSession = CircuitWorkoutSession | TraditionalWorkoutSession | IntervalWorkoutSession | SitWorkoutSession | CoachedWorkoutSession
+export type WorkoutDefinition = CircuitWorkoutDefinition
+export type WorkoutSession = CircuitWorkoutSession | FreeformWorkoutSession | IntervalWorkoutSession | SitWorkoutSession | CoachedWorkoutSession
 
 export interface WorkoutHistoryEntry {
   id: string

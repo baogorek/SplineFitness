@@ -55,7 +55,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   }
 
   const circuitCount = workouts.filter((w) => w.session.mode === "circuit").length
-  const traditionalCount = workouts.filter((w) => w.session.mode === "traditional").length
+  const freeformCount = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string).length
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -78,7 +78,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
               </span>
               <span className="flex items-center gap-1">
                 <Dumbbell className="h-3 w-3 text-blue-500" />
-                {traditionalCount}
+                {freeformCount}
               </span>
             </div>
           </div>

@@ -33,7 +33,7 @@ export function WorkoutHeader({
               Back
             </Button>
             <span className="text-sm font-semibold tracking-tight text-foreground">
-              {mode === "circuit" ? "CIRCUIT" : "TRADITIONAL"}
+              {mode === "circuit" ? "CIRCUIT" : mode.toUpperCase()}
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

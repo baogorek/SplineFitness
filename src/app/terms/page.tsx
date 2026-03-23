@@ -50,7 +50,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-foreground mb-4">Description of Service</h2>
             <p className="text-muted-foreground mb-4">
               Spline Fitness is a workout tracking application that allows users to log and track their
-              exercise routines, including circuit training and traditional strength training workouts.
+              exercise routines, including circuit training and strength training workouts.
               The service is provided free of charge.
             </p>
           </section>
