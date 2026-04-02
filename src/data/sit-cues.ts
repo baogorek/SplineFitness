@@ -45,11 +45,11 @@ export const PHASE_SPEECH_CUES: Record<string, string> = {
   "neural-left":
     "Left leg glute bridge. Drive hips up. Squeeze at the top. Near-maximal effort.",
   "neural-switch":
-    "Switch legs.",
+    "Switch legs. Right leg glute bridge in 10 seconds.",
   "neural-right":
     "Right leg glute bridge. Drive hips up. Squeeze at the top. Near-maximal effort.",
   "washout":
-    "Walk at an easy pace for 2 minutes. Then do a flow run at 50% effort for 30 to 60 seconds.",
+    "Easy walk. Shake out your legs. We've got 3 minutes before sprints.",
 }
 
 export const PHASE_TOASTS: Record<string, string> = {
@@ -65,12 +65,41 @@ export const PHASE_TOASTS: Record<string, string> = {
     "13-second sprints tap fast glycolysis. Recovery clears H+ ions, restores ATP-PCr, and resets neural drive for quality output.",
 }
 
-export const WASHOUT_MIDPOINT_CUE =
-  "Time for your flow run. Run at 50% effort for 30 to 60 seconds."
+export interface PhaseCue {
+  remainingSeconds: number
+  text: string
+}
 
-export const WASHOUT_HEADSUP_CUE = "Flow run in 10 seconds."
+export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
+  "general-warmup": [
+    { remainingSeconds: 60, text: "One minute down. Keep it going." },
+    { remainingSeconds: 30, text: "30 seconds. Keep the pace up." },
+    { remainingSeconds: 15, text: "Pogo hops in 15 seconds. No rest." },
+  ],
+  "tissue-prep-work": [
+    { remainingSeconds: 10, text: "10 seconds. Stay light on your feet." },
+  ],
+  "neural-left": [
+    { remainingSeconds: 20, text: "Hold it. Keep squeezing." },
+    { remainingSeconds: 15, text: "15 seconds." },
+  ],
+  "neural-right": [
+    { remainingSeconds: 20, text: "Hold it. Keep driving those hips up." },
+    { remainingSeconds: 15, text: "15 seconds." },
+  ],
+  "washout": [
+    { remainingSeconds: 150, text: "Nice and easy. Let the ATP stores rebuild." },
+    { remainingSeconds: 120, text: "Two minutes to go. Keep walking." },
+    { remainingSeconds: 100, text: "Flow run in 10 seconds. Pick it up to about 50% effort." },
+    { remainingSeconds: 90, text: "Go. Flow run. Smooth stride, 50% effort." },
+    { remainingSeconds: 60, text: "One minute left. Keep the rhythm." },
+    { remainingSeconds: 30, text: "Slow to a walk. 30 seconds." },
+    { remainingSeconds: 15, text: "Get your mind right. Sprints are next." },
+  ],
+}
 
 export const NEXT_UP_CUES: Record<string, string> = {
+  "tissue-prep-rest->tissue-prep-work": "Pogo hops in 10 seconds.",
   "tissue-prep-rest->neural-left": "Next up: Left leg glute bridge. Near maximal effort.",
   "neural-right->washout": "Next up: Easy walking for 3 minutes.",
 }
@@ -78,7 +107,9 @@ export const NEXT_UP_CUES: Record<string, string> = {
 export function getNextPhaseLabel(phase: SitPhase, tissuePrepSet: number): string | null {
   switch (phase) {
     case "tissue-prep-rest":
-      return tissuePrepSet >= TISSUE_PREP_SETS ? "Left Leg Glute Bridge" : null
+      return tissuePrepSet >= TISSUE_PREP_SETS ? "Left Leg Glute Bridge" : "Pogo Hops"
+    case "neural-switch":
+      return "Right Leg Glute Bridge"
     case "neural-right":
       return "Active Recovery Walkout"
     default:

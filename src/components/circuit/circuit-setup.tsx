@@ -15,6 +15,7 @@ import { DurationSelector, GlobalDurationControl } from "./duration-selector"
 
 const VALID_DURATIONS = [30, 45, 60, 75, 90, 105, 120]
 const WEIGHT_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25]
+const LIGHT_WEIGHT_OPTIONS = [2.5, 5, 7.5, 10]
 const PLATFORM_OPTIONS = [6, 9, 12, 15, 18, 21, 24]
 
 type EquipmentConfig = {
@@ -38,6 +39,21 @@ const EQUIPMENT_EXERCISES: Record<string, EquipmentConfig> = {
     label: "Add weight",
     defaultValue: "10 lbs",
     options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
+  },
+  "alt-crossover-step-ups": {
+    label: "Platform height",
+    defaultValue: "12 in",
+    options: PLATFORM_OPTIONS.map(h => ({ value: `${h} in`, label: `${h} in` })),
+  },
+  "alt-reverse-lunges": {
+    label: "Add weight",
+    defaultValue: "10 lbs",
+    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
+  },
+  "alt-bw-side-lateral-raises": {
+    label: "Add weight",
+    defaultValue: "5 lbs",
+    options: LIGHT_WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
   },
 }
 

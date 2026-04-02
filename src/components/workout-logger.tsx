@@ -14,7 +14,7 @@ import { CoachedWorkout } from "./coached/coached-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
-import { getCircuitProgress } from "@/lib/storage"
+import { getCircuitProgress, getFreeformProgress } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { PwaInstallBanner } from "./pwa-install-banner"
 
@@ -262,6 +262,8 @@ export function WorkoutLogger() {
   useEffect(() => {
     if (getCircuitProgress()) {
       setMode("circuit")
+    } else if (getFreeformProgress()) {
+      setMode("freeform")
     }
   }, [])
 

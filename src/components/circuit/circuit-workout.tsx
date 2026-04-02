@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Activity, ArrowLeft, Calendar, Volume2, Zap } from "lucide-react"
+import { Activity, ArrowLeft, Calendar, CheckCircle2, Circle, Volume2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
@@ -167,6 +167,8 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [transitionExerciseName, setTransitionExerciseName] = useState("")
   const [transitionEquipmentNote, setTransitionEquipmentNote] = useState("")
   const [completedSessionData, setCompletedSessionData] = useState<CircuitWorkoutSession | null>(null)
+  const [showComboChecklist, setShowComboChecklist] = useState(false)
+  const [comboCheckedItems, setComboCheckedItems] = useState<Set<string>>(new Set())
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
   const isFirstComboRef = useRef(true)
@@ -451,7 +453,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     }
   }, [transitionTimer, clearCountdownTimeouts, audio, transitionExerciseName, comboTimer, roundTimer])
 
-  const handleStartCombo = useCallback(() => {
+  const beginComboTransition = useCallback(() => {
     lastAnnouncedExerciseRef.current = -1
     lastAnnouncedCueRef.current = ""
     resumeAfterTransitionRef.current = false
@@ -474,7 +476,24 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       transitionTimer.reset()
       transitionTimer.start()
     }
-  }, [transitionTimer, currentCombo, audio, exerciseChoices, exerciseSettings, startTransitionCountdown])
+  }, [transitionTimer, currentCombo, audio, exerciseChoices, exerciseEquipment, exerciseSettings, startTransitionCountdown])
+
+  const handleStartCombo = useCallback(() => {
+    if (currentCombo) {
+      const equippedInCombo = currentCombo.subExercises.filter(s => exerciseEquipment[s.id])
+      if (equippedInCombo.length > 0) {
+        setComboCheckedItems(new Set())
+        setShowComboChecklist(true)
+        return
+      }
+    }
+    beginComboTransition()
+  }, [currentCombo, exerciseEquipment, beginComboTransition])
+
+  const handleComboChecklistConfirm = useCallback(() => {
+    setShowComboChecklist(false)
+    beginComboTransition()
+  }, [beginComboTransition])
 
   const handleSaveComboResult = useCallback(
     (result: ComboCompletionResult) => {
@@ -1002,6 +1021,67 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           onSkip={handleSkipWeakLinkPractice}
         />
       )}
+
+      {showComboChecklist && phase === "ready" && currentCombo && (() => {
+        const equippedItems = currentCombo.subExercises
+          .filter(s => exerciseEquipment[s.id])
+          .map(s => ({
+            id: s.id,
+            name: resolveExerciseName(s, exerciseChoices),
+            equipment: exerciseEquipment[s.id],
+          }))
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
+              <h3 className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
+              <p className="text-sm text-muted-foreground">Confirm your equipment is ready for this combo.</p>
+              <div className="space-y-3">
+                {equippedItems.map(item => {
+                  const isChecked = comboCheckedItems.has(item.id)
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setComboCheckedItems(prev => {
+                        const next = new Set(prev)
+                        if (next.has(item.id)) next.delete(item.id)
+                        else next.add(item.id)
+                        return next
+                      })}
+                      className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                      {isChecked ? (
+                        <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                      ) : (
+                        <Circle className="h-5 w-5 text-muted-foreground shrink-0" />
+                      )}
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{item.name}</div>
+                        <div className="text-xs text-muted-foreground">{item.equipment}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowComboChecklist(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleComboChecklistConfirm}
+                  disabled={comboCheckedItems.size < equippedItems.length}
+                  className="flex-1"
+                >
+                  Confirm & Start
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

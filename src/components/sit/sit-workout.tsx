@@ -27,8 +27,7 @@ import {
   computeSprintRecovery,
   PHASE_LABELS,
   PHASE_SPEECH_CUES,
-  WASHOUT_MIDPOINT_CUE,
-  WASHOUT_HEADSUP_CUE,
+  PHASE_COACHING_CUES,
   NEXT_UP_CUES,
   getNextPhaseLabel,
 } from "@/data/sit-cues"
@@ -59,12 +58,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const startedAtRef = useRef<string>("")
   const sprintStartRef = useRef<number>(0)
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
-  const washoutCueFiredRef = useRef(false)
-  const washoutHeadsUpFiredRef = useRef(false)
-  const nextUpCueFiredRef = useRef(false)
+  const firedCuesRef = useRef<Set<string>>(new Set())
   const phasesCompletedRef = useRef(0)
-  const generalWarmupCueFiredRef = useRef(false)
-  const neuralHoldCueFiredRef = useRef(false)
   const lastTickRemainingRef = useRef<number>(-1)
 
   const speedMultiplier = testMode ? 12 : 1
@@ -85,6 +80,20 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     }
     return () => { audio.stopKeepalive() }
   }, [phase, audio])
+
+  useEffect(() => {
+    const sprintPhases: SitPhase[] = ["sprint-ready", "sprint-active", "sprint-recovery"]
+    if (sprintPhases.includes(phase)) {
+      try {
+        (screen.orientation as any).lock("portrait").catch(() => {})
+      } catch {}
+    }
+    return () => {
+      try {
+        screen.orientation.unlock()
+      } catch {}
+    }
+  }, [phase])
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
 
@@ -110,36 +119,23 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const phaseTimer = useTimer({
     targetSeconds: phaseTargetSeconds || undefined,
     onTick: (remaining) => {
-      if (phase === "general-warmup") {
-        if (remaining === 15 && !generalWarmupCueFiredRef.current) {
-          generalWarmupCueFiredRef.current = true
-          audio.speak("Pogo hops in 15 seconds. No rest.")
-        }
-      }
-      if (phase === "neural-left" || phase === "neural-right") {
-        if (remaining === 15 && !neuralHoldCueFiredRef.current) {
-          neuralHoldCueFiredRef.current = true
-          audio.speak("15 seconds")
-        }
-      }
-      if (phase === "washout") {
-        if (!washoutHeadsUpFiredRef.current && remaining === Math.floor(WASHOUT_SECONDS / 2) + 10) {
-          washoutHeadsUpFiredRef.current = true
-          audio.speak(WASHOUT_HEADSUP_CUE)
-        }
-        if (!washoutCueFiredRef.current) {
-          const halfwayRemaining = Math.floor(WASHOUT_SECONDS / 2)
-          if (remaining <= halfwayRemaining) {
-            washoutCueFiredRef.current = true
-            audio.speak(WASHOUT_MIDPOINT_CUE)
+      const cues = PHASE_COACHING_CUES[phase]
+      if (cues) {
+        for (const cue of cues) {
+          const key = `${phase}-${cue.remainingSeconds}`
+          if (remaining === cue.remainingSeconds && !firedCuesRef.current.has(key)) {
+            firedCuesRef.current.add(key)
+            audio.speak(cue.text)
           }
         }
       }
-      if (phase === "tissue-prep-rest" && !nextUpCueFiredRef.current && remaining === 10) {
-        const cueKey = "tissue-prep-rest->neural-left"
-        const shouldFire = tissuePrepSet >= TISSUE_PREP_SETS
-        if (shouldFire && NEXT_UP_CUES[cueKey]) {
-          nextUpCueFiredRef.current = true
+      if (phase === "tissue-prep-rest" && remaining === 10) {
+        const cueKey = tissuePrepSet < TISSUE_PREP_SETS
+          ? "tissue-prep-rest->tissue-prep-work"
+          : "tissue-prep-rest->neural-left"
+        const key = `next-up-${cueKey}`
+        if (!firedCuesRef.current.has(key) && NEXT_UP_CUES[cueKey]) {
+          firedCuesRef.current.add(key)
           audio.speak(NEXT_UP_CUES[cueKey])
         }
       }
@@ -162,8 +158,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const transitionTo = useCallback((nextPhase: SitPhase) => {
     phaseTimer.pause()
     phaseTimer.reset()
-    nextUpCueFiredRef.current = false
-    neuralHoldCueFiredRef.current = false
+    firedCuesRef.current.clear()
     lastTickRemainingRef.current = -1
     setPhase(nextPhase)
   }, [phaseTimer])
@@ -188,8 +183,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const handlePhaseComplete = useCallback(() => {
     switch (phase) {
       case "general-warmup":
-        generalWarmupCueFiredRef.current = false
-        lastTickRemainingRef.current = -1
         transitionTo("tissue-prep-work")
         break
       case "tissue-prep-work":
@@ -212,8 +205,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
         break
       case "neural-right":
         phasesCompletedRef.current = 2
-        washoutCueFiredRef.current = false
-        washoutHeadsUpFiredRef.current = false
         transitionTo("washout")
         break
       case "washout":
@@ -624,7 +615,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               targetSeconds={phaseTargetSeconds}
               isRunning={phaseTimer.isRunning}
               tissuePrepSet={tissuePrepSet}
-              nextUpLabel={phase === "neural-left" || phase === "neural-right" ? undefined : (getNextPhaseLabel(phase as SitPhase, tissuePrepSet) ?? undefined)}
+              nextUpLabel={getNextPhaseLabel(phase as SitPhase, tissuePrepSet) ?? undefined}
               onPause={() => { phaseTimer.pause(); workoutTimer.pause() }}
               onResume={() => { phaseTimer.start(); workoutTimer.start() }}
               onSkip={phase === "washout" ? handleSkipWashout : undefined}

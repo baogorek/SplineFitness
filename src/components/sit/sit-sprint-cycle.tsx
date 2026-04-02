@@ -54,17 +54,6 @@ export function SprintActive({ onStop }: SprintActiveProps) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [])
 
-  useEffect(() => {
-    try {
-      (screen.orientation as any).lock("portrait").catch(() => {})
-    } catch {}
-    return () => {
-      try {
-        screen.orientation.unlock()
-      } catch {}
-    }
-  }, [])
-
   const handleStop = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
     const finalTime = (performance.now() - startTimeRef.current) / 1000

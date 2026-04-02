@@ -145,6 +145,13 @@ export interface FreeformWorkoutSession {
   exercises: FreeformExercise[]
 }
 
+export interface FreeformSessionProgress {
+  exercises: FreeformExercise[]
+  elapsedSeconds: number
+  startedAt: string
+  savedAt: string
+}
+
 // SIT Types
 export interface SprintRecord {
   sprintNumber: number

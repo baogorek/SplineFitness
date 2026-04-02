@@ -388,8 +388,8 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-shrink-0 px-4 pt-4 pb-2 bg-background">
+      <div className="flex-1 flex flex-col overflow-auto">
+        <div className="px-4 pt-4 pb-2 bg-background">
           {workoutStartedRef.current && (
             <RoundTimer
               formattedTime={workoutTimer.formattedTime}
@@ -451,12 +451,6 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                 </p>
               </div>
 
-              {workoutStartedRef.current && restTimer.elapsedSeconds > 0 && (
-                <p className="text-lg font-mono text-muted-foreground">
-                  Rest: {restTimer.formattedTime}
-                </p>
-              )}
-
               {workoutStartedRef.current && currentSet > 1 && (
                 <div className="w-full max-w-xs">
                   <label className="text-xs text-muted-foreground uppercase tracking-wider">
@@ -470,6 +464,12 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
+              )}
+
+              {workoutStartedRef.current && restTimer.elapsedSeconds > 0 && (
+                <p className="text-lg font-mono text-muted-foreground">
+                  Rest: {restTimer.formattedTime}
+                </p>
               )}
 
               <div className="flex items-center gap-3">

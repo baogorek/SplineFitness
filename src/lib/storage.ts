@@ -7,6 +7,7 @@ import {
   SitWorkoutSession,
   CoachedWorkoutSession,
   CircuitSessionProgress,
+  FreeformSessionProgress,
   ExercisePreference,
   ExerciseSetting,
 } from "@/types/workout"
@@ -15,6 +16,7 @@ import { supabase } from "./supabase"
 const STORAGE_KEYS = {
   CURRENT_SESSION: "strength-tracker:current-session",
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
+  FREEFORM_PROGRESS: "strength-tracker:freeform-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
   EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
@@ -225,6 +227,22 @@ export function getCircuitProgress(): CircuitSessionProgress | null {
 export function clearCircuitProgress(): void {
   if (typeof window === "undefined") return
   localStorage.removeItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+}
+
+export function saveFreeformProgress(progress: FreeformSessionProgress): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(STORAGE_KEYS.FREEFORM_PROGRESS, JSON.stringify(progress))
+}
+
+export function getFreeformProgress(): FreeformSessionProgress | null {
+  if (typeof window === "undefined") return null
+  const data = localStorage.getItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+  return data ? JSON.parse(data) : null
+}
+
+export function clearFreeformProgress(): void {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(STORAGE_KEYS.FREEFORM_PROGRESS)
 }
 
 export function formatTime(seconds: number): string {

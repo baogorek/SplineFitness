@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { ArrowLeft, Clock, Plus, CheckCircle2 } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { ArrowLeft, Clock, Plus, CheckCircle2, Dumbbell } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { FreeformExercise, FreeformWorkoutSession } from "@/types/workout"
+import { FreeformExercise, FreeformWorkoutSession, FreeformSessionProgress } from "@/types/workout"
 import { FreeformExerciseCard } from "./freeform-exercise-card"
 import { useTimer } from "@/hooks/use-timer"
-import { saveWorkoutSession } from "@/lib/storage"
+import { saveWorkoutSession, saveFreeformProgress, getFreeformProgress, clearFreeformProgress } from "@/lib/storage"
 
 interface FreeformWorkoutProps {
   onModeChange: () => void
@@ -21,15 +21,52 @@ function createEmptyExercise(): FreeformExercise {
   }
 }
 
+type FreeformPhase = "workout" | "resume-prompt"
+
 export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   const [exercises, setExercises] = useState<FreeformExercise[]>([createEmptyExercise()])
   const [saving, setSaving] = useState(false)
+  const [phase, setPhase] = useState<FreeformPhase>("workout")
+  const [pendingResume, setPendingResume] = useState<FreeformSessionProgress | null>(null)
   const startedAtRef = useRef(new Date().toISOString())
   const timer = useTimer({ countUp: true })
 
   useEffect(() => {
-    timer.start()
+    const saved = getFreeformProgress()
+    if (saved) {
+      setPendingResume(saved)
+      setPhase("resume-prompt")
+    } else {
+      timer.start()
+    }
   }, [])
+
+  useEffect(() => {
+    if (phase !== "workout") return
+    saveFreeformProgress({
+      exercises,
+      elapsedSeconds: timer.elapsedSeconds,
+      startedAt: startedAtRef.current,
+      savedAt: new Date().toISOString(),
+    })
+  }, [phase, exercises, timer.elapsedSeconds])
+
+  const handleResume = useCallback(() => {
+    if (!pendingResume) return
+    setExercises(pendingResume.exercises)
+    startedAtRef.current = pendingResume.startedAt
+    timer.resetTo(pendingResume.elapsedSeconds)
+    timer.start()
+    setPendingResume(null)
+    setPhase("workout")
+  }, [pendingResume, timer])
+
+  const handleDiscardResume = useCallback(() => {
+    clearFreeformProgress()
+    setPendingResume(null)
+    setPhase("workout")
+    timer.start()
+  }, [timer])
 
   const updateExercise = (id: string, updated: FreeformExercise) => {
     setExercises((prev) => prev.map((e) => (e.id === id ? updated : e)))
@@ -55,8 +92,54 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
       exercises: namedExercises,
     }
     await saveWorkoutSession(session)
+    clearFreeformProgress()
     setSaving(false)
     onModeChange()
+  }
+
+  const handleBack = () => {
+    clearFreeformProgress()
+    onModeChange()
+  }
+
+  if (phase === "resume-prompt" && pendingResume) {
+    const namedCount = pendingResume.exercises.filter((e) => e.name.trim()).length
+    const savedTime = new Date(pendingResume.savedAt)
+    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
+    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="h-20 w-20 rounded-full bg-blue-600 flex items-center justify-center mx-auto">
+            <Dumbbell className="h-10 w-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Resume Workout?</h1>
+          <p className="text-muted-foreground">
+            You have an in-progress Freeform session from {timeAgoText}.
+          </p>
+          <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
+            <p className="text-sm text-foreground">
+              {namedCount} exercise{namedCount !== 1 ? "s" : ""} logged
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 mt-6">
+            <button
+              onClick={handleResume}
+              className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors w-full"
+            >
+              Resume
+            </button>
+            <button
+              onClick={handleDiscardResume}
+              className="px-6 py-3 bg-muted text-muted-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors w-full"
+            >
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const hasNamedExercises = exercises.some((e) => e.name.trim())
@@ -66,7 +149,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={onModeChange} className="gap-1">
+            <Button variant="outline" size="sm" onClick={handleBack} className="gap-1">
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
