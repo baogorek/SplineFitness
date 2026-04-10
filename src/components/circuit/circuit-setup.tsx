@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { ArrowLeft, Play, Clock, ChevronDown, ChevronUp, CheckCircle2, Circle } from "lucide-react"
+import { ArrowLeft, Play, Clock, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
@@ -148,7 +148,6 @@ export function CircuitSetup({
   const [configStatus, setConfigStatus] = useState<string | null>(null)
   const [configError, setConfigError] = useState(false)
   const [showChecklist, setShowChecklist] = useState(false)
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
 
   const workout = circuitWorkouts[variant]
 
@@ -264,7 +263,6 @@ export function CircuitSetup({
 
   const handleStartClick = useCallback(() => {
     if (weightedExercises.length > 0) {
-      setCheckedItems(new Set())
       setShowChecklist(true)
     } else {
       onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)
@@ -537,34 +535,20 @@ export function CircuitSetup({
       {showChecklist && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
-            <p className="text-sm text-muted-foreground">Confirm your equipment is ready before starting.</p>
+            <h3 className="text-lg font-semibold text-foreground">Equipment Summary</h3>
+            <p className="text-sm text-muted-foreground">Here&apos;s what you&apos;ve set up for this workout.</p>
             <div className="space-y-3">
-              {weightedExercises.map(item => {
-                const isChecked = checkedItems.has(item.id)
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCheckedItems(prev => {
-                      const next = new Set(prev)
-                      if (next.has(item.id)) next.delete(item.id)
-                      else next.add(item.id)
-                      return next
-                    })}
-                    className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/50"
-                  >
-                    {isChecked ? (
-                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground shrink-0" />
-                    )}
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{item.weight}</div>
-                    </div>
-                  </button>
-                )
-              })}
+              {weightedExercises.map(item => (
+                <div
+                  key={item.id}
+                  className="w-full flex items-center gap-3 rounded-lg border border-border p-3"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-foreground">{item.name}</div>
+                    <div className="text-xs text-muted-foreground">{item.weight}</div>
+                  </div>
+                </div>
+              ))}
             </div>
             <div className="flex gap-3 pt-2">
               <Button
@@ -579,10 +563,9 @@ export function CircuitSetup({
                   setShowChecklist(false)
                   onStart(variant, exerciseSettings, exerciseChoices, exerciseEquipment)
                 }}
-                disabled={checkedItems.size < weightedExercises.length}
                 className="flex-1"
               >
-                Confirm & Start
+                Start Workout
               </Button>
             </div>
           </div>

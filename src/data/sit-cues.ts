@@ -89,11 +89,11 @@ export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
   ],
   "washout": [
     { remainingSeconds: 150, text: "Nice and easy. Let the ATP stores rebuild." },
-    { remainingSeconds: 120, text: "Two minutes to go. Keep walking." },
-    { remainingSeconds: 100, text: "Flow run in 10 seconds. Pick it up to about 50% effort." },
-    { remainingSeconds: 90, text: "Go. Flow run. Smooth stride, 50% effort." },
-    { remainingSeconds: 60, text: "One minute left. Keep the rhythm." },
-    { remainingSeconds: 30, text: "Slow to a walk. 30 seconds." },
+    { remainingSeconds: 130, text: "Flow run in 10 seconds. Pick it up to about 50% effort." },
+    { remainingSeconds: 120, text: "Go. Flow run. Smooth stride, 50% effort." },
+    { remainingSeconds: 90, text: "90 seconds. Keep the pace." },
+    { remainingSeconds: 60, text: "Slow to a walk. One minute to bring your breathing down." },
+    { remainingSeconds: 30, text: "30 seconds. Controlled breathing." },
     { remainingSeconds: 15, text: "Get your mind right. Sprints are next." },
   ],
 }

@@ -122,7 +122,14 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     }
   }, [currentNote, currentSet, phase])
 
+  const clearIOSUndoStack = useCallback(() => {
+    (document.activeElement as HTMLElement)?.blur()
+    document.designMode = "on"
+    document.designMode = "off"
+  }, [])
+
   const beginSet = useCallback(() => {
+    clearIOSUndoStack()
     if (!workoutStartedRef.current) {
       workoutStartedRef.current = true
       startedAtRef.current = new Date().toISOString()
@@ -133,7 +140,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     restTimer.reset()
     spokenCuesRef.current.clear()
     clearCountdownTimeouts()
-  }, [workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote])
+  }, [workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote, clearIOSUndoStack])
 
   const handleStartSet = useCallback(() => {
     beginSet()
