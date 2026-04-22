@@ -9,8 +9,13 @@ import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
 import { IntervalTimer } from "./interval-timer"
-import { saveWorkoutSession } from "@/lib/storage"
-import { IntervalWorkoutSession } from "@/types/workout"
+import {
+  clearIntervalProgress,
+  getIntervalProgress,
+  saveIntervalProgress,
+  saveWorkoutSession,
+} from "@/lib/storage"
+import { IntervalPhase, IntervalSessionProgress, IntervalWorkoutSession } from "@/types/workout"
 import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
 import {
@@ -20,8 +25,6 @@ import {
   TOTAL_SETS,
 } from "@/data/interval-cues"
 
-type IntervalPhase = "ready" | "countdown" | "interval" | "complete"
-
 interface IntervalWorkoutProps {
   onModeChange: () => void
 }
@@ -29,11 +32,13 @@ interface IntervalWorkoutProps {
 export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [phase, setPhase] = useState<IntervalPhase>("ready")
   const [currentSet, setCurrentSet] = useState(1)
+  const [workoutStarted, setWorkoutStarted] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<IntervalWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [currentNote, setCurrentNote] = useState("")
   const [countdownDisplay, setCountdownDisplay] = useState<string>("")
+  const [pendingResume, setPendingResume] = useState<IntervalSessionProgress | null>(null)
 
   const audio = useAudio()
   useWakeLock(phase !== "complete")
@@ -41,15 +46,23 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
 
   const { signInWithGoogle } = useAuth()
   const spokenCuesRef = useRef<Set<number>>(new Set())
-  const workoutStartedRef = useRef(false)
   const startedAtRef = useRef<string>("")
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const setNotesRef = useRef<Record<number, string>>({})
+  const noteInputRef = useRef<HTMLInputElement | null>(null)
+  const restoredIntervalElapsedRef = useRef<number | null>(null)
 
   const speedMultiplier = testMode ? 12 : 1
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
   const restTimer = useTimer({ countUp: true, speedMultiplier })
+
+  useEffect(() => {
+    const saved = getIntervalProgress()
+    if (saved) {
+      setPendingResume(saved)
+    }
+  }, [])
 
   const buildSession = useCallback((completedSets: number, endedEarly: boolean): IntervalWorkoutSession => {
     const notes = { ...setNotesRef.current }
@@ -83,6 +96,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       intervalTimer.reset()
       if (currentSet >= TOTAL_SETS) {
         workoutTimer.pause()
+        clearIntervalProgress()
         const session = buildSession(TOTAL_SETS, false)
         setCompletedSessionData(session)
         if (FEATURES.AUTH_ENABLED) {
@@ -106,6 +120,8 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     countdownTimeoutsRef.current = []
   }, [])
 
+  useEffect(() => clearCountdownTimeouts, [clearCountdownTimeouts])
+
   useEffect(() => {
     if (phase === "countdown" || phase === "interval") {
       audio.startKeepalive()
@@ -115,32 +131,157 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     return () => { audio.stopKeepalive() }
   }, [phase, audio])
 
-  const saveCurrentNote = useCallback(() => {
-    if (currentNote.trim()) {
-      const setNum = phase === "complete" ? currentSet : currentSet - 1
-      setNotesRef.current[setNum] = currentNote.trim()
-    }
-  }, [currentNote, currentSet, phase])
+  useEffect(() => {
+    if (phase !== "interval") return
 
-  const clearIOSUndoStack = useCallback(() => {
-    (document.activeElement as HTMLElement)?.blur()
-    document.designMode = "on"
-    document.designMode = "off"
+    const restoredElapsed = restoredIntervalElapsedRef.current
+    if (restoredElapsed === null) return
+
+    spokenCuesRef.current = new Set(
+      INTERVAL_SPEECH_CUES
+        .filter((cue) => cue.elapsedSeconds <= restoredElapsed)
+        .map((cue) => cue.elapsedSeconds)
+    )
+    intervalTimer.resetTo(restoredElapsed)
+    restoredIntervalElapsedRef.current = null
+    intervalTimer.start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  const getEditableNoteSetNumber = useCallback((phaseValue: IntervalPhase, setNumber: number) => {
+    const noteSet = phaseValue === "complete" ? setNumber : setNumber - 1
+    return noteSet >= 1 ? noteSet : null
   }, [])
 
-  const beginSet = useCallback(() => {
+  const syncCompletedSessionNotes = useCallback(() => {
+    if (!completedSessionData) return
+
+    const filtered = Object.fromEntries(
+      Object.entries(setNotesRef.current).filter(([, value]) => value.trim())
+    )
+
+    setCompletedSessionData({
+      ...completedSessionData,
+      ...(Object.keys(filtered).length > 0 ? { setNotes: filtered } : {}),
+    })
+  }, [completedSessionData])
+
+  const saveCurrentNote = useCallback((clearInput = false) => {
+    const noteSet = getEditableNoteSetNumber(phase, currentSet)
+    if (noteSet !== null) {
+      const trimmed = currentNote.trim()
+      if (trimmed) {
+        setNotesRef.current[noteSet] = trimmed
+      } else {
+        delete setNotesRef.current[noteSet]
+      }
+    }
+
+    if (phase === "complete") {
+      syncCompletedSessionNotes()
+    }
+
+    if (clearInput) {
+      setCurrentNote("")
+    }
+  }, [currentNote, currentSet, phase, getEditableNoteSetNumber, syncCompletedSessionNotes])
+
+  const clearIOSUndoStack = useCallback(() => {
+    if (typeof document === "undefined") return
+
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
+    const resetInput = document.createElement("input")
+    resetInput.type = "text"
+    resetInput.readOnly = true
+    resetInput.tabIndex = -1
+    resetInput.setAttribute("aria-hidden", "true")
+    resetInput.style.position = "fixed"
+    resetInput.style.opacity = "0"
+    resetInput.style.pointerEvents = "none"
+    resetInput.style.top = "-1000px"
+    resetInput.style.left = "0"
+    document.body.appendChild(resetInput)
+    resetInput.focus()
+    resetInput.blur()
+    resetInput.remove()
+  }, [])
+
+  const handleNoteBlur = useCallback(() => {
+    saveCurrentNote()
     clearIOSUndoStack()
-    if (!workoutStartedRef.current) {
-      workoutStartedRef.current = true
+  }, [saveCurrentNote, clearIOSUndoStack])
+
+  const saveProgressSnapshot = useCallback(() => {
+    if (phase === "complete" || pendingResume) return
+    if (!workoutStarted && phase === "ready" && currentSet === 1 && !currentNote.trim()) return
+
+    const checkpointPhase = phase === "countdown" ? "ready" : phase
+    saveIntervalProgress({
+      phase: checkpointPhase,
+      currentSet,
+      workoutStarted,
+      startedAt: startedAtRef.current,
+      savedAt: new Date().toISOString(),
+      workoutTimerSeconds: workoutTimer.elapsedSeconds,
+      restTimerSeconds: restTimer.elapsedSeconds,
+      intervalElapsedSeconds: phase === "interval" ? intervalTimer.elapsedSeconds : 0,
+      currentNote,
+      setNotes: { ...setNotesRef.current },
+    })
+  }, [
+    phase,
+    pendingResume,
+    workoutStarted,
+    currentSet,
+    currentNote,
+    workoutTimer.elapsedSeconds,
+    restTimer.elapsedSeconds,
+    intervalTimer.elapsedSeconds,
+  ])
+
+  useEffect(() => {
+    saveProgressSnapshot()
+  }, [saveProgressSnapshot])
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      saveProgressSnapshot()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveProgressSnapshot()
+      }
+    }
+
+    window.addEventListener("pagehide", handlePageHide)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [saveProgressSnapshot])
+
+  useEffect(() => {
+    return () => {
+      saveProgressSnapshot()
+    }
+  }, [saveProgressSnapshot])
+
+  const beginSet = useCallback(() => {
+    saveCurrentNote(true)
+    clearIOSUndoStack()
+    if (!workoutStarted) {
+      setWorkoutStarted(true)
       startedAtRef.current = new Date().toISOString()
       workoutTimer.start()
     }
-    saveCurrentNote()
     restTimer.pause()
     restTimer.reset()
     spokenCuesRef.current.clear()
     clearCountdownTimeouts()
-  }, [workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote, clearIOSUndoStack])
+  }, [workoutStarted, workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote, clearIOSUndoStack])
 
   const handleStartSet = useCallback(() => {
     beginSet()
@@ -183,6 +324,48 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     intervalTimer.start()
   }, [clearCountdownTimeouts, audio, intervalTimer])
 
+  const handleResume = useCallback(() => {
+    if (!pendingResume) return
+
+    setWorkoutStarted(pendingResume.workoutStarted)
+    startedAtRef.current = pendingResume.startedAt
+    setCurrentSet(pendingResume.currentSet)
+    setCurrentNote(pendingResume.currentNote)
+    setNotesRef.current = { ...pendingResume.setNotes }
+    setCountdownDisplay("")
+    workoutTimer.resetTo(pendingResume.workoutTimerSeconds)
+    restTimer.resetTo(pendingResume.restTimerSeconds)
+    intervalTimer.pause()
+    intervalTimer.reset()
+    spokenCuesRef.current.clear()
+    clearCountdownTimeouts()
+    setPendingResume(null)
+
+    if (!pendingResume.workoutStarted) {
+      setPhase("ready")
+      return
+    }
+
+    workoutTimer.start()
+
+    if (pendingResume.phase === "interval") {
+      restoredIntervalElapsedRef.current = pendingResume.intervalElapsedSeconds
+      setPhase("interval")
+      return
+    }
+
+    if (pendingResume.restTimerSeconds > 0) {
+      restTimer.start()
+    }
+    setPhase("ready")
+  }, [pendingResume, workoutTimer, restTimer, intervalTimer, clearCountdownTimeouts])
+
+  const handleDiscardResume = useCallback(() => {
+    clearIntervalProgress()
+    setPendingResume(null)
+    setPhase("ready")
+  }, [])
+
   const handleEndWorkout = useCallback(async () => {
     clearCountdownTimeouts()
     intervalTimer.pause()
@@ -190,6 +373,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     workoutTimer.pause()
     restTimer.pause()
     restTimer.reset()
+    clearIntervalProgress()
 
     const completedSets = phase === "ready" ? currentSet - 1 : currentSet
     saveCurrentNote()
@@ -243,6 +427,54 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
 
   const displayedCompletedSets = completedSessionData?.completedSets ?? TOTAL_SETS
 
+  if (pendingResume) {
+    const savedAtLabel = new Date(pendingResume.savedAt).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+    const checkpointLabel = pendingResume.phase === "interval"
+      ? `Set ${pendingResume.currentSet} in progress`
+      : pendingResume.workoutStarted
+      ? `Ready for set ${pendingResume.currentSet}`
+      : "Before first set"
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="h-20 w-20 rounded-full bg-red-500 flex items-center justify-center mx-auto">
+            <HeartPulse className="h-10 w-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Resume 4x4 Session?</h1>
+          <p className="text-muted-foreground">
+            You have an in-progress interval session saved on {savedAtLabel}.
+          </p>
+          <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
+            <p className="text-sm text-foreground">Checkpoint: {checkpointLabel}</p>
+            <p className="text-sm text-muted-foreground">
+              {Math.max(0, pendingResume.currentSet - 1)} set{pendingResume.currentSet - 1 === 1 ? "" : "s"} completed
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 mt-6">
+            <button
+              onClick={handleResume}
+              className="px-6 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors w-full"
+            >
+              Resume
+            </button>
+            <button
+              onClick={handleDiscardResume}
+              className="px-6 py-3 bg-muted text-muted-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors w-full"
+            >
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (phase === "complete") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -280,23 +512,22 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                 Set {displayedCompletedSets} performance (optional)
               </label>
               <input
+                ref={noteInputRef}
                 type="text"
                 value={currentNote}
                 onChange={(e) => setCurrentNote(e.target.value)}
-                onBlur={() => {
-                  if (currentNote.trim()) {
-                    setNotesRef.current[displayedCompletedSets] = currentNote.trim()
-                    if (completedSessionData) {
-                      const notes = { ...setNotesRef.current }
-                      const filtered = Object.fromEntries(Object.entries(notes).filter(([, v]) => v.trim()))
-                      setCompletedSessionData({
-                        ...completedSessionData,
-                        ...(Object.keys(filtered).length > 0 ? { setNotes: filtered } : {}),
-                      })
-                    }
+                onBlur={handleNoteBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    e.currentTarget.blur()
                   }
                 }}
                 placeholder="e.g. HR 178, RPE 8"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                enterKeyHint="done"
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -378,7 +609,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              {workoutStartedRef.current && (
+              {workoutStarted && (
                 <button
                   onClick={handleEndWorkout}
                   className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
@@ -397,7 +628,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
 
       <div className="flex-1 flex flex-col overflow-auto">
         <div className="px-4 pt-4 pb-2 bg-background">
-          {workoutStartedRef.current && (
+          {workoutStarted && (
             <RoundTimer
               formattedTime={workoutTimer.formattedTime}
               isRunning={workoutTimer.isRunning}
@@ -447,33 +678,45 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               </div>
               <div className="text-center space-y-2">
                 <h2 className="text-2xl font-bold text-foreground">
-                  {currentSet === 1 && !workoutStartedRef.current
+                  {currentSet === 1 && !workoutStarted
                     ? "4x4 Interval"
                     : `Set ${currentSet} of ${TOTAL_SETS}`}
                 </h2>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  {currentSet === 1 && !workoutStartedRef.current
+                  {currentSet === 1 && !workoutStarted
                     ? "4 sets of 4-minute high-intensity intervals with physiology coaching"
                     : "Start when you're ready. Your total workout time is running."}
                 </p>
               </div>
 
-              {workoutStartedRef.current && currentSet > 1 && (
+              {workoutStarted && currentSet > 1 && (
                 <div className="w-full max-w-xs">
                   <label className="text-xs text-muted-foreground uppercase tracking-wider">
                     Set {currentSet - 1} performance (optional)
                   </label>
                   <input
+                    ref={noteInputRef}
                     type="text"
                     value={currentNote}
                     onChange={(e) => setCurrentNote(e.target.value)}
+                    onBlur={handleNoteBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        e.currentTarget.blur()
+                      }
+                    }}
                     placeholder="e.g. HR 178, RPE 8"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    enterKeyHint="done"
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               )}
 
-              {workoutStartedRef.current && restTimer.elapsedSeconds > 0 && (
+              {workoutStarted && restTimer.elapsedSeconds > 0 && (
                 <p className="text-lg font-mono text-muted-foreground">
                   Rest: {restTimer.formattedTime}
                 </p>

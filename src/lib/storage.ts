@@ -4,7 +4,9 @@ import {
   CircuitWorkoutSession,
   FreeformWorkoutSession,
   IntervalWorkoutSession,
+  IntervalSessionProgress,
   SitWorkoutSession,
+  SitSessionProgress,
   CoachedWorkoutSession,
   CircuitSessionProgress,
   FreeformSessionProgress,
@@ -15,6 +17,8 @@ import { supabase } from "./supabase"
 
 const STORAGE_KEYS = {
   CURRENT_SESSION: "strength-tracker:current-session",
+  INTERVAL_PROGRESS: "strength-tracker:interval-progress",
+  SIT_PROGRESS: "strength-tracker:sit-progress",
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   FREEFORM_PROGRESS: "strength-tracker:freeform-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
@@ -205,6 +209,62 @@ export function clearCurrentSession(): void {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION)
   } catch (error) {
     console.warn("Error clearing current session:", error)
+  }
+}
+
+export function saveIntervalProgress(progress: IntervalSessionProgress): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.INTERVAL_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving interval progress:", error)
+  }
+}
+
+export function getIntervalProgress(): IntervalSessionProgress | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.INTERVAL_PROGRESS)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearIntervalProgress(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.INTERVAL_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing interval progress:", error)
+  }
+}
+
+export function saveSitProgress(progress: SitSessionProgress): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.SIT_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving SIT progress:", error)
+  }
+}
+
+export function getSitProgress(): SitSessionProgress | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.SIT_PROGRESS)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearSitProgress(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.SIT_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing SIT progress:", error)
   }
 }
 

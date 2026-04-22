@@ -1,5 +1,19 @@
 export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "coached"
 export type WorkoutVariant = "A" | "B"
+export type SitPhase =
+  | "ready"
+  | "warmup-countdown"
+  | "general-warmup"
+  | "tissue-prep-work"
+  | "tissue-prep-rest"
+  | "neural-left"
+  | "neural-switch"
+  | "neural-right"
+  | "washout"
+  | "sprint-ready"
+  | "sprint-active"
+  | "sprint-recovery"
+  | "complete"
 
 // Circuit Types
 export interface VideoLink {
@@ -124,6 +138,21 @@ export interface IntervalWorkoutSession {
   endedEarly?: boolean
 }
 
+export type IntervalPhase = "ready" | "countdown" | "interval" | "complete"
+
+export interface IntervalSessionProgress {
+  phase: Exclude<IntervalPhase, "complete">
+  currentSet: number
+  workoutStarted: boolean
+  startedAt: string
+  savedAt: string
+  workoutTimerSeconds: number
+  restTimerSeconds: number
+  intervalElapsedSeconds: number
+  currentNote: string
+  setNotes: Record<number, string>
+}
+
 // Freeform Types
 export interface FreeformSetData {
   id: number
@@ -167,6 +196,20 @@ export interface SitWorkoutSession {
   bestSprintTimeSeconds: number | null
   phasesCompleted: number
   endedEarly: boolean
+}
+
+export interface SitSessionProgress {
+  phase: SitPhase
+  tissuePrepSet: number
+  sprintNumber: number
+  sprintHistory: SprintRecord[]
+  bestTime: number | null
+  warmupCountdown: number
+  workoutTimerSeconds: number
+  phaseTimerElapsedSeconds: number
+  phasesCompleted: number
+  startedAt: string
+  savedAt: string
 }
 
 // Coached Types

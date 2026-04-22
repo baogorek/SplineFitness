@@ -1,17 +1,6 @@
-export type SitPhase =
-  | "ready"
-  | "warmup-countdown"
-  | "general-warmup"
-  | "tissue-prep-work"
-  | "tissue-prep-rest"
-  | "neural-left"
-  | "neural-switch"
-  | "neural-right"
-  | "washout"
-  | "sprint-ready"
-  | "sprint-active"
-  | "sprint-recovery"
-  | "complete"
+import { SitPhase } from "@/types/workout"
+
+export type { SitPhase } from "@/types/workout"
 
 export const GENERAL_WARMUP_SECONDS = 120
 export const TISSUE_PREP_SETS = 2

@@ -11,8 +11,13 @@ import { RoundTimer } from "@/components/circuit/round-timer"
 import { SitPhaseDisplay } from "./sit-phase-display"
 import { SprintReady, SprintActive, SprintRecovery } from "./sit-sprint-cycle"
 import { PerformanceDropModal } from "./performance-drop-modal"
-import { saveWorkoutSession } from "@/lib/storage"
-import { SprintRecord, SitWorkoutSession } from "@/types/workout"
+import {
+  clearSitProgress,
+  getSitProgress,
+  saveSitProgress,
+  saveWorkoutSession,
+} from "@/lib/storage"
+import { SprintRecord, SitSessionProgress, SitWorkoutSession } from "@/types/workout"
 import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
 import {
@@ -36,6 +41,48 @@ interface SitWorkoutProps {
   onModeChange: () => void
 }
 
+const KEEPALIVE_PHASES: SitPhase[] = [
+  "general-warmup",
+  "tissue-prep-work",
+  "tissue-prep-rest",
+  "neural-left",
+  "neural-switch",
+  "neural-right",
+  "washout",
+  "sprint-ready",
+  "sprint-active",
+  "sprint-recovery",
+]
+
+const TIMED_PHASES: SitPhase[] = [
+  "general-warmup",
+  "tissue-prep-work",
+  "tissue-prep-rest",
+  "neural-left",
+  "neural-switch",
+  "neural-right",
+  "washout",
+  "sprint-recovery",
+]
+
+const SPRINT_ORIENTATION_PHASES: SitPhase[] = ["sprint-ready", "sprint-active", "sprint-recovery"]
+
+function getResumeCheckpointLabel(progress: SitSessionProgress): string {
+  switch (progress.phase) {
+    case "warmup-countdown":
+      return "Warmup countdown"
+    case "tissue-prep-work":
+    case "tissue-prep-rest":
+      return `${PHASE_LABELS[progress.phase]} (Set ${progress.tissuePrepSet}/${TISSUE_PREP_SETS})`
+    case "sprint-ready":
+      return `Sprint ${progress.sprintNumber} ready`
+    case "sprint-recovery":
+      return "Sprint recovery"
+    default:
+      return PHASE_LABELS[progress.phase] || "In progress"
+  }
+}
+
 export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [phase, setPhase] = useState<SitPhase>("ready")
   const [tissuePrepSet, setTissuePrepSet] = useState(1)
@@ -43,7 +90,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [sprintHistory, setSprintHistory] = useState<SprintRecord[]>([])
   const [bestTime, setBestTime] = useState<number | null>(null)
   const [showDropModal, setShowDropModal] = useState(false)
-  const [pendingDropTime, setPendingDropTime] = useState<number | null>(null)
   const [pendingShortMA, setPendingShortMA] = useState<number | null>(null)
   const [pendingLongMA, setPendingLongMA] = useState<number | null>(null)
   const [testMode, setTestMode] = useState(false)
@@ -51,6 +97,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [warmupCountdown, setWarmupCountdown] = useState(5)
   const [sprintCountdownValue, setSprintCountdownValue] = useState<number | null>(null)
+  const [pendingResume, setPendingResume] = useState<SitSessionProgress | null>(null)
 
   const audio = useAudio()
   const { signInWithGoogle } = useAuth()
@@ -61,6 +108,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const firedCuesRef = useRef<Set<string>>(new Set())
   const phasesCompletedRef = useRef(0)
   const lastTickRemainingRef = useRef<number>(-1)
+  const restoreTimedPhaseRef = useRef<{ phase: SitPhase; elapsedSeconds: number } | null>(null)
 
   const speedMultiplier = testMode ? 12 : 1
 
@@ -68,12 +116,14 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   useNavigationGuard(phase !== "ready" && phase !== "complete")
 
   useEffect(() => {
-    const keepalivePhases: SitPhase[] = [
-      "general-warmup", "tissue-prep-work", "tissue-prep-rest",
-      "neural-left", "neural-switch", "neural-right",
-      "washout", "sprint-ready", "sprint-active", "sprint-recovery",
-    ]
-    if (keepalivePhases.includes(phase)) {
+    const saved = getSitProgress()
+    if (saved) {
+      setPendingResume(saved)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (KEEPALIVE_PHASES.includes(phase)) {
       audio.startKeepalive()
     } else {
       audio.stopKeepalive()
@@ -82,15 +132,20 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [phase, audio])
 
   useEffect(() => {
-    const sprintPhases: SitPhase[] = ["sprint-ready", "sprint-active", "sprint-recovery"]
-    if (sprintPhases.includes(phase)) {
+    if (SPRINT_ORIENTATION_PHASES.includes(phase)) {
       try {
-        (screen.orientation as any).lock("portrait").catch(() => {})
+        const orientation = screen.orientation as ScreenOrientation & {
+          lock?: (orientation: string) => Promise<void>
+        }
+        orientation.lock?.("portrait").catch(() => {})
       } catch {}
     }
     return () => {
       try {
-        screen.orientation.unlock()
+        const orientation = screen.orientation as ScreenOrientation & {
+          unlock?: () => void
+        }
+        orientation.unlock?.()
       } catch {}
     }
   }, [phase])
@@ -155,6 +210,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     countdownTimeoutsRef.current = []
   }, [])
 
+  useEffect(() => clearCountdownTimeouts, [clearCountdownTimeouts])
+
   const transitionTo = useCallback((nextPhase: SitPhase) => {
     phaseTimer.pause()
     phaseTimer.reset()
@@ -164,21 +221,82 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [phaseTimer])
 
   useEffect(() => {
-    const timedPhases: SitPhase[] = [
-      "general-warmup", "tissue-prep-work", "tissue-prep-rest",
-      "neural-left", "neural-switch", "neural-right",
-      "washout", "sprint-recovery",
-    ]
-    if (timedPhases.includes(phase)) {
-      phaseTimer.reset()
+    if (!TIMED_PHASES.includes(phase)) return
+
+    const restoredPhase = restoreTimedPhaseRef.current
+    if (restoredPhase?.phase === phase) {
+      restoreTimedPhaseRef.current = null
+      phaseTimer.resetTo(restoredPhase.elapsedSeconds)
       phaseTimer.start()
       const speechCue = PHASE_SPEECH_CUES[phase]
       if (speechCue) {
-        audio.speak(speechCue)
+        audio.speak(`Resuming. ${speechCue}`)
       }
+      return
+    }
+
+    phaseTimer.reset()
+    phaseTimer.start()
+    const speechCue = PHASE_SPEECH_CUES[phase]
+    if (speechCue) {
+      audio.speak(speechCue)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
+
+  const saveProgressSnapshot = useCallback(() => {
+    if (!workoutStartedRef.current || phase === "ready" || phase === "complete" || pendingResume) {
+      return
+    }
+
+    const checkpointPhase = phase === "sprint-active" ? "sprint-ready" : phase
+    saveSitProgress({
+      phase: checkpointPhase,
+      tissuePrepSet,
+      sprintNumber,
+      sprintHistory,
+      bestTime,
+      warmupCountdown,
+      workoutTimerSeconds: workoutTimer.elapsedSeconds,
+      phaseTimerElapsedSeconds: TIMED_PHASES.includes(phase) ? phaseTimer.elapsedSeconds : 0,
+      phasesCompleted: phasesCompletedRef.current,
+      startedAt: startedAtRef.current,
+      savedAt: new Date().toISOString(),
+    })
+  }, [
+    phase,
+    tissuePrepSet,
+    sprintNumber,
+    sprintHistory,
+    bestTime,
+    warmupCountdown,
+    workoutTimer.elapsedSeconds,
+    phaseTimer.elapsedSeconds,
+    pendingResume,
+  ])
+
+  useEffect(() => {
+    saveProgressSnapshot()
+  }, [saveProgressSnapshot])
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      saveProgressSnapshot()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveProgressSnapshot()
+      }
+    }
+
+    window.addEventListener("pagehide", handlePageHide)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [saveProgressSnapshot])
 
   const handlePhaseComplete = useCallback(() => {
     switch (phase) {
@@ -218,30 +336,96 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, tissuePrepSet])
 
+  const startWarmupCountdown = useCallback((startFrom = 5, announce = true) => {
+    clearCountdownTimeouts()
+    setPhase("warmup-countdown")
+    setWarmupCountdown(startFrom)
+    const tick = 1000 / speedMultiplier
+
+    if (announce) {
+      audio.speak("Get ready for jumping jacks")
+    }
+
+    const timeouts: NodeJS.Timeout[] = []
+    for (let nextCount = startFrom - 1, step = 1; nextCount >= 1; nextCount -= 1, step += 1) {
+      timeouts.push(setTimeout(() => {
+        audio.playCountdownTick()
+        setWarmupCountdown(nextCount)
+      }, tick * step))
+    }
+    timeouts.push(setTimeout(() => {
+      audio.playCountdownGo()
+      workoutTimer.start()
+      transitionTo("general-warmup")
+    }, tick * startFrom))
+
+    countdownTimeoutsRef.current = timeouts
+  }, [workoutTimer, transitionTo, audio, speedMultiplier, clearCountdownTimeouts])
+
   const handleStartWorkout = useCallback(() => {
     workoutStartedRef.current = true
     startedAtRef.current = new Date().toISOString()
+    phasesCompletedRef.current = 0
+    startWarmupCountdown()
+  }, [startWarmupCountdown])
 
+  const handleSkipWarmup = useCallback(() => {
+    workoutStartedRef.current = true
+    startedAtRef.current = new Date().toISOString()
+    phasesCompletedRef.current = 3
     clearCountdownTimeouts()
+    phaseTimer.pause()
+    phaseTimer.reset()
     setWarmupCountdown(5)
-    setPhase("warmup-countdown")
-    const tick = 1000 / speedMultiplier
+    setSprintCountdownValue(null)
+    workoutTimer.reset()
+    workoutTimer.start()
+    setPhase("sprint-ready")
+  }, [clearCountdownTimeouts, phaseTimer, workoutTimer])
 
-    audio.speak("Get ready for jumping jacks")
+  const handleResume = useCallback(() => {
+    if (!pendingResume) return
 
-    const timeouts = [
-      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(4) }, tick * 1),
-      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(3) }, tick * 2),
-      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(2) }, tick * 3),
-      setTimeout(() => { audio.playCountdownTick(); setWarmupCountdown(1) }, tick * 4),
-      setTimeout(() => {
-        audio.playCountdownGo()
-        workoutTimer.start()
-        transitionTo("general-warmup")
-      }, tick * 5),
-    ]
-    countdownTimeoutsRef.current = timeouts
-  }, [workoutTimer, transitionTo, audio, speedMultiplier, clearCountdownTimeouts])
+    workoutStartedRef.current = true
+    startedAtRef.current = pendingResume.startedAt
+    phasesCompletedRef.current = pendingResume.phasesCompleted
+
+    setTissuePrepSet(pendingResume.tissuePrepSet)
+    setSprintNumber(pendingResume.sprintNumber)
+    setSprintHistory(pendingResume.sprintHistory)
+    setBestTime(pendingResume.bestTime)
+    setWarmupCountdown(pendingResume.warmupCountdown)
+    setSprintCountdownValue(null)
+    setShowDropModal(false)
+    setPendingShortMA(null)
+    setPendingLongMA(null)
+    workoutTimer.resetTo(pendingResume.workoutTimerSeconds)
+    setPendingResume(null)
+
+    if (pendingResume.phase === "warmup-countdown") {
+      startWarmupCountdown(pendingResume.warmupCountdown, true)
+      return
+    }
+
+    if (TIMED_PHASES.includes(pendingResume.phase)) {
+      restoreTimedPhaseRef.current = {
+        phase: pendingResume.phase,
+        elapsedSeconds: pendingResume.phaseTimerElapsedSeconds,
+      }
+      workoutTimer.start()
+      setPhase(pendingResume.phase)
+      return
+    }
+
+    workoutTimer.start()
+    setPhase(pendingResume.phase)
+  }, [pendingResume, startWarmupCountdown, workoutTimer])
+
+  const handleDiscardResume = useCallback(() => {
+    clearSitProgress()
+    setPendingResume(null)
+    setPhase("ready")
+  }, [])
 
   const startSprintCountdown = useCallback(() => {
     clearCountdownTimeouts()
@@ -279,7 +463,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       const shortMA = (times[times.length - 1] + times[times.length - 2]) / 2
       const drop = (shortMA - longMA) / longMA
       if (drop > 0.05) {
-        setPendingDropTime(elapsed)
         setPendingShortMA(shortMA)
         setPendingLongMA(longMA)
         setShowDropModal(true)
@@ -299,7 +482,9 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const saveAndComplete = useCallback(async (endedEarly: boolean) => {
     workoutTimer.pause()
+    phaseTimer.pause()
     clearCountdownTimeouts()
+    clearSitProgress()
     phasesCompletedRef.current = endedEarly ? phasesCompletedRef.current : 4
 
     const session: SitWorkoutSession = {
@@ -319,7 +504,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       setSavedToHistory(result !== null)
     }
     setPhase("complete")
-  }, [workoutTimer, sprintHistory, bestTime, clearCountdownTimeouts])
+  }, [workoutTimer, phaseTimer, sprintHistory, bestTime, clearCountdownTimeouts])
 
   const handleEndWorkout = useCallback(() => {
     saveAndComplete(sprintHistory.length === 0)
@@ -327,14 +512,12 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const handleDropContinue = useCallback(() => {
     setShowDropModal(false)
-    setPendingDropTime(null)
     setPendingShortMA(null)
     setPendingLongMA(null)
   }, [])
 
   const handleDropEnd = useCallback(() => {
     setShowDropModal(false)
-    setPendingDropTime(null)
     setPendingShortMA(null)
     setPendingLongMA(null)
     saveAndComplete(true)
@@ -402,6 +585,49 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       details,
     })
     return `https://calendar.google.com/calendar/render?${params.toString()}`
+  }
+
+  if (pendingResume) {
+    const savedTime = new Date(pendingResume.savedAt)
+    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
+    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+    const completedSprints = pendingResume.sprintHistory.length
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="h-20 w-20 rounded-full bg-green-500 flex items-center justify-center mx-auto">
+            <Zap className="h-10 w-10 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Resume SIT Session?</h1>
+          <p className="text-muted-foreground">
+            You have an in-progress sprint session from {timeAgoText}.
+          </p>
+          <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
+            <p className="text-sm text-foreground">
+              Checkpoint: {getResumeCheckpointLabel(pendingResume)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {completedSprints} sprint{completedSprints !== 1 ? "s" : ""} completed
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 mt-6">
+            <button
+              onClick={handleResume}
+              className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors w-full"
+            >
+              Resume
+            </button>
+            <button
+              onClick={handleDiscardResume}
+              className="px-6 py-3 bg-muted text-muted-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors w-full"
+            >
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Complete screen
@@ -592,6 +818,17 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               >
                 Start Workout
               </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleSkipWarmup}
+                className="h-12 px-8 text-base font-semibold"
+              >
+                Already Warmed Up
+              </Button>
+              <p className="text-xs text-muted-foreground text-center max-w-xs -mt-2">
+                Skip the guided warmup and go straight to sprint setup.
+              </p>
             </div>
           )}
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -14,7 +14,7 @@ import { CoachedWorkout } from "./coached/coached-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
-import { getCircuitProgress, getFreeformProgress } from "@/lib/storage"
+import { getCircuitProgress, getFreeformProgress, getIntervalProgress, getSitProgress } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { PwaInstallBanner } from "./pwa-install-banner"
 
@@ -257,15 +257,22 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
 }
 
 export function WorkoutLogger() {
-  const [mode, setMode] = useState<AppMode | null>(null)
-
-  useEffect(() => {
+  const [mode, setMode] = useState<AppMode | null>(() => {
+    if (typeof window === "undefined") return null
     if (getCircuitProgress()) {
-      setMode("circuit")
-    } else if (getFreeformProgress()) {
-      setMode("freeform")
+      return "circuit"
     }
-  }, [])
+    if (getFreeformProgress()) {
+      return "freeform"
+    }
+    if (getIntervalProgress()) {
+      return "interval"
+    }
+    if (getSitProgress()) {
+      return "sit"
+    }
+    return null
+  })
 
   const handleModeChange = () => {
     setMode(null)
