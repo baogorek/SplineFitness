@@ -73,6 +73,22 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
           endedEarly: row.data.endedEarly,
         }
         break
+      case 'vo2max':
+        sessionData = {
+          durationSeconds: row.data.durationSeconds,
+          startOffsetMiles: row.data.startOffsetMiles,
+          finalDistanceMiles: row.data.finalDistanceMiles,
+          testDistanceMiles: row.data.testDistanceMiles,
+          testDistanceMeters: row.data.testDistanceMeters,
+          vo2Max: row.data.vo2Max,
+          mets: row.data.mets,
+          averagePaceSecondsPerMile: row.data.averagePaceSecondsPerMile,
+          averageSpeedMph: row.data.averageSpeedMph,
+          inclinePercent: row.data.inclinePercent,
+          notes: row.data.notes,
+          endedEarly: row.data.endedEarly,
+        }
+        break
       case 'coached':
         sessionData = {
           workoutId: row.workout_id,
@@ -143,6 +159,23 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
         endedEarly: session.endedEarly,
       }
       workoutId = "sit-sprint"
+      break
+    case "vo2max":
+      sessionData = {
+        durationSeconds: session.durationSeconds,
+        startOffsetMiles: session.startOffsetMiles,
+        finalDistanceMiles: session.finalDistanceMiles,
+        testDistanceMiles: session.testDistanceMiles,
+        testDistanceMeters: session.testDistanceMeters,
+        vo2Max: session.vo2Max,
+        mets: session.mets,
+        averagePaceSecondsPerMile: session.averagePaceSecondsPerMile,
+        averageSpeedMph: session.averageSpeedMph,
+        inclinePercent: session.inclinePercent,
+        notes: session.notes,
+        endedEarly: session.endedEarly,
+      }
+      workoutId = "vo2max-cooper"
       break
     case "coached":
       sessionData = {

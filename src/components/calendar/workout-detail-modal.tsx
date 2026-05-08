@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Timer, Dumbbell, Clock, Zap, BookOpen } from "lucide-react"
-import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession } from "@/types/workout"
+import { X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
+import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession, Vo2MaxWorkoutSession } from "@/types/workout"
 import { formatDisplayDate } from "./calendar-utils"
 
 interface WorkoutDetailModalProps {
@@ -42,12 +42,74 @@ function FreeformDataView({ session }: { session: FreeformWorkoutSession }) {
   )
 }
 
+function formatDuration(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+}
+
+function formatPace(secondsPerMile: number): string {
+  if (!Number.isFinite(secondsPerMile) || secondsPerMile <= 0) return "--"
+  const roundedSeconds = Math.round(secondsPerMile)
+  const minutes = Math.floor(roundedSeconds / 60)
+  const seconds = roundedSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, "0")}/mi`
+}
+
+function Vo2MaxDataView({ session }: { session: Vo2MaxWorkoutSession }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Relative VO2 Max</p>
+          <p className="mt-1 text-xl font-bold text-cyan-600">{session.vo2Max.toFixed(1)}</p>
+          <p className="text-xs text-muted-foreground">mL/kg/min</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">METs</p>
+          <p className="mt-1 text-xl font-bold text-foreground">{session.mets.toFixed(1)}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Test Distance</p>
+          <p className="mt-1 text-sm font-mono font-bold text-foreground">
+            {session.testDistanceMiles.toFixed(2)} mi
+          </p>
+          <p className="text-xs text-muted-foreground">{Math.round(session.testDistanceMeters)} m</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Speed</p>
+          <p className="mt-1 text-sm font-mono font-bold text-foreground">
+            {session.averageSpeedMph.toFixed(1)} mph
+          </p>
+          <p className="text-xs text-muted-foreground">{formatPace(session.averagePaceSecondsPerMile)}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">
+          Body-mass scaled oxygen uptake per kilogram per minute.
+        </p>
+        <p>
+          Final {session.finalDistanceMiles.toFixed(2)} mi - start offset {session.startOffsetMiles.toFixed(2)} mi
+        </p>
+        <p>Duration {formatDuration(session.durationSeconds)} at {session.inclinePercent}% incline</p>
+        {session.endedEarly && <p className="font-medium text-amber-600">Marked finished early</p>}
+        {session.notes && <p className="pt-1 text-foreground">{session.notes}</p>}
+      </div>
+    </div>
+  )
+}
+
 function WorkoutDataView({ session }: { session: WorkoutSession }) {
   if (session.mode === "freeform" || (session.mode as string) === "traditional") {
     const freeformSession = session as FreeformWorkoutSession
     if (freeformSession.exercises) {
       return <FreeformDataView session={freeformSession} />
     }
+  }
+  if (session.mode === "vo2max") {
+    return <Vo2MaxDataView session={session} />
   }
   return (
     <div className="space-y-3">
@@ -87,6 +149,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                   <Timer className="h-4 w-4 text-red-500" />
                 ) : entry.session.mode === "sit" ? (
                   <Zap className="h-4 w-4 text-green-500" />
+                ) : entry.session.mode === "vo2max" ? (
+                  <Gauge className="h-4 w-4 text-cyan-500" />
                 ) : entry.session.mode === "coached" ? (
                   <BookOpen className="h-4 w-4 text-purple-500" />
                 ) : (
@@ -99,6 +163,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                     ? "4x4 Interval"
                     : entry.session.mode === "sit"
                     ? "SIT Sprint"
+                    : entry.session.mode === "vo2max"
+                    ? "VO2 Max"
                     : entry.session.mode === "coached"
                     ? `Coached: ${entry.session.workoutName}`
                     : "Freeform"}

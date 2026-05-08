@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { FreeformWorkout } from "./freeform/freeform-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
 import { SitWorkout } from "./sit/sit-workout"
 import { CoachedWorkout } from "./coached/coached-workout"
+import { Vo2MaxWorkout } from "./vo2max/vo2max-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
@@ -56,6 +57,18 @@ const workoutModes = [
     border: "border-green-200",
     hoverBorder: "hover:border-green-300",
     iconColor: "text-green-600",
+  },
+  {
+    id: "vo2max" as const,
+    icon: Gauge,
+    title: "VO2 Max",
+    subtitle: "Treadmill test",
+    description: "12-minute Cooper-style treadmill estimate with calendar recording",
+    color: "bg-cyan-500",
+    lightBg: "bg-cyan-50",
+    border: "border-cyan-200",
+    hoverBorder: "hover:border-cyan-300",
+    iconColor: "text-cyan-600",
   },
   {
     id: "coached" as const,
@@ -288,6 +301,10 @@ export function WorkoutLogger() {
 
   if (mode === "sit") {
     return <SitWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "vo2max") {
+    return <Vo2MaxWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "coached") {

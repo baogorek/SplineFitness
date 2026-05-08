@@ -1,4 +1,4 @@
-export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "coached"
+export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "coached" | "vo2max"
 export type WorkoutVariant = "A" | "B"
 export type SitPhase =
   | "ready"
@@ -213,6 +213,25 @@ export interface SitSessionProgress {
   savedAt: string
 }
 
+// VO2 Max Types
+export interface Vo2MaxWorkoutSession {
+  mode: "vo2max"
+  startedAt: string
+  completedAt?: string
+  durationSeconds: number
+  startOffsetMiles: number
+  finalDistanceMiles: number
+  testDistanceMiles: number
+  testDistanceMeters: number
+  vo2Max: number
+  mets: number
+  averagePaceSecondsPerMile: number
+  averageSpeedMph: number
+  inclinePercent: number
+  notes?: string
+  endedEarly: boolean
+}
+
 // Coached Types
 export interface CoachedVideoLink { url: string; label?: string }
 
@@ -256,7 +275,13 @@ export interface CoachedWorkoutSession {
 
 // Unified Types
 export type WorkoutDefinition = CircuitWorkoutDefinition
-export type WorkoutSession = CircuitWorkoutSession | FreeformWorkoutSession | IntervalWorkoutSession | SitWorkoutSession | CoachedWorkoutSession
+export type WorkoutSession =
+  | CircuitWorkoutSession
+  | FreeformWorkoutSession
+  | IntervalWorkoutSession
+  | SitWorkoutSession
+  | CoachedWorkoutSession
+  | Vo2MaxWorkoutSession
 
 export interface WorkoutHistoryEntry {
   id: string

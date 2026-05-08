@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ChevronLeft, ChevronRight, Timer, Dumbbell } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight, Timer, Dumbbell, Gauge } from "lucide-react"
 import { WorkoutHistoryEntry } from "@/types/workout"
 import { getWorkoutHistory } from "@/lib/storage"
 import { formatMonthYear, groupWorkoutsByDate } from "./calendar-utils"
@@ -55,6 +55,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
 
   const circuitCount = workouts.filter((w) => w.session.mode === "circuit").length
   const freeformCount = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string).length
+  const vo2MaxCount = workouts.filter((w) => w.session.mode === "vo2max").length
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -78,6 +79,10 @@ export function CalendarView({ onBack }: CalendarViewProps) {
               <span className="flex items-center gap-1">
                 <Dumbbell className="h-3 w-3 text-blue-500" />
                 {freeformCount}
+              </span>
+              <span className="flex items-center gap-1">
+                <Gauge className="h-3 w-3 text-cyan-500" />
+                {vo2MaxCount}
               </span>
             </div>
           </div>

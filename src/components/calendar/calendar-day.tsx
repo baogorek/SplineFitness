@@ -17,6 +17,7 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
   const freeformWorkouts = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string)
   const coachedWorkouts = workouts.filter((w) => w.session.mode === "coached")
   const sitWorkouts = workouts.filter((w) => w.session.mode === "sit")
+  const vo2MaxWorkouts = workouts.filter((w) => w.session.mode === "vo2max")
 
   return (
     <button
@@ -45,6 +46,9 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
           )}
           {sitWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          )}
+          {vo2MaxWorkouts.length > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
           )}
         </div>
       )}
