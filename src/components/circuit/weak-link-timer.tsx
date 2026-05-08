@@ -45,16 +45,18 @@ export function WeakLinkTimer({
       handleExerciseComplete()
     },
   })
+  const startTimer = timer.start
+  const resetTimer = timer.reset
 
   useEffect(() => {
     if (currentExercise) {
       audio.speak(currentExercise.exerciseName)
-      timer.start()
+      startTimer()
     }
     return () => {
-      timer.reset()
+      resetTimer()
     }
-  }, [currentIndex])
+  }, [audio, currentExercise, startTimer, resetTimer])
 
   const handleExerciseComplete = useCallback(() => {
     const record: WeakLinkPractice = {

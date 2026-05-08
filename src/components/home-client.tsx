@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useSyncExternalStore } from "react"
 import { WorkoutLogger } from "@/components/workout-logger"
 import { useAuth } from "@/components/auth-provider"
 
+function subscribeToClientReady() {
+  return () => {}
+}
+
 export function HomeClient() {
   const { loading } = useAuth()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(subscribeToClientReady, () => true, () => false)
 
   if (!mounted || loading) {
     return (

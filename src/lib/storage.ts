@@ -2,12 +2,8 @@ import {
   WorkoutSession,
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
-  FreeformWorkoutSession,
-  IntervalWorkoutSession,
   IntervalSessionProgress,
-  SitWorkoutSession,
   SitSessionProgress,
-  CoachedWorkoutSession,
   CircuitSessionProgress,
   FreeformSessionProgress,
   ExercisePreference,
@@ -109,52 +105,54 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const isFreeform = session.mode === 'freeform'
-  const isCircuit = session.mode === 'circuit'
-  const isInterval = session.mode === 'interval'
-  const isSit = session.mode === 'sit'
-  const isCoached = session.mode === 'coached'
-  const circuitSession = session as CircuitWorkoutSession
+  let sessionData: Record<string, unknown>
+  let workoutId: string
+  let variant: CircuitWorkoutSession["variant"] | null = null
 
-  const sessionData = isFreeform
-    ? { exercises: (session as FreeformWorkoutSession).exercises }
-    : isCircuit
-    ? {
-        rounds: circuitSession.rounds,
-        exerciseSettings: circuitSession.exerciseSettings,
-        exerciseChoices: circuitSession.exerciseChoices,
-        weakLinkPractice: circuitSession.weakLinkPractice,
+  switch (session.mode) {
+    case "freeform":
+      sessionData = { exercises: session.exercises }
+      workoutId = "freeform"
+      break
+    case "circuit":
+      sessionData = {
+        rounds: session.rounds,
+        exerciseSettings: session.exerciseSettings,
+        exerciseChoices: session.exerciseChoices,
+        weakLinkPractice: session.weakLinkPractice,
       }
-    : isInterval
-    ? {
-        totalSets: (session as IntervalWorkoutSession).totalSets,
-        completedSets: (session as IntervalWorkoutSession).completedSets,
-        totalTimeSeconds: (session as IntervalWorkoutSession).totalTimeSeconds,
-        setNotes: (session as IntervalWorkoutSession).setNotes,
-        endedEarly: (session as IntervalWorkoutSession).endedEarly,
+      workoutId = session.workoutId
+      variant = session.variant
+      break
+    case "interval":
+      sessionData = {
+        totalSets: session.totalSets,
+        completedSets: session.completedSets,
+        totalTimeSeconds: session.totalTimeSeconds,
+        setNotes: session.setNotes,
+        endedEarly: session.endedEarly,
       }
-    : isSit
-    ? {
-        totalTimeSeconds: (session as SitWorkoutSession).totalTimeSeconds,
-        sprintTimes: (session as SitWorkoutSession).sprintTimes,
-        bestSprintTimeSeconds: (session as SitWorkoutSession).bestSprintTimeSeconds,
-        phasesCompleted: (session as SitWorkoutSession).phasesCompleted,
-        endedEarly: (session as SitWorkoutSession).endedEarly,
+      workoutId = "4x4-interval"
+      break
+    case "sit":
+      sessionData = {
+        totalTimeSeconds: session.totalTimeSeconds,
+        sprintTimes: session.sprintTimes,
+        bestSprintTimeSeconds: session.bestSprintTimeSeconds,
+        phasesCompleted: session.phasesCompleted,
+        endedEarly: session.endedEarly,
       }
-    : isCoached
-    ? {
-        totalTimeSeconds: (session as CoachedWorkoutSession).totalTimeSeconds,
-        phasesCompleted: (session as CoachedWorkoutSession).phasesCompleted,
-        workoutName: (session as CoachedWorkoutSession).workoutName,
+      workoutId = "sit-sprint"
+      break
+    case "coached":
+      sessionData = {
+        totalTimeSeconds: session.totalTimeSeconds,
+        phasesCompleted: session.phasesCompleted,
+        workoutName: session.workoutName,
       }
-    : { exercises: (session as any).exercises }
-
-  const workoutId = isFreeform ? 'freeform'
-    : isInterval ? '4x4-interval'
-    : isSit ? 'sit-sprint'
-    : isCoached ? (session as CoachedWorkoutSession).workoutId
-    : (session as CircuitWorkoutSession).workoutId
-  const variant = (isFreeform || isInterval || isSit || isCoached) ? null : (session as CircuitWorkoutSession).variant
+      workoutId = session.workoutId
+      break
+  }
 
   const { data, error } = await supabase
     .from('workout_sessions')

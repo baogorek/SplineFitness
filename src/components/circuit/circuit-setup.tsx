@@ -57,6 +57,57 @@ const EQUIPMENT_EXERCISES: Record<string, EquipmentConfig> = {
   },
 }
 
+function buildInitialExerciseSettings(
+  savedSettings?: Record<string, ExerciseSetting>
+): Record<string, ExerciseSetting> {
+  const allExercises: Record<string, ExerciseSetting> = {}
+  Object.values(circuitWorkouts).forEach((w) => {
+    w.combos.forEach((combo) => {
+      combo.subExercises.forEach((sub) => {
+        allExercises[sub.id] = savedSettings?.[sub.id] || {
+          durationSeconds: 60,
+        }
+      })
+    })
+  })
+  return allExercises
+}
+
+function buildInitialExerciseChoices(
+  savedChoices?: Record<string, "main" | "alternative">
+): Record<string, "main" | "alternative"> {
+  const allChoices: Record<string, "main" | "alternative"> = {}
+  Object.values(circuitWorkouts).forEach((w) => {
+    w.combos.forEach((combo) => {
+      combo.subExercises.forEach((sub) => {
+        if (sub.alternative) {
+          allChoices[sub.id] = savedChoices?.[sub.id] || sub.defaultChoice || "main"
+        }
+      })
+    })
+  })
+  return allChoices
+}
+
+function normalizeExerciseEquipment(stored: Record<string, string>): {
+  equipment: Record<string, string>
+  migrated: boolean
+} {
+  const equipment = { ...stored }
+  let migrated = false
+  Object.keys(equipment).forEach(key => {
+    if (equipment[key] && !equipment[key].endsWith(" lbs") && !equipment[key].endsWith(" in")) {
+      equipment[key] = "10 lbs"
+      migrated = true
+    }
+  })
+  if (!equipment["alt-single-leg-box-squats"]) {
+    equipment["alt-single-leg-box-squats"] = "12 in"
+    migrated = true
+  }
+  return { equipment, migrated }
+}
+
 function snapToValidDuration(d: number): number {
   return VALID_DURATIONS.reduce((closest, val) =>
     Math.abs(val - d) < Math.abs(closest - d) ? val : closest
@@ -137,11 +188,13 @@ export function CircuitSetup({
   const [variant, setVariant] = useState<WorkoutVariant>(initialVariant)
   const [exerciseSettings, setExerciseSettings] = useState<
     Record<string, ExerciseSetting>
-  >({})
+  >(() => buildInitialExerciseSettings(savedSettings))
   const [exerciseChoices, setExerciseChoices] = useState<
     Record<string, "main" | "alternative">
-  >({})
-  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>({})
+  >(() => buildInitialExerciseChoices(savedChoices))
+  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>(
+    () => normalizeExerciseEquipment(getExerciseEquipment()).equipment
+  )
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set())
   const [configExpanded, setConfigExpanded] = useState(false)
   const [configText, setConfigText] = useState("")
@@ -152,39 +205,8 @@ export function CircuitSetup({
   const workout = circuitWorkouts[variant]
 
   useEffect(() => {
-    const allExercises: Record<string, ExerciseSetting> = {}
-    const allChoices: Record<string, "main" | "alternative"> = {}
-    Object.values(circuitWorkouts).forEach((w) => {
-      w.combos.forEach((combo) => {
-        combo.subExercises.forEach((sub) => {
-          allExercises[sub.id] = savedSettings?.[sub.id] || {
-            durationSeconds: 60,
-          }
-          if (sub.alternative) {
-            allChoices[sub.id] = savedChoices?.[sub.id] || sub.defaultChoice || "main"
-          }
-        })
-      })
-    })
-    setExerciseSettings(allExercises)
-    setExerciseChoices(allChoices)
-  }, [savedSettings, savedChoices])
-
-  useEffect(() => {
-    const stored = getExerciseEquipment()
-    let migrated = false
-    Object.keys(stored).forEach(key => {
-      if (stored[key] && !stored[key].endsWith(" lbs") && !stored[key].endsWith(" in")) {
-        stored[key] = "10 lbs"
-        migrated = true
-      }
-    })
-    if (!stored["alt-single-leg-box-squats"]) {
-      stored["alt-single-leg-box-squats"] = "12 in"
-      migrated = true
-    }
-    if (migrated) saveExerciseEquipment(stored)
-    setExerciseEquipment(stored)
+    const { equipment, migrated } = normalizeExerciseEquipment(getExerciseEquipment())
+    if (migrated) saveExerciseEquipment(equipment)
   }, [])
 
   const handleDurationChange = (exerciseId: string, duration: number) => {

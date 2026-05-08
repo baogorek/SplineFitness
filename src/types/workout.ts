@@ -6,6 +6,7 @@ export type SitPhase =
   | "general-warmup"
   | "tissue-prep-work"
   | "tissue-prep-rest"
+  | "adductor-squeeze"
   | "neural-left"
   | "neural-switch"
   | "neural-right"

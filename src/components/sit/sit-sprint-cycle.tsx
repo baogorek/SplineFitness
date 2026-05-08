@@ -18,8 +18,15 @@ export function SprintReady({ sprintNumber, onGo, onEndWorkout }: SprintReadyPro
         Sprint {sprintNumber}
       </p>
       <p className="text-sm text-muted-foreground text-center max-w-xs">
-        Press Ready to start a 4-second countdown. Hold phone in one hand. Place other hand on the ground in sprinter's stance.
+        Press Ready to start a 4-second countdown. Hold phone in one hand. Place other hand on the ground in sprinter&apos;s stance.
       </p>
+      {sprintNumber >= 5 && (
+        <div className="max-w-xs rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
+          <p className="text-xs font-medium leading-relaxed text-amber-800">
+            Rep 5+: continue only if pain-free with crisp mechanics. For a new surface or return-to-sprint day, ending here is the safer call.
+          </p>
+        </div>
+      )}
       <Button
         size="lg"
         onClick={onGo}
@@ -40,7 +47,7 @@ interface SprintActiveProps {
 
 export function SprintActive({ onStop }: SprintActiveProps) {
   const [displayTime, setDisplayTime] = useState("0.0")
-  const startTimeRef = useRef(performance.now())
+  const startTimeRef = useRef(0)
   const rafRef = useRef<number>(0)
 
   useEffect(() => {
@@ -56,9 +63,7 @@ export function SprintActive({ onStop }: SprintActiveProps) {
 
   const handleStop = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
-    const finalTime = (performance.now() - startTimeRef.current) / 1000
     onStop()
-    void finalTime
   }, [onStop])
 
   return (
@@ -132,7 +137,7 @@ export function SprintRecovery({
           onClick={onSkipRecovery}
           className="h-14 px-10 text-lg font-bold bg-green-500 hover:bg-green-600 text-white"
         >
-          I'm Ready
+          I&apos;m Ready
         </Button>
       )}
 

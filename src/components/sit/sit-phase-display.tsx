@@ -107,7 +107,7 @@ export function SitPhaseDisplay({
           onClick={onSkip}
           className="h-12 px-8 text-base font-semibold border-green-500 text-green-600 hover:bg-green-50"
         >
-          I'm Ready
+          I&apos;m Ready
         </Button>
       )}
     </div>

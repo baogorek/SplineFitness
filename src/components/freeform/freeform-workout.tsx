@@ -23,23 +23,25 @@ function createEmptyExercise(): FreeformExercise {
 
 type FreeformPhase = "workout" | "resume-prompt"
 
+function formatSavedAtLabel(savedAt: string): string {
+  return new Date(savedAt).toLocaleString()
+}
+
 export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
+  const [initialResume] = useState<FreeformSessionProgress | null>(() => getFreeformProgress())
   const [exercises, setExercises] = useState<FreeformExercise[]>([createEmptyExercise()])
   const [saving, setSaving] = useState(false)
-  const [phase, setPhase] = useState<FreeformPhase>("workout")
-  const [pendingResume, setPendingResume] = useState<FreeformSessionProgress | null>(null)
+  const [phase, setPhase] = useState<FreeformPhase>(() => initialResume ? "resume-prompt" : "workout")
+  const [pendingResume, setPendingResume] = useState<FreeformSessionProgress | null>(() => initialResume)
   const startedAtRef = useRef(new Date().toISOString())
   const timer = useTimer({ countUp: true })
+  const startTimer = timer.start
 
   useEffect(() => {
-    const saved = getFreeformProgress()
-    if (saved) {
-      setPendingResume(saved)
-      setPhase("resume-prompt")
-    } else {
-      timer.start()
+    if (phase === "workout" && !pendingResume) {
+      startTimer()
     }
-  }, [])
+  }, [phase, pendingResume, startTimer])
 
   useEffect(() => {
     if (phase !== "workout") return
@@ -104,9 +106,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
 
   if (phase === "resume-prompt" && pendingResume) {
     const namedCount = pendingResume.exercises.filter((e) => e.name.trim()).length
-    const savedTime = new Date(pendingResume.savedAt)
-    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
-    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+    const savedAtLabel = formatSavedAtLabel(pendingResume.savedAt)
 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -116,7 +116,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Resume Workout?</h1>
           <p className="text-muted-foreground">
-            You have an in-progress Freeform session from {timeAgoText}.
+            You have an in-progress Freeform session saved at {savedAtLabel}.
           </p>
           <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
             <p className="text-sm text-foreground">

@@ -24,7 +24,6 @@ export function RoundSummary({
     (r) => r.completedWithoutStopping
   ).length
   const totalCount = roundData.comboResults.length
-  const completionRate = Math.round((completedCount / totalCount) * 100)
 
   const weakLinks = roundData.comboResults
     .filter((r) => !r.completedWithoutStopping && r.weakLinkExerciseId)

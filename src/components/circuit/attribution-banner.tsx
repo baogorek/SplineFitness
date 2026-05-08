@@ -11,7 +11,7 @@ export function AttributionBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground">
-            Based on the "Perfect Home Workout" by Jeff Cavaliere
+            Based on the &quot;Perfect Home Workout&quot; by Jeff Cavaliere
           </p>
           <a
             href="https://www.youtube.com/watch?v=vc1E5CfRfos"

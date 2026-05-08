@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { Share, Ellipsis, EllipsisVertical, X, SquarePlus } from "lucide-react"
 
 type Platform = "ios" | "android" | null
+type InstallState = { platform: Exclude<Platform, null> } | null
+type NavigatorWithStandalone = Navigator & { standalone?: boolean }
 
 function getPlatform(): Platform {
   if (typeof navigator === "undefined") return null
@@ -17,30 +19,37 @@ function isStandalone(): boolean {
   if (typeof window === "undefined") return false
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as any).standalone === true
+    (navigator as NavigatorWithStandalone).standalone === true
   )
 }
 
-export function PwaInstallBanner() {
-  const [visible, setVisible] = useState(false)
-  const [platform, setPlatform] = useState<Platform>(null)
+function getInstallState(): InstallState {
+  if (typeof window === "undefined") return null
+  if (isStandalone()) return null
+  const dismissed = localStorage.getItem("pwa-banner-dismissed")
+  if (dismissed) return null
+  const platform = getPlatform()
+  return platform ? { platform } : null
+}
 
-  useEffect(() => {
-    if (isStandalone()) return
-    const dismissed = localStorage.getItem("pwa-banner-dismissed")
-    if (dismissed) return
-    const p = getPlatform()
-    if (!p) return
-    setPlatform(p)
-    setVisible(true)
-  }, [])
+function subscribeToInstallState(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {}
+  const id = window.setTimeout(onStoreChange, 0)
+  return () => window.clearTimeout(id)
+}
+
+export function PwaInstallBanner() {
+  const installState = useSyncExternalStore(subscribeToInstallState, getInstallState, () => null)
+  const [dismissed, setDismissed] = useState(false)
 
   const dismiss = () => {
-    setVisible(false)
+    setDismissed(true)
     localStorage.setItem("pwa-banner-dismissed", "1")
   }
 
-  if (!visible || !platform) return null
+  if (!installState || dismissed) return null
+
+  const { platform } = installState
 
   return (
     <div className="w-full max-w-3xl mx-auto mb-4 animate-in fade-in slide-in-from-top-2 duration-300">

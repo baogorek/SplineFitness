@@ -6,6 +6,7 @@ export const GENERAL_WARMUP_SECONDS = 120
 export const TISSUE_PREP_SETS = 2
 export const TISSUE_PREP_WORK_SECONDS = 20
 export const TISSUE_PREP_REST_SECONDS = 30
+export const ADDUCTOR_SQUEEZE_SECONDS = 30
 export const NEURAL_HOLD_SECONDS = 30
 export const NEURAL_SWITCH_SECONDS = 10
 export const WASHOUT_SECONDS = 180
@@ -18,6 +19,7 @@ export const PHASE_LABELS: Record<string, string> = {
   "general-warmup": "Jumping Jacks",
   "tissue-prep-work": "Pogo Hops",
   "tissue-prep-rest": "Rest",
+  "adductor-squeeze": "Adductor Squeeze",
   "neural-left": "Left Leg Glute Bridge",
   "neural-switch": "Switch Legs",
   "neural-right": "Right Leg Glute Bridge",
@@ -31,6 +33,8 @@ export const PHASE_SPEECH_CUES: Record<string, string> = {
   "tissue-prep-work":
     "Quick, stiff hops. Minimize ground contact time. Stay on the balls of your feet.",
   "tissue-prep-rest": "Rest.",
+  "adductor-squeeze":
+    "Adductor squeeze. Lie down or sit. Knees bent, feet flat. Put a towel, ball, or both fists between your knees. Squeeze at 4 out of 10 effort. No sharp groin pain.",
   "neural-left":
     "Left leg glute bridge. Drive hips up. Squeeze at the top. Near-maximal effort.",
   "neural-switch":
@@ -46,6 +50,8 @@ export const PHASE_TOASTS: Record<string, string> = {
     "General warm-up: elevates core temperature, increases synovial fluid in joints, and prepares the cardiovascular system for high-intensity work.",
   "tissue-prep-work":
     "Tendon stiffness priming: rapid plyometric loading increases rate of force development via the stretch-shortening cycle.",
+  "adductor-squeeze":
+    "How: knees bent, feet flat, squeeze a towel/ball/fists between the knees at about 4/10 effort. This is a pain-free readiness screen; save Copenhagen progressions for separate prehab.",
   "neural-left":
     "Post-activation potentiation: near-maximal glute bridge holds recruit high-threshold motor units, temporarily enhancing explosive output.",
   "washout":
@@ -68,6 +74,10 @@ export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
   "tissue-prep-work": [
     { remainingSeconds: 10, text: "10 seconds. Stay light on your feet." },
   ],
+  "adductor-squeeze": [
+    { remainingSeconds: 20, text: "Even pressure. Feet flat. Keep the pelvis still." },
+    { remainingSeconds: 10, text: "If the groin bites, back off. Glute bridge next." },
+  ],
   "neural-left": [
     { remainingSeconds: 20, text: "Hold it. Keep squeezing." },
     { remainingSeconds: 15, text: "15 seconds." },
@@ -89,14 +99,17 @@ export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
 
 export const NEXT_UP_CUES: Record<string, string> = {
   "tissue-prep-rest->tissue-prep-work": "Pogo hops in 10 seconds.",
-  "tissue-prep-rest->neural-left": "Next up: Left leg glute bridge. Near maximal effort.",
+  "tissue-prep-rest->adductor-squeeze": "Next up: adductor squeeze. Moderate pressure. Pain-free.",
+  "adductor-squeeze->neural-left": "Next up: Left leg glute bridge. Near maximal effort.",
   "neural-right->washout": "Next up: Easy walking for 3 minutes.",
 }
 
 export function getNextPhaseLabel(phase: SitPhase, tissuePrepSet: number): string | null {
   switch (phase) {
     case "tissue-prep-rest":
-      return tissuePrepSet >= TISSUE_PREP_SETS ? "Left Leg Glute Bridge" : "Pogo Hops"
+      return tissuePrepSet >= TISSUE_PREP_SETS ? "Adductor Squeeze" : "Pogo Hops"
+    case "adductor-squeeze":
+      return "Left Leg Glute Bridge"
     case "neural-switch":
       return "Right Leg Glute Bridge"
     case "neural-right":

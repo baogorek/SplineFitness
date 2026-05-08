@@ -26,6 +26,7 @@ import {
   TISSUE_PREP_SETS,
   TISSUE_PREP_WORK_SECONDS,
   TISSUE_PREP_REST_SECONDS,
+  ADDUCTOR_SQUEEZE_SECONDS,
   NEURAL_HOLD_SECONDS,
   NEURAL_SWITCH_SECONDS,
   WASHOUT_SECONDS,
@@ -45,6 +46,7 @@ const KEEPALIVE_PHASES: SitPhase[] = [
   "general-warmup",
   "tissue-prep-work",
   "tissue-prep-rest",
+  "adductor-squeeze",
   "neural-left",
   "neural-switch",
   "neural-right",
@@ -58,6 +60,7 @@ const TIMED_PHASES: SitPhase[] = [
   "general-warmup",
   "tissue-prep-work",
   "tissue-prep-rest",
+  "adductor-squeeze",
   "neural-left",
   "neural-switch",
   "neural-right",
@@ -66,6 +69,10 @@ const TIMED_PHASES: SitPhase[] = [
 ]
 
 const SPRINT_ORIENTATION_PHASES: SitPhase[] = ["sprint-ready", "sprint-active", "sprint-recovery"]
+
+function formatSavedAtLabel(savedAt: string): string {
+  return new Date(savedAt).toLocaleString()
+}
 
 function getResumeCheckpointLabel(progress: SitSessionProgress): string {
   switch (progress.phase) {
@@ -162,6 +169,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       case "general-warmup": return GENERAL_WARMUP_SECONDS
       case "tissue-prep-work": return TISSUE_PREP_WORK_SECONDS
       case "tissue-prep-rest": return TISSUE_PREP_REST_SECONDS
+      case "adductor-squeeze": return ADDUCTOR_SQUEEZE_SECONDS
       case "neural-left":
       case "neural-right": return NEURAL_HOLD_SECONDS
       case "neural-switch": return NEURAL_SWITCH_SECONDS
@@ -187,7 +195,15 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       if (phase === "tissue-prep-rest" && remaining === 10) {
         const cueKey = tissuePrepSet < TISSUE_PREP_SETS
           ? "tissue-prep-rest->tissue-prep-work"
-          : "tissue-prep-rest->neural-left"
+          : "tissue-prep-rest->adductor-squeeze"
+        const key = `next-up-${cueKey}`
+        if (!firedCuesRef.current.has(key) && NEXT_UP_CUES[cueKey]) {
+          firedCuesRef.current.add(key)
+          audio.speak(NEXT_UP_CUES[cueKey])
+        }
+      }
+      if (phase === "adductor-squeeze" && remaining === 10) {
+        const cueKey = "adductor-squeeze->neural-left"
         const key = `next-up-${cueKey}`
         if (!firedCuesRef.current.has(key) && NEXT_UP_CUES[cueKey]) {
           firedCuesRef.current.add(key)
@@ -312,8 +328,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           transitionTo("tissue-prep-work")
         } else {
           phasesCompletedRef.current = 1
-          transitionTo("neural-left")
+          transitionTo("adductor-squeeze")
         }
+        break
+      case "adductor-squeeze":
+        transitionTo("neural-left")
         break
       case "neural-left":
         transitionTo("neural-switch")
@@ -588,9 +607,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }
 
   if (pendingResume) {
-    const savedTime = new Date(pendingResume.savedAt)
-    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
-    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+    const savedAtLabel = formatSavedAtLabel(pendingResume.savedAt)
     const completedSprints = pendingResume.sprintHistory.length
 
     return (
@@ -601,7 +618,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Resume SIT Session?</h1>
           <p className="text-muted-foreground">
-            You have an in-progress sprint session from {timeAgoText}.
+            You have an in-progress sprint session saved at {savedAtLabel}.
           </p>
           <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
             <p className="text-sm text-foreground">
@@ -744,7 +761,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const isTimedPhase = [
     "general-warmup", "tissue-prep-work", "tissue-prep-rest",
-    "neural-left", "neural-switch", "neural-right",
+    "adductor-squeeze", "neural-left", "neural-switch", "neural-right",
     "washout",
   ].includes(phase)
 

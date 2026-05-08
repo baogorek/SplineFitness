@@ -74,6 +74,10 @@ function resolveExerciseName(
 
 const MIN_TRANSITION_SECONDS = 5
 
+function formatSavedAtLabel(savedAt: string): string {
+  return new Date(savedAt).toLocaleString()
+}
+
 function getEffectiveTransitionDuration(sub: SubExercise): number {
   return Math.max(MIN_TRANSITION_SECONDS, sub.prepTimeSeconds || 0)
 }
@@ -147,15 +151,16 @@ function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: str
 }
 
 export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
-  const [phase, setPhase] = useState<Phase>("setup")
+  const [initialCircuitProgress] = useState<CircuitSessionProgress | null>(() => getCircuitProgress())
+  const [phase, setPhase] = useState<Phase>(() => initialCircuitProgress ? "resume-prompt" : "setup")
   const [activeWorkout, setActiveWorkout] = useState<WorkoutVariant>("A")
   const [currentRound, setCurrentRound] = useState(1)
   const [currentComboIndex, setCurrentComboIndex] = useState(0)
   const [rounds, setRounds] = useState<CircuitRoundData[]>([])
   const [currentRoundResults, setCurrentRoundResults] = useState<ComboCompletionResult[]>([])
   const [exerciseSettings, setExerciseSettings] = useState<Record<string, ExerciseSetting>>({})
-  const [exerciseChoices, setExerciseChoices] = useState<Record<string, "main" | "alternative">>({})
-  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>({})
+  const [exerciseChoices, setExerciseChoices] = useState<Record<string, "main" | "alternative">>(() => getExerciseChoices())
+  const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>(() => getExerciseEquipment())
   const [savedPreferences, setSavedPreferences] = useState<Record<string, ExercisePreference>>({})
   const [weakLinks, setWeakLinks] = useState<WeakLinkEntry[]>([])
   const [weakLinkPracticeExercises, setWeakLinkPracticeExercises] = useState<WeakLinkEntry[]>([])
@@ -169,6 +174,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [completedSessionData, setCompletedSessionData] = useState<CircuitWorkoutSession | null>(null)
   const [showComboChecklist, setShowComboChecklist] = useState(false)
   const [comboCheckedItems, setComboCheckedItems] = useState<Set<string>>(new Set())
+  const [isResumeTransition, setIsResumeTransition] = useState(false)
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
   const isFirstComboRef = useRef(true)
@@ -202,20 +208,10 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     return () => { audio.stopKeepalive() }
   }, [phase, audio])
 
-  const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(null)
+  const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(() => initialCircuitProgress)
 
   useEffect(() => {
     getExercisePreferences().then(setSavedPreferences)
-    const savedChoices = getExerciseChoices()
-    if (Object.keys(savedChoices).length > 0) {
-      setExerciseChoices(savedChoices)
-    }
-    setExerciseEquipment(getExerciseEquipment())
-    const saved = getCircuitProgress()
-    if (saved) {
-      setPendingResume(saved)
-      setPhase("resume-prompt")
-    }
   }, [])
 
   const currentComboDuration = useMemo(() => {
@@ -264,6 +260,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         lastAnnouncedCueRef.current = ""
         comboTimer.pause()
         resumeAfterTransitionRef.current = true
+        setIsResumeTransition(true)
         if (currentExercise) {
           const name = resolveExerciseName(currentExercise, exerciseChoices)
           setTransitionExerciseName(name)
@@ -342,6 +339,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   })
 
   const roundTimer = useTimer({ countUp: true, speedMultiplier })
+  const resetRoundTimerTo = roundTimer.resetTo
 
   const handleTestAudio = () => {
     audio.playMinuteBeep()
@@ -378,12 +376,12 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     setCurrentRoundResults(pendingResume.currentRoundResults)
     setWeakLinks(pendingResume.weakLinks)
     if (pendingResume.roundTimerSeconds) {
-      roundTimer.resetTo(pendingResume.roundTimerSeconds)
+      resetRoundTimerTo(pendingResume.roundTimerSeconds)
     }
     workoutStartRef.current = pendingResume.startedAt
     setPendingResume(null)
     setPhase("ready")
-  }, [pendingResume, roundTimer])
+  }, [pendingResume, resetRoundTimerTo])
 
   const handleDiscardResume = useCallback(() => {
     clearCircuitProgress()
@@ -457,6 +455,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     lastAnnouncedExerciseRef.current = -1
     lastAnnouncedCueRef.current = ""
     resumeAfterTransitionRef.current = false
+    setIsResumeTransition(false)
     setTransitionDuration(8)
     const firstExercise = currentCombo?.subExercises[0]
     if (firstExercise) {
@@ -626,6 +625,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
     return (
       <CircuitSetup
+        key={JSON.stringify({ initialSettings, exerciseChoices })}
         onBack={onModeChange}
         onStart={handleSetupComplete}
         savedSettings={initialSettings}
@@ -637,9 +637,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   if (phase === "resume-prompt" && pendingResume) {
     const completedCombosInRound = pendingResume.currentRoundResults.length
     const completedRounds = pendingResume.rounds.length
-    const savedTime = new Date(pendingResume.savedAt)
-    const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 60000)
-    const timeAgoText = timeAgo < 1 ? "just now" : timeAgo < 60 ? `${timeAgo}m ago` : `${Math.round(timeAgo / 60)}h ago`
+    const savedAtLabel = formatSavedAtLabel(pendingResume.savedAt)
 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -649,7 +647,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Resume Workout?</h1>
           <p className="text-muted-foreground">
-            You have an in-progress Workout {pendingResume.variant} session from {timeAgoText}.
+            You have an in-progress Workout {pendingResume.variant} session saved at {savedAtLabel}.
           </p>
           <div className="rounded-lg bg-muted/50 p-4 text-left space-y-1">
             <p className="text-sm text-foreground">
@@ -910,13 +908,13 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           {phase === "transition" && (
             <div className="flex flex-col items-center gap-4 py-8">
               <p className="text-sm text-muted-foreground uppercase tracking-wider">
-                {resumeAfterTransitionRef.current ? "Transition" : "Get Ready"}
+                {isResumeTransition ? "Transition" : "Get Ready"}
               </p>
               <span className="text-6xl font-mono font-bold text-foreground tabular-nums">
                 {transitionTimer.formattedTime}
               </span>
               <p className="text-lg font-semibold text-primary">
-                {resumeAfterTransitionRef.current ? `Next: ${transitionExerciseName}` : transitionExerciseName}
+                {isResumeTransition ? `Next: ${transitionExerciseName}` : transitionExerciseName}
               </p>
               {transitionEquipmentNote && (
                 <p className="text-sm font-medium text-amber-500">{transitionEquipmentNote}</p>

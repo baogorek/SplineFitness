@@ -16,7 +16,7 @@ interface CalendarViewProps {
 
 export function CalendarView({ onBack }: CalendarViewProps) {
   const { user, signInWithGoogle } = useAuth()
-  const [currentMonth, setCurrentMonth] = useState<Date | null>(null)
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date())
   const [workouts, setWorkouts] = useState<WorkoutHistoryEntry[]>([])
   const [workoutsByDate, setWorkoutsByDate] = useState<Map<string, WorkoutHistoryEntry[]>>(new Map())
   const [loading, setLoading] = useState(true)
@@ -24,7 +24,6 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   const [selectedWorkouts, setSelectedWorkouts] = useState<WorkoutHistoryEntry[]>([])
 
   useEffect(() => {
-    setCurrentMonth(new Date())
     async function fetchHistory() {
       const history = await getWorkoutHistory()
       setWorkouts(history)
@@ -35,11 +34,11 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   }, [])
 
   const handlePrevMonth = () => {
-    setCurrentMonth((prev) => prev ? new Date(prev.getFullYear(), prev.getMonth() - 1, 1) : new Date())
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
   }
 
   const handleNextMonth = () => {
-    setCurrentMonth((prev) => prev ? new Date(prev.getFullYear(), prev.getMonth() + 1, 1) : new Date())
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
   }
 
   const handleDayClick = (date: Date, dayWorkouts: WorkoutHistoryEntry[]) => {
@@ -84,13 +83,13 @@ export function CalendarView({ onBack }: CalendarViewProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={handlePrevMonth} disabled={!currentMonth}>
+            <Button variant="ghost" size="icon" onClick={handlePrevMonth}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h2 className="text-lg font-semibold text-foreground">
-              {currentMonth ? formatMonthYear(currentMonth) : "Loading..."}
+              {formatMonthYear(currentMonth)}
             </h2>
-            <Button variant="ghost" size="icon" onClick={handleNextMonth} disabled={!currentMonth}>
+            <Button variant="ghost" size="icon" onClick={handleNextMonth}>
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
@@ -98,7 +97,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
       </header>
 
       <main className="flex-1 p-4">
-        {loading || !currentMonth ? (
+        {loading ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Loading history...</p>
           </div>

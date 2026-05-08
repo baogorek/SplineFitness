@@ -26,9 +26,17 @@ export function useTimer(options: UseTimerOptions = {}) {
   const pausedAccumulatorRef = useRef<number>(0)
   const completedRef = useRef(false)
 
-  onMinuteMarkRef.current = onMinuteMark
-  onCompleteRef.current = onComplete
-  onTickRef.current = onTick
+  useEffect(() => {
+    onMinuteMarkRef.current = onMinuteMark
+  }, [onMinuteMark])
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete
+  }, [onComplete])
+
+  useEffect(() => {
+    onTickRef.current = onTick
+  }, [onTick])
 
   const recalculate = useCallback(() => {
     if (!startTimeRef.current) return
@@ -108,7 +116,7 @@ export function useTimer(options: UseTimerOptions = {}) {
     pausedAccumulatorRef.current = seconds
     startTimeRef.current = 0
     completedRef.current = false
-  }, [speedMultiplier])
+  }, [])
 
   const remainingSeconds = useMemo(() => {
     if (!targetSeconds) return 0
