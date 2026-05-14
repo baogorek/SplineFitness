@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useRef } from "react"
 
+type RecoverableAudioContextState = AudioContextState | "interrupted"
+
 function expandSpeechText(text: string): string {
   return text
     .replace(/^Alt\.\s/g, "Alternating ")
@@ -21,7 +23,12 @@ export function estimateSpeechSeconds(text: string): number {
 export function useAudio() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
-  const getAudioContext = useCallback(() => {
+  const getAudioContext = useCallback((forceNew = false) => {
+    if (forceNew && audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       if (AudioContextClass) {
@@ -31,38 +38,68 @@ export function useAudio() {
     return audioContextRef.current
   }, [])
 
+  const resumeAudioContext = useCallback(async (ctx = getAudioContext()) => {
+    if (!ctx) return null
+
+    if (ctx.state === "closed") {
+      ctx = getAudioContext(true)
+      if (!ctx) return null
+    }
+
+    const resume = async () => {
+      if ((ctx.state as RecoverableAudioContextState) !== "running") {
+        await ctx.resume()
+      }
+    }
+
+    try {
+      await resume()
+      if ((ctx.state as RecoverableAudioContextState) !== "running") {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        await resume()
+      }
+    } catch {
+      return null
+    }
+
+    return (ctx.state as RecoverableAudioContextState) === "running" ? ctx : null
+  }, [getAudioContext])
+
   const playBeep = useCallback(
     (frequency: number, duration: number, gain: number = 0.3) => {
       const ctx = getAudioContext()
       if (!ctx) return
 
-      const doPlay = () => {
-        const oscillator = ctx.createOscillator()
-        const gainNode = ctx.createGain()
+      const doPlay = (activeCtx: AudioContext) => {
+        const oscillator = activeCtx.createOscillator()
+        const gainNode = activeCtx.createGain()
+        const now = activeCtx.currentTime
 
         oscillator.connect(gainNode)
-        gainNode.connect(ctx.destination)
+        gainNode.connect(activeCtx.destination)
         oscillator.frequency.value = frequency
         oscillator.type = "sine"
 
-        gainNode.gain.setValueAtTime(gain, ctx.currentTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration)
+        gainNode.gain.setValueAtTime(gain, now)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration)
 
-        oscillator.start()
-        oscillator.stop(ctx.currentTime + duration)
+        oscillator.start(now)
+        oscillator.stop(now + duration)
         oscillator.onended = () => {
           oscillator.disconnect()
           gainNode.disconnect()
         }
       }
 
-      if (ctx.state === "suspended") {
-        ctx.resume().then(doPlay)
+      if ((ctx.state as RecoverableAudioContextState) === "running") {
+        doPlay(ctx)
       } else {
-        doPlay()
+        void resumeAudioContext(ctx).then((activeCtx) => {
+          if (activeCtx) doPlay(activeCtx)
+        })
       }
     },
-    [getAudioContext]
+    [getAudioContext, resumeAudioContext]
   )
 
   const playMinuteBeep = useCallback(() => {
@@ -113,22 +150,27 @@ export function useAudio() {
     keepaliveRef.current = setInterval(() => {
       const ctx = getAudioContext()
       if (!ctx) return
-      if (ctx.state === "suspended") {
-        ctx.resume().then(() => playSilent(ctx))
-      } else {
+      if ((ctx.state as RecoverableAudioContextState) === "running") {
         playSilent(ctx)
+      } else {
+        void resumeAudioContext(ctx).then((activeCtx) => {
+          if (activeCtx) playSilent(activeCtx)
+        })
       }
     }, 15000)
 
     const resumeAudio = () => {
       const ctx = getAudioContext()
-      if (ctx && ctx.state === "suspended") {
-        ctx.resume()
+      if (ctx && (ctx.state as RecoverableAudioContextState) !== "running") {
+        void resumeAudioContext(ctx)
       }
     }
 
     touchHandlerRef.current = resumeAudio
     document.addEventListener("touchstart", resumeAudio, { passive: true })
+    document.addEventListener("pointerdown", resumeAudio, { passive: true })
+    document.addEventListener("mousedown", resumeAudio, { passive: true })
+    document.addEventListener("keydown", resumeAudio)
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -137,7 +179,7 @@ export function useAudio() {
     }
     visibilityHandlerRef.current = handleVisibility
     document.addEventListener("visibilitychange", handleVisibility)
-  }, [getAudioContext])
+  }, [getAudioContext, resumeAudioContext])
 
   const stopKeepalive = useCallback(() => {
     if (keepaliveRef.current) {
@@ -146,6 +188,9 @@ export function useAudio() {
     }
     if (touchHandlerRef.current) {
       document.removeEventListener("touchstart", touchHandlerRef.current)
+      document.removeEventListener("pointerdown", touchHandlerRef.current)
+      document.removeEventListener("mousedown", touchHandlerRef.current)
+      document.removeEventListener("keydown", touchHandlerRef.current)
       touchHandlerRef.current = null
     }
     if (visibilityHandlerRef.current) {
@@ -156,17 +201,23 @@ export function useAudio() {
 
   const speak = useCallback((text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
+      const resumeAfterSpeech = () => {
+        void resumeAudioContext()
+      }
+
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel()
       }
       const utterance = new SpeechSynthesisUtterance(expandSpeechText(text))
       utterance.rate = 0.9
-      if (onEnd) {
-        utterance.onend = () => onEnd()
+      utterance.onend = () => {
+        resumeAfterSpeech()
+        onEnd?.()
       }
+      utterance.onerror = resumeAfterSpeech
       window.speechSynthesis.speak(utterance)
     }
-  }, [])
+  }, [resumeAudioContext])
 
   return useMemo(() => ({
     playMinuteBeep,

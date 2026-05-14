@@ -37,6 +37,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [completedSessionData, setCompletedSessionData] = useState<IntervalWorkoutSession | null>(null)
   const [savedToHistory, setSavedToHistory] = useState(false)
   const [currentNote, setCurrentNote] = useState("")
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false)
   const [countdownDisplay, setCountdownDisplay] = useState<string>("")
   const [pendingResume, setPendingResume] = useState<IntervalSessionProgress | null>(null)
 
@@ -209,8 +210,11 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
 
   const handleNoteBlur = useCallback(() => {
     saveCurrentNote()
+    if (phase !== "complete") {
+      setNoteEditorOpen(false)
+    }
     clearIOSUndoStack()
-  }, [saveCurrentNote, clearIOSUndoStack])
+  }, [phase, saveCurrentNote, clearIOSUndoStack])
 
   const saveProgressSnapshot = useCallback(() => {
     if (phase === "complete" || pendingResume) return
@@ -277,14 +281,28 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       startedAtRef.current = new Date().toISOString()
       workoutTimer.start()
     }
+    setNoteEditorOpen(false)
     restTimer.pause()
     restTimer.reset()
     spokenCuesRef.current.clear()
     clearCountdownTimeouts()
   }, [workoutStarted, workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote, clearIOSUndoStack])
 
-  const handleStartSet = useCallback(() => {
+  const startInterval = useCallback(() => {
     beginSet()
+    audio.playCountdownGo()
+    setCountdownDisplay("")
+    setPhase("interval")
+    intervalTimer.reset()
+    intervalTimer.start()
+  }, [audio, intervalTimer, beginSet])
+
+  const handleStartSet = useCallback(() => {
+    saveCurrentNote()
+    clearIOSUndoStack()
+    clearCountdownTimeouts()
+    setNoteEditorOpen(false)
+    spokenCuesRef.current.clear()
     setPhase("countdown")
 
     const tick = 1000 / speedMultiplier
@@ -298,31 +316,32 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("2") }, tick * 4),
       setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("1") }, tick * 5),
       setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("GO") }, tick * 6),
-      setTimeout(() => {
-        audio.playCountdownGo()
-        setPhase("interval")
-        intervalTimer.reset()
-        intervalTimer.start()
-      }, tick * 7),
+      setTimeout(startInterval, tick * 7),
     ]
     countdownTimeoutsRef.current = timeouts
-  }, [currentSet, audio, intervalTimer, speedMultiplier, beginSet])
+  }, [currentSet, audio, speedMultiplier, saveCurrentNote, clearIOSUndoStack, clearCountdownTimeouts, startInterval])
 
   const handleStartSetImmediate = useCallback(() => {
-    beginSet()
-    audio.playCountdownGo()
-    setPhase("interval")
-    intervalTimer.reset()
-    intervalTimer.start()
-  }, [audio, intervalTimer, beginSet])
+    startInterval()
+  }, [startInterval])
 
   const handleSkipCountdown = useCallback(() => {
     clearCountdownTimeouts()
-    audio.playCountdownGo()
-    setPhase("interval")
+    startInterval()
+  }, [clearCountdownTimeouts, startInterval])
+
+  const handleCancelCountdown = useCallback(() => {
+    clearCountdownTimeouts()
+    setCountdownDisplay("")
+    spokenCuesRef.current.clear()
     intervalTimer.reset()
-    intervalTimer.start()
-  }, [clearCountdownTimeouts, audio, intervalTimer])
+    setPhase("ready")
+  }, [clearCountdownTimeouts, intervalTimer])
+
+  const handleResetInterval = useCallback(() => {
+    spokenCuesRef.current.clear()
+    intervalTimer.reset()
+  }, [intervalTimer])
 
   const handleResume = useCallback(() => {
     if (!pendingResume) return
@@ -331,6 +350,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     startedAtRef.current = pendingResume.startedAt
     setCurrentSet(pendingResume.currentSet)
     setCurrentNote(pendingResume.currentNote)
+    setNoteEditorOpen(false)
     setNotesRef.current = { ...pendingResume.setNotes }
     setCountdownDisplay("")
     workoutTimer.resetTo(pendingResume.workoutTimerSeconds)
@@ -646,14 +666,23 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               <p className="text-lg font-semibold text-red-500">
                 Set {currentSet} of {TOTAL_SETS}
               </p>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={handleSkipCountdown}
-                className="h-14 px-6 text-lg font-semibold"
-              >
-                Go Now
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={handleCancelCountdown}
+                  className="h-14 px-6 text-lg font-semibold"
+                >
+                  Not Ready
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={handleSkipCountdown}
+                  className="h-14 px-6 text-lg font-semibold bg-red-500 hover:bg-red-600 text-white"
+                >
+                  Go Now
+                </Button>
+              </div>
             </div>
           )}
 
@@ -667,7 +696,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               totalSets={TOTAL_SETS}
               onStart={intervalTimer.start}
               onPause={intervalTimer.pause}
-              onReset={intervalTimer.reset}
+              onReset={handleResetInterval}
             />
           )}
 
@@ -694,25 +723,36 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                   <label className="text-xs text-muted-foreground uppercase tracking-wider">
                     Set {currentSet - 1} performance (optional)
                   </label>
-                  <input
-                    ref={noteInputRef}
-                    type="text"
-                    value={currentNote}
-                    onChange={(e) => setCurrentNote(e.target.value)}
-                    onBlur={handleNoteBlur}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        e.currentTarget.blur()
-                      }
-                    }}
-                    placeholder="e.g. HR 178, RPE 8"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    enterKeyHint="done"
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
-                  />
+                  {noteEditorOpen ? (
+                    <input
+                      ref={noteInputRef}
+                      type="text"
+                      value={currentNote}
+                      onChange={(e) => setCurrentNote(e.target.value)}
+                      onBlur={handleNoteBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          e.currentTarget.blur()
+                        }
+                      }}
+                      placeholder="e.g. HR 178, RPE 8"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      enterKeyHint="done"
+                      autoFocus
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setNoteEditorOpen(true)}
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    >
+                      {currentNote.trim() || "Add set note"}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -728,7 +768,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                   onClick={handleStartSet}
                   className="h-14 px-8 text-lg font-semibold bg-red-500 hover:bg-red-600 text-white"
                 >
-                  Start Set {currentSet}
+                  Start Countdown
                 </Button>
                 <Button
                   size="lg"
