@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { ArrowLeft, Clock, Plus, CheckCircle2, Dumbbell } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, Plus, CheckCircle2, Dumbbell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FreeformExercise, FreeformWorkoutSession, FreeformSessionProgress } from "@/types/workout"
 import { FreeformExerciseCard } from "./freeform-exercise-card"
 import { useTimer } from "@/hooks/use-timer"
 import { saveWorkoutSession, saveFreeformProgress, getFreeformProgress, clearFreeformProgress } from "@/lib/storage"
+import { useAuth } from "@/components/auth-provider"
+import { FEATURES } from "@/lib/feature-flags"
 
 interface FreeformWorkoutProps {
   onModeChange: () => void
@@ -21,10 +23,69 @@ function createEmptyExercise(): FreeformExercise {
   }
 }
 
-type FreeformPhase = "workout" | "resume-prompt"
+type FreeformPhase = "workout" | "resume-prompt" | "complete"
 
 function formatSavedAtLabel(savedAt: string): string {
   return new Date(savedAt).toLocaleString()
+}
+
+function formatDuration(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.round(seconds))
+  const mins = Math.floor(safeSeconds / 60)
+  const secs = safeSeconds % 60
+  return `${mins}:${secs.toString().padStart(2, "0")}`
+}
+
+function getSessionDurationSeconds(session: FreeformWorkoutSession): number {
+  const completedAt = session.completedAt || session.startedAt
+  return Math.max(
+    0,
+    Math.round((new Date(completedAt).getTime() - new Date(session.startedAt).getTime()) / 1000)
+  )
+}
+
+function formatSetForCalendar(set: FreeformExercise["sets"][number]): string {
+  const parts = []
+  if (set.weight) {
+    parts.push(`${set.weight} lbs`)
+  }
+  if (set.reps) {
+    parts.push(`${set.reps} reps`)
+  }
+  return parts.length > 0 ? `Set ${set.id} (${parts.join(", ")})` : `Set ${set.id}`
+}
+
+function formatExerciseForCalendar(exercise: FreeformExercise): string {
+  const tags = exercise.tags.length > 0 ? ` [${exercise.tags.join(", ")}]` : ""
+  if (exercise.sets.length === 0) {
+    return `${exercise.name}${tags}`
+  }
+  return `${exercise.name}${tags}: ${exercise.sets.map(formatSetForCalendar).join("; ")}`
+}
+
+function buildGoogleCalendarUrl(session: FreeformWorkoutSession): string {
+  const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
+  const duration = formatDuration(getSessionDurationSeconds(session))
+  const lines = [
+    `Duration: ${duration}`,
+    `Exercises: ${session.exercises.length}`,
+    "",
+    "Exercise Log:",
+    ...session.exercises.map((exercise) => `  ${formatExerciseForCalendar(exercise)}`),
+  ]
+
+  let details = lines.join("\n")
+  if (details.length > 1500) {
+    details = details.slice(0, 1497) + "..."
+  }
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: "Freeform Workout",
+    dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
+    details,
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
 export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
@@ -33,9 +94,13 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   const [saving, setSaving] = useState(false)
   const [phase, setPhase] = useState<FreeformPhase>(() => initialResume ? "resume-prompt" : "workout")
   const [pendingResume, setPendingResume] = useState<FreeformSessionProgress | null>(() => initialResume)
+  const [completedSessionData, setCompletedSessionData] = useState<FreeformWorkoutSession | null>(null)
+  const [savedToHistory, setSavedToHistory] = useState(false)
   const startedAtRef = useRef(new Date().toISOString())
+  const savingRef = useRef(false)
   const timer = useTimer({ countUp: true })
   const startTimer = timer.start
+  const { signInWithGoogle } = useAuth()
 
   useEffect(() => {
     if (phase === "workout" && !pendingResume) {
@@ -83,20 +148,32 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   }
 
   const handleComplete = async () => {
+    if (savingRef.current) return
+
     const namedExercises = exercises.filter((e) => e.name.trim())
     if (namedExercises.length === 0) return
 
+    savingRef.current = true
     setSaving(true)
+    timer.pause()
+
+    const completedAt = new Date().toISOString()
     const session: FreeformWorkoutSession = {
       mode: "freeform",
       startedAt: startedAtRef.current,
-      completedAt: new Date().toISOString(),
+      completedAt,
       exercises: namedExercises,
     }
-    await saveWorkoutSession(session)
     clearFreeformProgress()
+    setCompletedSessionData(session)
+
+    if (FEATURES.AUTH_ENABLED) {
+      const result = await saveWorkoutSession(session)
+      setSavedToHistory(result !== null)
+    }
+
     setSaving(false)
-    onModeChange()
+    setPhase("complete")
   }
 
   const handleBack = () => {
@@ -143,6 +220,104 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   }
 
   const hasNamedExercises = exercises.some((e) => e.name.trim())
+
+  if (phase === "complete" && completedSessionData) {
+    const durationSeconds = getSessionDurationSeconds(completedSessionData)
+    const totalSets = completedSessionData.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="h-20 w-20 rounded-full bg-blue-600 flex items-center justify-center mx-auto">
+            <Dumbbell className="h-10 w-10 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-foreground">Workout Complete!</h1>
+          <p className="text-muted-foreground">
+            You logged {completedSessionData.exercises.length} exercise
+            {completedSessionData.exercises.length !== 1 ? "s" : ""}
+          </p>
+
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="rounded-lg bg-muted/50 p-4 text-center">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                Total Time
+              </p>
+              <p className="text-2xl font-mono font-bold text-foreground">
+                {formatDuration(durationSeconds)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-muted/50 p-4 text-center">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                Sets
+              </p>
+              <p className="text-2xl font-mono font-bold text-foreground">{totalSets}</p>
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-muted/50 p-4 text-left space-y-3">
+            {completedSessionData.exercises.map((exercise) => (
+              <div key={exercise.id} className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">{exercise.name}</p>
+                {exercise.sets.length > 0 && (
+                  <div className="space-y-0.5">
+                    {exercise.sets.map((set) => (
+                      <p key={set.id} className="text-xs text-muted-foreground font-mono">
+                        {formatSetForCalendar(set)}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <a
+            href={buildGoogleCalendarUrl(completedSessionData)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
+          >
+            <Calendar className="h-4 w-4" />
+            Add to Google Calendar
+          </a>
+          <p className="text-center text-sm font-semibold text-amber-500 mt-1">
+            Remember to tap Save in Google Calendar!
+          </p>
+
+          {FEATURES.AUTH_ENABLED ? (
+            savedToHistory ? (
+              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
+                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
+                <p className="text-sm text-amber-600 font-medium">
+                  Sign in to save your workouts and track progress over time
+                </p>
+                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
+                  Sign in with Google
+                </Button>
+              </div>
+            )
+          ) : (
+            <div className="rounded-lg bg-slate-100 border border-slate-200 p-4 mt-4 text-left">
+              <p className="text-sm font-medium text-slate-700 mb-2">Workout Data</p>
+              <pre className="text-xs text-slate-600 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {JSON.stringify(completedSessionData, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          <button
+            onClick={onModeChange}
+            className="mt-6 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors w-full"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col pb-32">
