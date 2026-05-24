@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react"
 import { Share, Ellipsis, EllipsisVertical, X, SquarePlus } from "lucide-react"
 
 type Platform = "ios" | "android" | null
-type InstallState = { platform: Exclude<Platform, null> } | null
+type InstallState = Exclude<Platform, null> | null
 type NavigatorWithStandalone = Navigator & { standalone?: boolean }
 
 function getPlatform(): Platform {
@@ -26,10 +26,14 @@ function isStandalone(): boolean {
 function getInstallState(): InstallState {
   if (typeof window === "undefined") return null
   if (isStandalone()) return null
-  const dismissed = localStorage.getItem("pwa-banner-dismissed")
+  let dismissed: string | null = null
+  try {
+    dismissed = localStorage.getItem("pwa-banner-dismissed")
+  } catch {
+    dismissed = null
+  }
   if (dismissed) return null
-  const platform = getPlatform()
-  return platform ? { platform } : null
+  return getPlatform()
 }
 
 function subscribeToInstallState(onStoreChange: () => void) {
@@ -44,12 +48,16 @@ export function PwaInstallBanner() {
 
   const dismiss = () => {
     setDismissed(true)
-    localStorage.setItem("pwa-banner-dismissed", "1")
+    try {
+      localStorage.setItem("pwa-banner-dismissed", "1")
+    } catch {
+      // Storage may be unavailable in restricted browser modes.
+    }
   }
 
   if (!installState || dismissed) return null
 
-  const { platform } = installState
+  const platform = installState
 
   return (
     <div className="w-full max-w-3xl mx-auto mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
