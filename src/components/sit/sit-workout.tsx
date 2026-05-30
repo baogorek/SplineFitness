@@ -23,6 +23,7 @@ import { FEATURES } from "@/lib/feature-flags"
 import {
   SitPhase,
   GENERAL_WARMUP_SECONDS,
+  POST_WARMUP_SHAKEOUT_SECONDS,
   TISSUE_PREP_SETS,
   TISSUE_PREP_WORK_SECONDS,
   TISSUE_PREP_REST_SECONDS,
@@ -30,7 +31,6 @@ import {
   NEURAL_HOLD_SECONDS,
   NEURAL_SWITCH_SECONDS,
   WASHOUT_SECONDS,
-  computeSprintRecovery,
   PHASE_LABELS,
   PHASE_SPEECH_CUES,
   PHASE_COACHING_CUES,
@@ -44,6 +44,7 @@ interface SitWorkoutProps {
 
 const KEEPALIVE_PHASES: SitPhase[] = [
   "general-warmup",
+  "post-warmup-shakeout",
   "tissue-prep-work",
   "tissue-prep-rest",
   "adductor-squeeze",
@@ -58,6 +59,7 @@ const KEEPALIVE_PHASES: SitPhase[] = [
 
 const TIMED_PHASES: SitPhase[] = [
   "general-warmup",
+  "post-warmup-shakeout",
   "tissue-prep-work",
   "tissue-prep-rest",
   "adductor-squeeze",
@@ -111,6 +113,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const workoutStartedRef = useRef(false)
   const startedAtRef = useRef<string>("")
   const sprintStartRef = useRef<number>(0)
+  const sprintStopHandledRef = useRef(false)
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const firedCuesRef = useRef<Set<string>>(new Set())
   const phasesCompletedRef = useRef(0)
@@ -159,14 +162,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
 
-  const lastSprintTime = useMemo(() => {
-    if (sprintHistory.length === 0) return 0
-    return sprintHistory[sprintHistory.length - 1].timeSeconds
-  }, [sprintHistory])
-
   const phaseTargetSeconds = useMemo(() => {
     switch (phase) {
       case "general-warmup": return GENERAL_WARMUP_SECONDS
+      case "post-warmup-shakeout": return POST_WARMUP_SHAKEOUT_SECONDS
       case "tissue-prep-work": return TISSUE_PREP_WORK_SECONDS
       case "tissue-prep-rest": return TISSUE_PREP_REST_SECONDS
       case "adductor-squeeze": return ADDUCTOR_SQUEEZE_SECONDS
@@ -174,13 +173,13 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       case "neural-right": return NEURAL_HOLD_SECONDS
       case "neural-switch": return NEURAL_SWITCH_SECONDS
       case "washout": return WASHOUT_SECONDS
-      case "sprint-recovery": return lastSprintTime > 0 ? computeSprintRecovery(lastSprintTime) : 180
       default: return 0
     }
-  }, [phase, lastSprintTime])
+  }, [phase])
 
   const phaseTimer = useTimer({
     targetSeconds: phaseTargetSeconds || undefined,
+    countUp: phase === "sprint-recovery",
     onTick: (remaining) => {
       const cues = PHASE_COACHING_CUES[phase]
       if (cues) {
@@ -192,16 +191,23 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           }
         }
       }
-      if (phase === "tissue-prep-rest" && remaining === 10) {
-        const cueKey = tissuePrepSet < TISSUE_PREP_SETS
-          ? "tissue-prep-rest->tissue-prep-work"
-          : "tissue-prep-rest->adductor-squeeze"
-        const key = `next-up-${cueKey}`
-        if (!firedCuesRef.current.has(key) && NEXT_UP_CUES[cueKey]) {
-          firedCuesRef.current.add(key)
-          audio.speak(NEXT_UP_CUES[cueKey])
+
+      if (phase === "tissue-prep-rest") {
+        const isFinalTissuePrepRest = tissuePrepSet >= TISSUE_PREP_SETS
+        const cueRemainingSeconds = isFinalTissuePrepRest ? 20 : 10
+        const cueKey = isFinalTissuePrepRest
+          ? "tissue-prep-rest->adductor-squeeze"
+          : "tissue-prep-rest->tissue-prep-work"
+
+        if (remaining === cueRemainingSeconds) {
+          const key = `next-up-${cueKey}`
+          if (!firedCuesRef.current.has(key) && NEXT_UP_CUES[cueKey]) {
+            firedCuesRef.current.add(key)
+            audio.speak(NEXT_UP_CUES[cueKey])
+          }
         }
       }
+
       if (phase === "adductor-squeeze" && remaining === 10) {
         const cueKey = "adductor-squeeze->neural-left"
         const key = `next-up-${cueKey}`
@@ -210,13 +216,16 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           audio.speak(NEXT_UP_CUES[cueKey])
         }
       }
+
       if (remaining >= 1 && remaining <= 5 && remaining !== lastTickRemainingRef.current) {
         lastTickRemainingRef.current = remaining
         audio.playCountdownTick()
       }
     },
     onComplete: () => {
-      handlePhaseComplete()
+      if (phase !== "sprint-recovery") {
+        handlePhaseComplete()
+      }
     },
     speedMultiplier,
   })
@@ -317,6 +326,9 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const handlePhaseComplete = useCallback(() => {
     switch (phase) {
       case "general-warmup":
+        transitionTo("post-warmup-shakeout")
+        break
+      case "post-warmup-shakeout":
         transitionTo("tissue-prep-work")
         break
       case "tissue-prep-work":
@@ -460,6 +472,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       setTimeout(() => {
         audio.playCountdownGo()
         setSprintCountdownValue(null)
+        sprintStopHandledRef.current = false
         sprintStartRef.current = performance.now()
         setPhase("sprint-active")
       }, tick * 4),
@@ -467,8 +480,14 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     countdownTimeoutsRef.current = timeouts
   }, [sprintNumber, audio, speedMultiplier, clearCountdownTimeouts])
 
-  const handleSprintStop = useCallback(() => {
-    const elapsed = (performance.now() - sprintStartRef.current) / 1000
+  const handleSprintStop = useCallback((elapsedSeconds?: number) => {
+    if (sprintStopHandledRef.current) return
+
+    sprintStopHandledRef.current = true
+    const fallbackElapsed = sprintStartRef.current > 0
+      ? (performance.now() - sprintStartRef.current) / 1000
+      : 0
+    const elapsed = Math.max(0, elapsedSeconds ?? fallbackElapsed)
     const record: SprintRecord = { sprintNumber, timeSeconds: elapsed }
 
     const updatedHistory = [...sprintHistory, record]
@@ -496,8 +515,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     setSprintNumber((n) => n + 1)
     phaseTimer.reset()
     transitionTo("sprint-recovery")
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sprintNumber, bestTime, sprintHistory.length, phaseTimer, transitionTo])
+  }, [sprintNumber, bestTime, sprintHistory, phaseTimer, transitionTo])
 
   const saveAndComplete = useCallback(async (endedEarly: boolean) => {
     workoutTimer.pause()
@@ -760,7 +778,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }
 
   const isTimedPhase = [
-    "general-warmup", "tissue-prep-work", "tissue-prep-rest",
+    "general-warmup", "post-warmup-shakeout", "tissue-prep-work", "tissue-prep-rest",
     "adductor-squeeze", "neural-left", "neural-switch", "neural-right",
     "washout",
   ].includes(phase)
@@ -899,7 +917,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
             <SprintRecovery
               formattedTime={phaseTimer.formattedTime}
               recoveryElapsed={phaseTimer.elapsedSeconds}
-              recoveryTargetSeconds={phaseTargetSeconds}
               sprintHistory={sprintHistory}
               bestTime={bestTime}
               onSkipRecovery={handleSkipRecovery}

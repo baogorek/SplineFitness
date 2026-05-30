@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Activity, ArrowLeft, Calendar, CheckCircle2, Circle, Volume2, Zap } from "lucide-react"
+import { Activity, ArrowLeft, Calendar, CheckCircle2, Circle, ClipboardList, Volume2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   WorkoutVariant,
@@ -150,6 +150,42 @@ function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: str
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to the textarea copy path below.
+    }
+  }
+
+  if (typeof document === "undefined") return false
+
+  const textArea = document.createElement("textarea")
+  textArea.value = text
+  textArea.setAttribute("readonly", "")
+  textArea.style.position = "fixed"
+  textArea.style.top = "0"
+  textArea.style.left = "0"
+  textArea.style.width = "1px"
+  textArea.style.height = "1px"
+  textArea.style.opacity = "0"
+  textArea.style.fontSize = "16px"
+
+  document.body.appendChild(textArea)
+  textArea.focus()
+  textArea.select()
+
+  try {
+    return document.execCommand("copy")
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(textArea)
+  }
+}
+
 export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [initialCircuitProgress] = useState<CircuitSessionProgress | null>(() => getCircuitProgress())
   const [phase, setPhase] = useState<Phase>(() => initialCircuitProgress ? "resume-prompt" : "setup")
@@ -175,11 +211,13 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [showComboChecklist, setShowComboChecklist] = useState(false)
   const [comboCheckedItems, setComboCheckedItems] = useState<Set<string>>(new Set())
   const [isResumeTransition, setIsResumeTransition] = useState(false)
+  const [audioLogCopyStatus, setAudioLogCopyStatus] = useState<"idle" | "copied" | "failed">("idle")
   const savingRef = useRef(false)
   const workoutStartRef = useRef<string | null>(null)
   const isFirstComboRef = useRef(true)
   const resumeAfterTransitionRef = useRef(false)
   const transitionExerciseDurationRef = useRef(60)
+  const audioLogCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { signInWithGoogle } = useAuth()
 
@@ -207,6 +245,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     }
     return () => { audio.stopKeepalive() }
   }, [phase, audio])
+
+  useEffect(() => {
+    return () => {
+      if (audioLogCopyResetRef.current) {
+        clearTimeout(audioLogCopyResetRef.current)
+      }
+    }
+  }, [])
 
   const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(() => initialCircuitProgress)
 
@@ -345,6 +391,19 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     audio.playMinuteBeep()
     audio.speak("Alt. Single Leg Box Squats")
   }
+
+  const handleCopyAudioLog = useCallback(async () => {
+    const copied = await copyTextToClipboard(audio.getDebugLog())
+    setAudioLogCopyStatus(copied ? "copied" : "failed")
+
+    if (audioLogCopyResetRef.current) {
+      clearTimeout(audioLogCopyResetRef.current)
+    }
+    audioLogCopyResetRef.current = setTimeout(() => {
+      setAudioLogCopyStatus("idle")
+      audioLogCopyResetRef.current = null
+    }, 1800)
+  }, [audio])
 
   useEffect(() => {
     if (phase === "setup" || phase === "resume-prompt" || phase === "workout-complete") return
@@ -848,6 +907,27 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               >
                 <Volume2 className="h-3 w-3" />
                 Audio
+              </button>
+              <button
+                onClick={handleCopyAudioLog}
+                title="Copy audio diagnostic log"
+                aria-label="Copy audio diagnostic log"
+                className={`flex h-6 px-2 items-center gap-1 rounded text-xs font-medium transition-colors ${
+                  audioLogCopyStatus === "copied"
+                    ? "bg-green-600 text-white"
+                    : audioLogCopyStatus === "failed"
+                      ? "bg-red-600 text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <ClipboardList className="h-3 w-3" />
+                <span className="hidden sm:inline">
+                  {audioLogCopyStatus === "copied"
+                    ? "Copied"
+                    : audioLogCopyStatus === "failed"
+                      ? "Failed"
+                      : "Log"}
+                </span>
               </button>
             </div>
             <div className="text-right">

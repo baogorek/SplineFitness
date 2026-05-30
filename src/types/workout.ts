@@ -4,6 +4,7 @@ export type SitPhase =
   | "ready"
   | "warmup-countdown"
   | "general-warmup"
+  | "post-warmup-shakeout"
   | "tissue-prep-work"
   | "tissue-prep-rest"
   | "adductor-squeeze"

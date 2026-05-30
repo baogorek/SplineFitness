@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { SprintRecord } from "@/types/workout"
-import { AtpStatusBar } from "./atp-status-bar"
+import { RecoveryStatusBar } from "./atp-status-bar"
 
 interface SprintReadyProps {
   sprintNumber: number
@@ -42,17 +42,20 @@ export function SprintReady({ sprintNumber, onGo, onEndWorkout }: SprintReadyPro
 }
 
 interface SprintActiveProps {
-  onStop: () => void
+  onStop: (elapsedSeconds: number) => void
 }
 
 export function SprintActive({ onStop }: SprintActiveProps) {
   const [displayTime, setDisplayTime] = useState("0.0")
+  const [isStopping, setIsStopping] = useState(false)
   const startTimeRef = useRef(0)
   const rafRef = useRef<number>(0)
+  const stoppedRef = useRef(false)
 
   useEffect(() => {
     startTimeRef.current = performance.now()
     const tick = () => {
+      if (stoppedRef.current) return
       const elapsed = (performance.now() - startTimeRef.current) / 1000
       setDisplayTime(elapsed.toFixed(1))
       rafRef.current = requestAnimationFrame(tick)
@@ -62,20 +65,37 @@ export function SprintActive({ onStop }: SprintActiveProps) {
   }, [])
 
   const handleStop = useCallback(() => {
+    if (stoppedRef.current) return
+
+    stoppedRef.current = true
+    const elapsed = (performance.now() - startTimeRef.current) / 1000
+    setDisplayTime(elapsed.toFixed(1))
+    setIsStopping(true)
     cancelAnimationFrame(rafRef.current)
-    onStop()
+    onStop(elapsed)
   }, [onStop])
 
   return (
     <button
-      onClick={handleStop}
-      className="flex flex-col flex-1 w-full bg-red-600 active:bg-red-700 items-center justify-center min-h-screen"
+      type="button"
+      disabled={isStopping}
+      onPointerDown={(event) => {
+        event.preventDefault()
+        handleStop()
+      }}
+      onKeyDown={(event) => {
+        if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+          event.preventDefault()
+          handleStop()
+        }
+      }}
+      className="flex flex-col flex-1 w-full bg-red-600 active:bg-red-700 items-center justify-center min-h-screen touch-none select-none disabled:cursor-default"
     >
       <span className="text-7xl font-mono font-bold text-white tabular-nums">
         {displayTime}s
       </span>
       <span className="text-lg text-red-200 mt-4 uppercase tracking-wider font-semibold">
-        Tap anywhere to stop
+        {isStopping ? "Stopping" : "Tap anywhere to stop"}
       </span>
     </button>
   )
@@ -84,7 +104,6 @@ export function SprintActive({ onStop }: SprintActiveProps) {
 interface SprintRecoveryProps {
   formattedTime: string
   recoveryElapsed: number
-  recoveryTargetSeconds?: number
   sprintHistory: SprintRecord[]
   bestTime: number | null
   onSkipRecovery?: () => void
@@ -96,7 +115,6 @@ interface SprintRecoveryProps {
 export function SprintRecovery({
   formattedTime,
   recoveryElapsed,
-  recoveryTargetSeconds,
   sprintHistory,
   bestTime,
   onSkipRecovery,
@@ -128,7 +146,7 @@ export function SprintRecovery({
       </span>
 
       <div className="w-full max-w-sm">
-        <AtpStatusBar elapsedSeconds={recoveryElapsed} targetSeconds={recoveryTargetSeconds} />
+        <RecoveryStatusBar elapsedSeconds={recoveryElapsed} />
       </div>
 
       {onSkipRecovery && (

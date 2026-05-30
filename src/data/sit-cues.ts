@@ -3,6 +3,7 @@ import { SitPhase } from "@/types/workout"
 export type { SitPhase } from "@/types/workout"
 
 export const GENERAL_WARMUP_SECONDS = 120
+export const POST_WARMUP_SHAKEOUT_SECONDS = 30
 export const TISSUE_PREP_SETS = 2
 export const TISSUE_PREP_WORK_SECONDS = 20
 export const TISSUE_PREP_REST_SECONDS = 30
@@ -11,12 +12,12 @@ export const NEURAL_HOLD_SECONDS = 30
 export const NEURAL_SWITCH_SECONDS = 10
 export const WASHOUT_SECONDS = 180
 
-export function computeSprintRecovery(sprintSeconds: number): number {
-  return Math.round(Math.max(90, Math.min(240, sprintSeconds * 15)))
-}
+export const ADDUCTOR_SETUP_CUE =
+  "Adductor squeeze next. Lie down or sit. Knees bent, feet flat. Put a towel, ball, or both fists between your knees. Squeeze at 4 out of 10 effort. No sharp groin pain."
 
 export const PHASE_LABELS: Record<string, string> = {
   "general-warmup": "Jumping Jacks",
+  "post-warmup-shakeout": "Shake Out",
   "tissue-prep-work": "Pogo Hops",
   "tissue-prep-rest": "Rest",
   "adductor-squeeze": "Adductor Squeeze",
@@ -30,11 +31,13 @@ export const PHASE_LABELS: Record<string, string> = {
 export const PHASE_SPEECH_CUES: Record<string, string> = {
   "general-warmup":
     "Jumping jacks. Get the blood flowing and raise your core temperature.",
+  "post-warmup-shakeout":
+    "Shake out your calves. Walk it off and reset your ankles.",
   "tissue-prep-work":
     "Quick, stiff hops. Minimize ground contact time. Stay on the balls of your feet.",
   "tissue-prep-rest": "Rest.",
   "adductor-squeeze":
-    "Adductor squeeze. Lie down or sit. Knees bent, feet flat. Put a towel, ball, or both fists between your knees. Squeeze at 4 out of 10 effort. No sharp groin pain.",
+    "Adductor squeeze. Begin now. Moderate pressure. Pain-free.",
   "neural-left":
     "Left leg glute bridge. Drive hips up. Squeeze at the top. Near-maximal effort.",
   "neural-switch":
@@ -48,6 +51,8 @@ export const PHASE_SPEECH_CUES: Record<string, string> = {
 export const PHASE_TOASTS: Record<string, string> = {
   "general-warmup":
     "General warm-up: elevates core temperature, increases synovial fluid in joints, and prepares the cardiovascular system for high-intensity work.",
+  "post-warmup-shakeout":
+    "Brief reset: let the calves settle so pogo hops stay elastic and crisp instead of turning into endurance work.",
   "tissue-prep-work":
     "Tendon stiffness priming: rapid plyometric loading increases rate of force development via the stretch-shortening cycle.",
   "adductor-squeeze":
@@ -57,7 +62,7 @@ export const PHASE_TOASTS: Record<string, string> = {
   "washout":
     "Phosphocreatine resynthesis window: 3 minutes of low-intensity movement restores approximately 85% of intramuscular ATP-PCr stores.",
   "sprint-recovery":
-    "13-second sprints tap fast glycolysis. Recovery clears H+ ions, restores ATP-PCr, and resets neural drive for quality output.",
+    "All-out sprint recovery is about restoring power and preserving mechanics. Use the timer as guidance, not permission.",
 }
 
 export interface PhaseCue {
@@ -69,7 +74,10 @@ export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
   "general-warmup": [
     { remainingSeconds: 60, text: "One minute down. Keep it going." },
     { remainingSeconds: 30, text: "30 seconds. Keep the pace up." },
-    { remainingSeconds: 15, text: "Pogo hops in 15 seconds. No rest." },
+    { remainingSeconds: 15, text: "Shake out in 15 seconds. Let your calves reset." },
+  ],
+  "post-warmup-shakeout": [
+    { remainingSeconds: 10, text: "Pogo hops in 10 seconds." },
   ],
   "tissue-prep-work": [
     { remainingSeconds: 10, text: "10 seconds. Stay light on your feet." },
@@ -99,13 +107,17 @@ export const PHASE_COACHING_CUES: Partial<Record<SitPhase, PhaseCue[]>> = {
 
 export const NEXT_UP_CUES: Record<string, string> = {
   "tissue-prep-rest->tissue-prep-work": "Pogo hops in 10 seconds.",
-  "tissue-prep-rest->adductor-squeeze": "Next up: adductor squeeze. Moderate pressure. Pain-free.",
+  "tissue-prep-rest->adductor-squeeze": ADDUCTOR_SETUP_CUE,
   "adductor-squeeze->neural-left": "Next up: Left leg glute bridge. Near maximal effort.",
   "neural-right->washout": "Next up: Easy walking for 3 minutes.",
 }
 
 export function getNextPhaseLabel(phase: SitPhase, tissuePrepSet: number): string | null {
   switch (phase) {
+    case "general-warmup":
+      return "Shake Out"
+    case "post-warmup-shakeout":
+      return "Pogo Hops"
     case "tissue-prep-rest":
       return tissuePrepSet >= TISSUE_PREP_SETS ? "Adductor Squeeze" : "Pogo Hops"
     case "adductor-squeeze":
@@ -118,20 +130,3 @@ export function getNextPhaseLabel(phase: SitPhase, tissuePrepSet: number): strin
       return null
   }
 }
-
-export interface AtpStage {
-  maxSeconds: number
-  label: string
-  color: string
-}
-
-export const ATP_STAGES: AtpStage[] = [
-  { maxSeconds: 30, label: "Phosphagen Depleted. Heavy Breathing.", color: "bg-red-500" },
-  { maxSeconds: 90, label: "Resynthesizing ATP-PCr (approx 70%)...", color: "bg-orange-500" },
-  { maxSeconds: 150, label: "Clearing Metabolic Waste / Restoring CNS...", color: "bg-yellow-500" },
-  { maxSeconds: 210, label: "Clearing Metabolic Waste / Restoring CNS...", color: "bg-yellow-500" },
-  { maxSeconds: 240, label: "System Reset. Ready for Quality.", color: "bg-lime-500" },
-]
-
-export const ATP_FULL_LABEL = "FULL RECHARGE. READY TO SPRINT."
-export const ATP_FULL_COLOR = "bg-green-500"
