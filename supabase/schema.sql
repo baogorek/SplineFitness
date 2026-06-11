@@ -4,7 +4,7 @@
 create table if not exists workout_sessions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users(id) on delete cascade,
-  mode text not null check (mode in ('circuit', 'traditional', 'freeform', 'interval', 'sit', 'coached', 'vo2max')),
+  mode text not null check (mode in ('circuit', 'traditional', 'freeform', 'interval', 'sit', 'vo2max')),
   workout_id text not null,
   variant text check (variant in ('A', 'B')),
   started_at timestamptz not null,

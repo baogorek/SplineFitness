@@ -30,6 +30,7 @@ const features = [
     icon: UserPlus,
     title: "1-on-1 Coaching",
     description: "Book personal training sessions with experienced coaches",
+    enabled: FEATURES.BOOKING_ENABLED,
   },
   {
     icon: BookOpen,
@@ -106,7 +107,7 @@ export function LandingPage({ posts }: LandingPageProps) {
               Everything you need to train smarter
             </h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => {
+              {features.filter((feature) => feature.enabled !== false).map((feature) => {
                 const cardContent = (
                   <Card
                     key={feature.title}

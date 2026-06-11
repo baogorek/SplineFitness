@@ -1,4 +1,4 @@
-export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "coached" | "vo2max"
+export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "vo2max"
 export type WorkoutVariant = "A" | "B"
 export type SitPhase =
   | "ready"
@@ -233,40 +233,7 @@ export interface Vo2MaxWorkoutSession {
   endedEarly: boolean
 }
 
-// Coached Types
-export interface CoachedVideoLink { url: string; label?: string }
-
-export interface CoachedExercise {
-  id: string; name: string
-  sets?: number; reps?: string; holdSeconds?: number
-  durationSeconds?: number; restSeconds?: number; perSide?: boolean
-  why?: string; cue?: string; videos?: CoachedVideoLink[]
-  note?: string
-}
-
-export interface CoachedSuperset {
-  id: string; label: string
-  exercises: CoachedExercise[]
-  rounds: number; restBetweenRoundsSeconds?: number
-  instruction?: string
-}
-
-export type CoachedPhaseItem =
-  | { type: "exercise"; exercise: CoachedExercise }
-  | { type: "superset"; superset: CoachedSuperset }
-
-export interface CoachedPhase {
-  id: string; name: string; phaseNumber: number
-  description?: string
-  items: CoachedPhaseItem[]
-}
-
-export interface CoachedWorkoutDefinition {
-  id: string; name: string; shortName: string
-  description: string; phases: CoachedPhase[]
-}
-
-export interface CoachedWorkoutSession {
+export interface LegacyProgramWorkoutSession {
   mode: "coached"
   workoutId: string; workoutName: string
   startedAt: string; completedAt?: string
@@ -276,13 +243,15 @@ export interface CoachedWorkoutSession {
 
 // Unified Types
 export type WorkoutDefinition = CircuitWorkoutDefinition
-export type WorkoutSession =
+export type ActiveWorkoutSession =
   | CircuitWorkoutSession
   | FreeformWorkoutSession
   | IntervalWorkoutSession
   | SitWorkoutSession
-  | CoachedWorkoutSession
   | Vo2MaxWorkoutSession
+export type WorkoutSession =
+  | ActiveWorkoutSession
+  | LegacyProgramWorkoutSession
 
 export interface WorkoutHistoryEntry {
   id: string

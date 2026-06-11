@@ -1,4 +1,5 @@
 import {
+  ActiveWorkoutSession,
   WorkoutSession,
   WorkoutHistoryEntry,
   CircuitWorkoutSession,
@@ -117,7 +118,7 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
   })
 }
 
-export async function saveWorkoutSession(session: WorkoutSession): Promise<WorkoutHistoryEntry | null> {
+export async function saveWorkoutSession(session: ActiveWorkoutSession): Promise<WorkoutHistoryEntry | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
@@ -176,14 +177,6 @@ export async function saveWorkoutSession(session: WorkoutSession): Promise<Worko
         endedEarly: session.endedEarly,
       }
       workoutId = "vo2max-cooper"
-      break
-    case "coached":
-      sessionData = {
-        totalTimeSeconds: session.totalTimeSeconds,
-        phasesCompleted: session.phasesCompleted,
-        workoutName: session.workoutName,
-      }
-      workoutId = session.workoutId
       break
   }
 

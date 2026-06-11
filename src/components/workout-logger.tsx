@@ -10,7 +10,6 @@ import { CircuitWorkout } from "./circuit/circuit-workout"
 import { FreeformWorkout } from "./freeform/freeform-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
 import { SitWorkout } from "./sit/sit-workout"
-import { CoachedWorkout } from "./coached/coached-workout"
 import { Vo2MaxWorkout } from "./vo2max/vo2max-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
@@ -71,18 +70,6 @@ const workoutModes = [
     iconColor: "text-cyan-600",
   },
   {
-    id: "coached" as const,
-    icon: BookOpen,
-    title: "Coached Lifting",
-    subtitle: "Dumbbell programs",
-    description: "Phase-based coached workouts with dumbbells & kettlebells",
-    color: "bg-purple-500",
-    lightBg: "bg-purple-50",
-    border: "border-purple-200",
-    hoverBorder: "hover:border-purple-300",
-    iconColor: "text-purple-600",
-  },
-  {
     id: "freeform" as const,
     icon: Dumbbell,
     title: "Freeform",
@@ -117,11 +104,13 @@ const workoutModes = [
     border: "border-violet-200",
     hoverBorder: "hover:border-violet-300",
     iconColor: "text-violet-600",
+    enabled: FEATURES.BOOKING_ENABLED,
   },
 ]
 
 function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void }) {
   const { user, signOut, signInWithGoogle } = useAuth()
+  const visibleWorkoutModes = workoutModes.filter((mode) => mode.enabled !== false)
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
@@ -187,11 +176,11 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
         {/* Workout mode cards */}
         <div className="w-full max-w-3xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {workoutModes.map((mode, index) => (
+            {visibleWorkoutModes.map((mode, index) => (
               <button
                 key={mode.id}
                 onClick={() => onSelectMode(mode.id)}
-                className={`group relative rounded-2xl bg-white border-2 ${mode.border} ${mode.hoverBorder} p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1 ${index === workoutModes.length - 1 && workoutModes.length % 2 !== 0 ? "sm:col-span-2" : ""}`}
+                className={`group relative rounded-2xl bg-white border-2 ${mode.border} ${mode.hoverBorder} p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1 ${index === visibleWorkoutModes.length - 1 && visibleWorkoutModes.length % 2 !== 0 ? "sm:col-span-2" : ""}`}
               >
                 {/* Colored accent bar */}
                 <div className={`absolute top-0 left-6 right-6 h-1 ${mode.color} rounded-b-full`} />
@@ -305,10 +294,6 @@ export function WorkoutLogger() {
 
   if (mode === "vo2max") {
     return <Vo2MaxWorkout onModeChange={handleModeChange} />
-  }
-
-  if (mode === "coached") {
-    return <CoachedWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "freeform") {

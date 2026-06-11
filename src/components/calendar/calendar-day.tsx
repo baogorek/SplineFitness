@@ -15,7 +15,7 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
   const hasWorkouts = workouts.length > 0
   const circuitWorkouts = workouts.filter((w) => w.session.mode === "circuit")
   const freeformWorkouts = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string)
-  const coachedWorkouts = workouts.filter((w) => w.session.mode === "coached")
+  const archivedProgramWorkouts = workouts.filter((w) => w.session.mode === "coached")
   const sitWorkouts = workouts.filter((w) => w.session.mode === "sit")
   const vo2MaxWorkouts = workouts.filter((w) => w.session.mode === "vo2max")
 
@@ -41,8 +41,8 @@ export function CalendarDay({ date, workouts, isCurrentMonth, onClick }: Calenda
           {freeformWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
           )}
-          {coachedWorkouts.length > 0 && (
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+          {archivedProgramWorkouts.length > 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
           )}
           {sitWorkouts.length > 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-green-500" />

@@ -166,7 +166,7 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                     : entry.session.mode === "vo2max"
                     ? "VO2 Max"
                     : entry.session.mode === "coached"
-                    ? `Coached: ${entry.session.workoutName}`
+                    ? `Archived program: ${entry.session.workoutName}`
                     : "Freeform"}
                 </Badge>
                 <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
