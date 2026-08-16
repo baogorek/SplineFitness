@@ -406,7 +406,12 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   }, [audio])
 
   useEffect(() => {
-    if (phase === "setup" || phase === "resume-prompt" || phase === "workout-complete") return
+    if (
+      savingRef.current ||
+      phase === "setup" ||
+      phase === "resume-prompt" ||
+      phase === "workout-complete"
+    ) return
     saveCircuitProgress({
       variant: activeWorkout,
       exerciseSettings,
@@ -636,6 +641,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         const result = await saveWorkoutSession(session)
         setSavedToHistory(result !== null)
       }
+      clearCircuitProgress()
       setPhase("workout-complete")
     },
     [workout.id, activeWorkout, rounds, exerciseSettings, exerciseChoices, exerciseEquipment, weakLinkPracticeRecords]

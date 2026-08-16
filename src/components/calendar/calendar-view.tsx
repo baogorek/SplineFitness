@@ -31,7 +31,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
       setLoading(false)
     }
     fetchHistory()
-  }, [])
+  }, [user])
 
   const handlePrevMonth = () => {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))

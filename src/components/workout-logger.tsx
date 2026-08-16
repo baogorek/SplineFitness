@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -14,7 +14,13 @@ import { Vo2MaxWorkout } from "./vo2max/vo2max-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
 import { useAuth } from "./auth-provider"
-import { getCircuitProgress, getFreeformProgress, getIntervalProgress, getSitProgress } from "@/lib/storage"
+import {
+  clearProgressAlreadySavedToHistory,
+  getCircuitProgress,
+  getFreeformProgress,
+  getIntervalProgress,
+  getSitProgress,
+} from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { PwaInstallBanner } from "./pwa-install-banner"
 
@@ -259,25 +265,51 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
 }
 
 export function WorkoutLogger() {
-  const [mode, setMode] = useState<AppMode | null>(() => {
-    if (typeof window === "undefined") return null
-    if (getCircuitProgress()) {
-      return "circuit"
+  const [mode, setMode] = useState<AppMode | null>(null)
+  const [checkingSavedProgress, setCheckingSavedProgress] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const getSavedMode = (): WorkoutMode | null => {
+      if (getCircuitProgress()) {
+        return "circuit"
+      }
+      if (getFreeformProgress()) {
+        return "freeform"
+      }
+      if (getIntervalProgress()) {
+        return "interval"
+      }
+      if (getSitProgress()) {
+        return "sit"
+      }
+      return null
     }
-    if (getFreeformProgress()) {
-      return "freeform"
+
+    const restoreSavedProgress = async () => {
+      if (FEATURES.AUTH_ENABLED && getSavedMode()) {
+        await clearProgressAlreadySavedToHistory()
+      }
+
+      if (!cancelled) {
+        setMode(getSavedMode())
+        setCheckingSavedProgress(false)
+      }
     }
-    if (getIntervalProgress()) {
-      return "interval"
+
+    void restoreSavedProgress()
+    return () => {
+      cancelled = true
     }
-    if (getSitProgress()) {
-      return "sit"
-    }
-    return null
-  })
+  }, [])
 
   const handleModeChange = () => {
     setMode(null)
+  }
+
+  if (checkingSavedProgress) {
+    return <div className="text-muted-foreground">Loading...</div>
   }
 
   if (mode === "circuit") {

@@ -34,7 +34,7 @@ export default function PrivacyPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Privacy Policy</h1>
-          <p className="text-muted-foreground">Last updated: January 19, 2026</p>
+          <p className="text-muted-foreground">Last updated: August 16, 2026</p>
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">Data Storage</h2>
             <p className="text-muted-foreground mb-4">
-              Your data is stored securely using Supabase, a cloud database service. Data is encrypted in transit
+              Your data is stored securely using Google Firebase, a cloud database service. Data is encrypted in transit
               and at rest. Our servers are located in the United States.
             </p>
           </section>
@@ -97,8 +97,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-foreground mb-4">Third-Party Services</h2>
             <p className="text-muted-foreground mb-4">We use the following third-party services:</p>
             <ul className="list-disc list-inside text-muted-foreground mb-4 space-y-1">
-              <li><strong>Google OAuth</strong> - For authentication (signing in to your account)</li>
-              <li><strong>Supabase</strong> - For secure data storage and authentication services</li>
+              <li><strong>Google Firebase</strong> - For authentication and secure workout data storage</li>
               <li><strong>Vercel</strong> - For hosting the application</li>
             </ul>
             <p className="text-muted-foreground mb-4">
@@ -109,8 +108,8 @@ export default function PrivacyPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">Guest Mode</h2>
             <p className="text-muted-foreground mb-4">
-              You can use Spline Fitness without signing in. In guest mode, no data is collected or stored.
-              Your workouts exist only in your browser session and are not saved when you close the app.
+              You can use Spline Fitness without signing in. In guest mode, workout progress may be stored
+              locally in your browser, but it is not uploaded or synchronized between devices.
             </p>
           </section>
 

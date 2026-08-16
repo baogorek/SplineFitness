@@ -52,6 +52,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const setNotesRef = useRef<Record<number, string>>({})
   const noteInputRef = useRef<HTMLInputElement | null>(null)
   const restoredIntervalElapsedRef = useRef<number | null>(null)
+  const completionInProgressRef = useRef(false)
 
   const speedMultiplier = testMode ? 12 : 1
 
@@ -96,6 +97,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       spokenCuesRef.current.clear()
       intervalTimer.reset()
       if (currentSet >= TOTAL_SETS) {
+        completionInProgressRef.current = true
         workoutTimer.pause()
         clearIntervalProgress()
         const session = buildSession(TOTAL_SETS, false)
@@ -104,6 +106,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
           const result = await saveWorkoutSession(session)
           setSavedToHistory(result !== null)
         }
+        clearIntervalProgress()
         setPhase("complete")
       } else {
         setCurrentSet((prev) => prev + 1)
@@ -217,7 +220,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   }, [phase, saveCurrentNote, clearIOSUndoStack])
 
   const saveProgressSnapshot = useCallback(() => {
-    if (phase === "complete" || pendingResume) return
+    if (completionInProgressRef.current || phase === "complete" || pendingResume) return
     if (!workoutStarted && phase === "ready" && currentSet === 1 && !currentNote.trim()) return
 
     const checkpointPhase = phase === "countdown" ? "ready" : phase
@@ -387,6 +390,9 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   }, [])
 
   const handleEndWorkout = useCallback(async () => {
+    if (completionInProgressRef.current) return
+    completionInProgressRef.current = true
+
     clearCountdownTimeouts()
     intervalTimer.pause()
     intervalTimer.reset()
@@ -403,6 +409,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       const result = await saveWorkoutSession(session)
       setSavedToHistory(result !== null)
     }
+    clearIntervalProgress()
     setPhase("complete")
   }, [phase, currentSet, clearCountdownTimeouts, intervalTimer, workoutTimer, restTimer, buildSession, saveCurrentNote])
 

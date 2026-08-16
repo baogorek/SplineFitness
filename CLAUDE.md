@@ -3,7 +3,7 @@
 ## Deployment
 - Hosted on Vercel with automatic deploys from `main` branch
 - Custom domain: splinefitness.com
-- Auth: Supabase with Google OAuth
+- Auth and workout history: Firebase Authentication and Cloud Firestore
 
 ## Important Reminders
 - Before discussing deployment issues, ALWAYS run `git status` to check for uncommitted changes

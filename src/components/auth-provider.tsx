@@ -1,12 +1,17 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react"
-import { User, Session } from "@supabase/supabase-js"
-import { supabase } from "@/lib/supabase"
+import {
+  GoogleAuthProvider,
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+} from "firebase/auth"
+import { firebaseAuth } from "@/lib/firebase"
 
 type AuthContextType = {
   user: User | null
-  session: Session | null
   loading: boolean
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
@@ -16,47 +21,48 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const loading = false
+  const [loading, setLoading] = useState(Boolean(firebaseAuth))
 
   useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-      })
-      .catch(() => {
-        // Supabase unavailable - continue as logged out
-      })
+    if (!firebaseAuth) return
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-    })
-
-    return () => subscription.unsubscribe()
+    return onAuthStateChanged(
+      firebaseAuth,
+      (nextUser) => {
+        setUser(nextUser)
+        setLoading(false)
+      },
+      (error) => {
+        console.error("Authentication state error:", error)
+        setUser(null)
+        setLoading(false)
+      }
+    )
   }, [])
 
   const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    })
+    if (!firebaseAuth) {
+      console.error("Firebase is not configured")
+      return
+    }
+
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: "select_account" })
+    await signInWithPopup(firebaseAuth, provider)
   }
 
   const signOut = async () => {
+    if (!firebaseAuth) return
+
     try {
-      await supabase.auth.signOut()
-      window.location.reload()
+      await firebaseSignOut(firebaseAuth)
     } catch (error) {
       console.error("Sign out error:", error)
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

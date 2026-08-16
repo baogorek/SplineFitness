@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownsUserData(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isWorkout() {
+      return request.resource.data.keys().hasAll([
+          'mode',
+          'startedAt',
+          'completedAt'
+        ])
+        && request.resource.data.mode in [
+          'circuit',
+          'freeform',
+          'interval',
+          'sit',
+          'vo2max'
+        ]
+        && request.resource.data.startedAt is string
+        && request.resource.data.completedAt is string;
+    }
+
+    match /users/{userId}/workouts/{workoutId} {
+      allow read, delete: if ownsUserData(userId);
+      allow create, update: if ownsUserData(userId) && isWorkout();
+    }
+
+    match /users/{userId}/exercisePreferences/{exerciseId} {
+      allow read, delete: if ownsUserData(userId);
+      allow create, update: if ownsUserData(userId)
+        && request.resource.data.exerciseId == exerciseId
+        && request.resource.data.durationSeconds is int
+        && request.resource.data.durationSeconds > 0;
+    }
+  }
+}

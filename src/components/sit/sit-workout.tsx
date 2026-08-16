@@ -119,6 +119,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const phasesCompletedRef = useRef(0)
   const lastTickRemainingRef = useRef<number>(-1)
   const restoreTimedPhaseRef = useRef<{ phase: SitPhase; elapsedSeconds: number } | null>(null)
+  const completionInProgressRef = useRef(false)
 
   const speedMultiplier = testMode ? 12 : 1
 
@@ -270,7 +271,13 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [phase])
 
   const saveProgressSnapshot = useCallback(() => {
-    if (!workoutStartedRef.current || phase === "ready" || phase === "complete" || pendingResume) {
+    if (
+      completionInProgressRef.current ||
+      !workoutStartedRef.current ||
+      phase === "ready" ||
+      phase === "complete" ||
+      pendingResume
+    ) {
       return
     }
 
@@ -518,6 +525,9 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [sprintNumber, bestTime, sprintHistory, phaseTimer, transitionTo])
 
   const saveAndComplete = useCallback(async (endedEarly: boolean) => {
+    if (completionInProgressRef.current) return
+    completionInProgressRef.current = true
+
     workoutTimer.pause()
     phaseTimer.pause()
     clearCountdownTimeouts()
@@ -540,6 +550,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       const result = await saveWorkoutSession(session)
       setSavedToHistory(result !== null)
     }
+    clearSitProgress()
     setPhase("complete")
   }, [workoutTimer, phaseTimer, sprintHistory, bestTime, clearCountdownTimeouts])
 

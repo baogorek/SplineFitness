@@ -109,7 +109,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   }, [phase, pendingResume, startTimer])
 
   useEffect(() => {
-    if (phase !== "workout") return
+    if (phase !== "workout" || savingRef.current) return
     saveFreeformProgress({
       exercises,
       elapsedSeconds: timer.elapsedSeconds,
@@ -172,6 +172,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
       setSavedToHistory(result !== null)
     }
 
+    clearFreeformProgress()
     setSaving(false)
     setPhase("complete")
   }

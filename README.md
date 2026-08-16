@@ -14,8 +14,8 @@ A workout tracking app with an integrated blog, built with Next.js 16.
 
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS v4
 - **UI Components**: shadcn/ui (Radix primitives)
-- **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth with Google OAuth
+- **Database**: Cloud Firestore
+- **Auth**: Firebase Authentication with Google sign-in
 - **Blog**: MDX with gray-matter frontmatter
 
 ## Getting Started
@@ -27,12 +27,18 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### Environment Variables
+### Optional Firebase Environment Overrides
 
-Create `.env.local`:
+The public Firebase web configuration for the production project is included in
+`src/lib/firebase.ts`. To point a local build at a different Firebase project,
+create `.env.local` with:
 ```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 ```
 
 ## Project Structure
@@ -56,7 +62,7 @@ src/
 │   └── posts/                # Blog posts (MDX)
 ├── data/                     # Workout definitions
 ├── hooks/                    # Custom React hooks
-├── lib/                      # Utilities (Supabase, blog helpers)
+├── lib/                      # Utilities (Firebase, storage, blog helpers)
 └── types/                    # TypeScript definitions
 ```
 
@@ -113,62 +119,24 @@ With a custom title for accessibility:
 | `categories` | No | Array of categories (future) |
 | `tags` | No | Array of tags (future) |
 
-## Supabase Setup
+## Firebase Setup
 
-If setting up Supabase from scratch:
+1. Create a Firebase project and register a web app.
+2. Enable Google in **Authentication → Sign-in method**.
+3. Create the default Cloud Firestore database in production mode.
+4. Add the public web app configuration to `src/lib/firebase.ts`, or provide it
+   through the optional `NEXT_PUBLIC_FIREBASE_*` environment overrides.
+5. Authenticate the Firebase CLI and deploy the rules and indexes:
 
-1. Create a new project at [supabase.com](https://supabase.com)
-
-2. Get credentials from **Project Settings → API Keys**:
-   - Project URL
-   - Publishable key (or legacy anon key)
-
-3. Add to `.env.local` and Vercel environment variables
-
-4. Run in **SQL Editor**:
-   ```sql
-   create table workout_sessions (
-     id uuid default gen_random_uuid() primary key,
-     user_id uuid references auth.users not null,
-     mode text not null,
-     workout_id text not null,
-     variant text,
-     started_at timestamptz not null,
-     completed_at timestamptz not null,
-     data jsonb not null,
-     created_at timestamptz default now()
-   );
-
-   alter table workout_sessions enable row level security;
-
-   create policy "Users can view own sessions" on workout_sessions
-     for select using (auth.uid() = user_id);
-
-   create policy "Users can insert own sessions" on workout_sessions
-     for insert with check (auth.uid() = user_id);
+   ```bash
+   npx firebase-tools login
+   npx firebase-tools deploy --only firestore
    ```
 
-5. Configure **Google OAuth**:
-   - In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create OAuth 2.0 credentials
-   - Add authorized redirect URI: `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
-   - In Supabase → **Authentication → Providers → Google**, add Client ID and Secret
-   - In Supabase → **Authentication → URL Configuration**:
-     - Site URL: `https://splinefitness.com`
-     - Redirect URLs: `https://splinefitness.com/**`, `http://localhost:3000/**`
-
-## Database Schema
-
-Table: `workout_sessions`
-- `id`: UUID primary key
-- `user_id`: UUID (references auth.users)
-- `mode`: 'circuit' | 'traditional'
-- `workout_id`: string
-- `variant`: 'A' | 'B'
-- `started_at`: timestamp
-- `completed_at`: timestamp
-- `data`: JSONB (rounds/exercises data)
-
-RLS policies ensure users can only access their own workouts. See `supabase/schema.sql` for full schema.
+Workout sessions are JSON-like documents stored under
+`users/{userId}/workouts/{workoutId}`. Exercise preferences are stored under
+`users/{userId}/exercisePreferences/{exerciseId}`. The rules in
+`firestore.rules` restrict both collections to their authenticated owner.
 
 ## Design Assets
 

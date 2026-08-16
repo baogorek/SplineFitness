@@ -2,7 +2,6 @@ import {
   ActiveWorkoutSession,
   WorkoutSession,
   WorkoutHistoryEntry,
-  CircuitWorkoutSession,
   IntervalSessionProgress,
   SitSessionProgress,
   CircuitSessionProgress,
@@ -10,7 +9,19 @@ import {
   ExercisePreference,
   ExerciseSetting,
 } from "@/types/workout"
-import { supabase } from "./supabase"
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+  writeBatch,
+} from "firebase/firestore"
+import { firebaseAuth, firestore } from "./firebase"
 
 const STORAGE_KEYS = {
   CURRENT_SESSION: "strength-tracker:current-session",
@@ -24,187 +35,60 @@ const STORAGE_KEYS = {
 } as const
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return []
 
-  const { data, error } = await supabase
-    .from('workout_sessions')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('completed_at', { ascending: false })
+  try {
+    const snapshot = await getDocs(query(
+      collection(firestore, "users", user.uid, "workouts"),
+      orderBy("completedAt", "desc")
+    ))
 
-  if (error) {
+    return snapshot.docs.map((workoutDoc) => {
+      const session = workoutDoc.data() as WorkoutSession
+      const completedAt = session.completedAt || session.startedAt
+      return {
+        id: workoutDoc.id,
+        session,
+        completedAt,
+      }
+    })
+  } catch (error) {
     console.error("Error fetching workout history:", error)
     return []
   }
-
-  return data.map(row => {
-    const base = {
-      mode: row.mode,
-      startedAt: row.started_at,
-      completedAt: row.completed_at,
-    }
-    let sessionData: Record<string, unknown>
-    switch (row.mode) {
-      case 'circuit':
-        sessionData = {
-          workoutId: row.workout_id,
-          variant: row.variant,
-          rounds: row.data.rounds,
-          exerciseSettings: row.data.exerciseSettings,
-          exerciseChoices: row.data.exerciseChoices,
-          weakLinkPractice: row.data.weakLinkPractice,
-        }
-        break
-      case 'interval':
-        sessionData = {
-          totalSets: row.data.totalSets,
-          completedSets: row.data.completedSets,
-          totalTimeSeconds: row.data.totalTimeSeconds,
-          setNotes: row.data.setNotes,
-          endedEarly: row.data.endedEarly,
-        }
-        break
-      case 'sit':
-        sessionData = {
-          totalTimeSeconds: row.data.totalTimeSeconds,
-          sprintTimes: row.data.sprintTimes,
-          bestSprintTimeSeconds: row.data.bestSprintTimeSeconds,
-          phasesCompleted: row.data.phasesCompleted,
-          endedEarly: row.data.endedEarly,
-        }
-        break
-      case 'vo2max':
-        sessionData = {
-          durationSeconds: row.data.durationSeconds,
-          startOffsetMiles: row.data.startOffsetMiles,
-          finalDistanceMiles: row.data.finalDistanceMiles,
-          testDistanceMiles: row.data.testDistanceMiles,
-          testDistanceMeters: row.data.testDistanceMeters,
-          vo2Max: row.data.vo2Max,
-          mets: row.data.mets,
-          averagePaceSecondsPerMile: row.data.averagePaceSecondsPerMile,
-          averageSpeedMph: row.data.averageSpeedMph,
-          inclinePercent: row.data.inclinePercent,
-          notes: row.data.notes,
-          endedEarly: row.data.endedEarly,
-        }
-        break
-      case 'coached':
-        sessionData = {
-          workoutId: row.workout_id,
-          workoutName: row.data.workoutName,
-          totalTimeSeconds: row.data.totalTimeSeconds,
-          phasesCompleted: row.data.phasesCompleted,
-        }
-        break
-      case 'freeform':
-        sessionData = {
-          exercises: row.data.exercises,
-        }
-        break
-      default:
-        sessionData = {
-          workoutId: row.workout_id,
-          variant: row.variant,
-          exercises: row.data.exercises,
-        }
-    }
-    return {
-      id: row.id,
-      session: { ...base, ...sessionData } as WorkoutSession,
-      completedAt: row.completed_at,
-    }
-  })
 }
 
 export async function saveWorkoutSession(session: ActiveWorkoutSession): Promise<WorkoutHistoryEntry | null> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return null
 
-  let sessionData: Record<string, unknown>
-  let workoutId: string
-  let variant: CircuitWorkoutSession["variant"] | null = null
+  const completedAt = session.completedAt || new Date().toISOString()
+  const storedSession = JSON.parse(JSON.stringify({
+    ...session,
+    completedAt,
+  })) as ActiveWorkoutSession
 
-  switch (session.mode) {
-    case "freeform":
-      sessionData = { exercises: session.exercises }
-      workoutId = "freeform"
-      break
-    case "circuit":
-      sessionData = {
-        rounds: session.rounds,
-        exerciseSettings: session.exerciseSettings,
-        exerciseChoices: session.exerciseChoices,
-        weakLinkPractice: session.weakLinkPractice,
+  try {
+    const workoutDoc = await addDoc(
+      collection(firestore, "users", user.uid, "workouts"),
+      {
+        ...storedSession,
+        createdAt: serverTimestamp(),
       }
-      workoutId = session.workoutId
-      variant = session.variant
-      break
-    case "interval":
-      sessionData = {
-        totalSets: session.totalSets,
-        completedSets: session.completedSets,
-        totalTimeSeconds: session.totalTimeSeconds,
-        setNotes: session.setNotes,
-        endedEarly: session.endedEarly,
-      }
-      workoutId = "4x4-interval"
-      break
-    case "sit":
-      sessionData = {
-        totalTimeSeconds: session.totalTimeSeconds,
-        sprintTimes: session.sprintTimes,
-        bestSprintTimeSeconds: session.bestSprintTimeSeconds,
-        phasesCompleted: session.phasesCompleted,
-        endedEarly: session.endedEarly,
-      }
-      workoutId = "sit-sprint"
-      break
-    case "vo2max":
-      sessionData = {
-        durationSeconds: session.durationSeconds,
-        startOffsetMiles: session.startOffsetMiles,
-        finalDistanceMiles: session.finalDistanceMiles,
-        testDistanceMiles: session.testDistanceMiles,
-        testDistanceMeters: session.testDistanceMeters,
-        vo2Max: session.vo2Max,
-        mets: session.mets,
-        averagePaceSecondsPerMile: session.averagePaceSecondsPerMile,
-        averageSpeedMph: session.averageSpeedMph,
-        inclinePercent: session.inclinePercent,
-        notes: session.notes,
-        endedEarly: session.endedEarly,
-      }
-      workoutId = "vo2max-cooper"
-      break
-  }
+    )
 
-  const { data, error } = await supabase
-    .from('workout_sessions')
-    .insert({
-      user_id: user.id,
-      mode: session.mode,
-      workout_id: workoutId,
-      variant: variant,
-      started_at: session.startedAt,
-      completed_at: session.completedAt || new Date().toISOString(),
-      data: sessionData,
-    })
-    .select()
-    .single()
+    clearCurrentSession()
+    clearWorkoutProgress(session.mode)
 
-  if (error) {
+    return {
+      id: workoutDoc.id,
+      session: storedSession,
+      completedAt,
+    }
+  } catch (error) {
     console.error("Error saving workout session:", error)
     return null
-  }
-
-  clearCurrentSession()
-
-  return {
-    id: data.id,
-    session,
-    completedAt: data.completed_at,
   }
 }
 
@@ -233,6 +117,60 @@ export function clearCurrentSession(): void {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION)
   } catch (error) {
     console.warn("Error clearing current session:", error)
+  }
+}
+
+export function clearWorkoutProgress(mode: ActiveWorkoutSession["mode"]): void {
+  switch (mode) {
+    case "interval":
+      clearIntervalProgress()
+      break
+    case "sit":
+      clearSitProgress()
+      break
+    case "circuit":
+      clearCircuitProgress()
+      break
+    case "freeform":
+      clearFreeformProgress()
+      break
+    case "vo2max":
+      break
+  }
+}
+
+export async function clearProgressAlreadySavedToHistory(): Promise<void> {
+  const savedProgress = [
+    { mode: "circuit" as const, progress: getCircuitProgress() },
+    { mode: "freeform" as const, progress: getFreeformProgress() },
+    { mode: "interval" as const, progress: getIntervalProgress() },
+    { mode: "sit" as const, progress: getSitProgress() },
+  ].filter((entry) => entry.progress !== null)
+
+  if (savedProgress.length === 0) return
+
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return
+
+  const startedAtValues = savedProgress.map((entry) => entry.progress!.startedAt)
+  try {
+    const snapshot = await getDocs(query(
+      collection(firestore, "users", user.uid, "workouts"),
+      where("startedAt", "in", startedAtValues)
+    ))
+
+    for (const entry of savedProgress) {
+      const alreadyCompleted = snapshot.docs.some((workoutDoc) => {
+        const data = workoutDoc.data()
+        return data.mode === entry.mode && data.startedAt === entry.progress!.startedAt
+      })
+
+      if (alreadyCompleted) {
+        clearWorkoutProgress(entry.mode)
+      }
+    }
+  } catch (error) {
+    console.warn("Error reconciling saved workout progress:", error)
   }
 }
 
@@ -374,27 +312,26 @@ export function saveExerciseChoices(choices: Record<string, "main" | "alternativ
 }
 
 export async function getExercisePreferences(): Promise<Record<string, ExercisePreference>> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = firebaseAuth?.currentUser
 
-  if (user) {
-    const { data, error } = await supabase
-      .from('exercise_preferences')
-      .select('*')
-      .eq('user_id', user.id)
-
-    if (error) {
+  if (firestore && user) {
+    try {
+      const snapshot = await getDocs(
+        collection(firestore, "users", user.uid, "exercisePreferences")
+      )
+      const prefs: Record<string, ExercisePreference> = {}
+      snapshot.docs.forEach((preferenceDoc) => {
+        const data = preferenceDoc.data()
+        prefs[preferenceDoc.id] = {
+          exerciseId: preferenceDoc.id,
+          durationSeconds: data.durationSeconds,
+        }
+      })
+      return prefs
+    } catch (error) {
       console.error("Error fetching exercise preferences:", error)
       return getLocalExercisePreferences()
     }
-
-    const prefs: Record<string, ExercisePreference> = {}
-    data.forEach(row => {
-      prefs[row.exercise_id] = {
-        exerciseId: row.exercise_id,
-        durationSeconds: row.duration_seconds,
-      }
-    })
-    return prefs
   }
 
   return getLocalExercisePreferences()
@@ -404,21 +341,20 @@ export async function saveExercisePreference(
   exerciseId: string,
   pref: Partial<ExercisePreference>
 ): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = firebaseAuth?.currentUser
 
-  if (user) {
-    const { error } = await supabase
-      .from('exercise_preferences')
-      .upsert({
-        user_id: user.id,
-        exercise_id: exerciseId,
-        duration_seconds: pref.durationSeconds ?? 60,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,exercise_id',
-      })
-
-    if (error) {
+  if (firestore && user) {
+    try {
+      await setDoc(
+        doc(firestore, "users", user.uid, "exercisePreferences", exerciseId),
+        {
+          exerciseId,
+          durationSeconds: pref.durationSeconds ?? 60,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+    } catch (error) {
       console.error("Error saving exercise preference:", error)
     }
   } else {
@@ -434,21 +370,25 @@ export async function saveExercisePreference(
 export async function saveBulkExercisePreferences(
   settings: Record<string, ExerciseSetting>
 ): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = firebaseAuth?.currentUser
+  const db = firestore
 
-  if (user) {
-    const rows = Object.entries(settings).map(([exerciseId, setting]) => ({
-      user_id: user.id,
-      exercise_id: exerciseId,
-      duration_seconds: setting.durationSeconds,
-      updated_at: new Date().toISOString(),
-    }))
-
-    const { error } = await supabase
-      .from('exercise_preferences')
-      .upsert(rows, { onConflict: 'user_id,exercise_id' })
-
-    if (error) {
+  if (db && user) {
+    try {
+      const batch = writeBatch(db)
+      Object.entries(settings).forEach(([exerciseId, setting]) => {
+        batch.set(
+          doc(db, "users", user.uid, "exercisePreferences", exerciseId),
+          {
+            exerciseId,
+            durationSeconds: setting.durationSeconds,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        )
+      })
+      await batch.commit()
+    } catch (error) {
       console.error("Error saving bulk exercise preferences:", error)
     }
   } else {
