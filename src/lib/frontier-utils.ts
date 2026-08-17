@@ -76,7 +76,9 @@ export function formatFrontierValue(metric: FrontierMetric, value: FrontierValue
     case "reps":
       return `${formatNumber(value.primary)} rep${value.primary === 1 ? "" : "s"}`
     case "weight-time":
-      return `${formatNumber(value.primary)} lb / ${formatDuration(value.secondary ?? 0)}`
+      return value.secondary === undefined
+        ? `${formatNumber(value.primary)} lb`
+        : `${formatNumber(value.primary)} lb / ${formatDuration(value.secondary)}`
     case "duration-longer":
     case "duration-faster":
       return formatDuration(value.primary)

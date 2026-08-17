@@ -158,7 +158,7 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                 )}
                 <Badge variant="outline">
                   {entry.session.mode === "circuit"
-                    ? `Resistance ${entry.session.variant}`
+                    ? `Jeff Cavaliere's Bodyweight Circuit ${entry.session.variant}`
                     : entry.session.mode === "interval"
                     ? "4x4 Interval"
                     : entry.session.mode === "sit"

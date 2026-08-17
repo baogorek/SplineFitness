@@ -132,17 +132,19 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     const now = new Date().toISOString()
 
     if (!editingExercise) {
-      const change: FrontierChange = {
-        id: crypto.randomUUID(),
-        value: entry.value,
-        recordedAt: now,
-        kind: "progress",
-      }
+      const changes: FrontierChange[] = entry.value
+        ? [{
+            id: crypto.randomUUID(),
+            value: entry.value,
+            recordedAt: now,
+            kind: "progress",
+          }]
+        : []
       const exercise: FrontierExercise = {
         id: crypto.randomUUID(),
         name: entry.name,
         metric: entry.metric,
-        changes: [change],
+        changes,
         order: currentCard.exercises.length,
         createdAt: now,
         updatedAt: now,
@@ -153,20 +155,22 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         updatedAt: now,
       })
     } else {
+      const nextChanges = entry.value && entry.valueAction !== "unchanged" && entry.valueAction !== "none"
+        ? [
+            ...editingExercise.changes,
+            {
+              id: crypto.randomUUID(),
+              value: entry.value,
+              recordedAt: now,
+              kind: entry.valueAction,
+            },
+          ]
+        : editingExercise.changes
       const updatedExercise: FrontierExercise = {
         ...editingExercise,
         name: entry.name,
-        changes: entry.valueAction === "unchanged"
-          ? editingExercise.changes
-          : [
-              ...editingExercise.changes,
-              {
-                id: crypto.randomUUID(),
-                value: entry.value,
-                recordedAt: now,
-                kind: entry.valueAction,
-              },
-            ],
+        metric: entry.metric,
+        changes: nextChanges,
         updatedAt: now,
       }
       commitCard({

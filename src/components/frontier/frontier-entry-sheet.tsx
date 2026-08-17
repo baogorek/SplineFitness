@@ -18,8 +18,8 @@ import { FrontierExercise, FrontierMetric, FrontierValue } from "@/types/frontie
 export interface FrontierEntrySave {
   name: string
   metric: FrontierMetric
-  value: FrontierValue
-  valueAction: "progress" | "correction" | "unchanged"
+  value: FrontierValue | null
+  valueAction: "progress" | "correction" | "unchanged" | "none"
 }
 
 interface FrontierEntrySheetProps {
@@ -66,8 +66,12 @@ export function FrontierEntrySheet({
   const parsedValue = useMemo<FrontierValue | null>(() => {
     if (metric === "weight-time") {
       const weight = Number(primary)
+      if (!Number.isFinite(weight) || weight <= 0) return null
+
+      if (!duration.trim()) return { primary: weight }
+
       const seconds = parseDuration(duration)
-      if (!Number.isFinite(weight) || weight <= 0 || seconds === null || seconds <= 0) return null
+      if (seconds === null || seconds <= 0) return null
       return { primary: weight, secondary: seconds }
     }
 
@@ -87,10 +91,18 @@ export function FrontierEntrySheet({
   const improvement = parsedValue
     ? isFrontierImprovement(metric, current, parsedValue)
     : false
+  const measureFieldsEmpty = metric === "weight-time"
+    ? !primary.trim() && !duration.trim()
+    : metric.startsWith("duration")
+      ? !duration.trim()
+      : !primary.trim()
   const canSave = Boolean(
     name.trim()
-      && parsedValue
-      && (!exercise || correcting || improvement || (nameChanged && !valueChanged))
+      && (!exercise
+        ? parsedValue || measureFieldsEmpty
+        : parsedValue
+          ? correcting || improvement || (nameChanged && !valueChanged)
+          : nameChanged && measureFieldsEmpty)
   )
 
   const handleMetricChange = (nextMetric: FrontierMetric) => {
@@ -100,13 +112,13 @@ export function FrontierEntrySheet({
   }
 
   const handleSubmit = () => {
-    if (!canSave || !parsedValue) return
+    if (!canSave) return
     onSave({
       name: name.trim(),
       metric,
       value: parsedValue,
       valueAction: !exercise
-        ? "progress"
+        ? parsedValue ? "progress" : "none"
         : !valueChanged
           ? "unchanged"
           : correcting
@@ -124,6 +136,7 @@ export function FrontierEntrySheet({
   const invalidFrontier = Boolean(
     exercise && parsedValue && valueChanged && !improvement && !correcting
   )
+  const invalidNewMeasure = Boolean(!exercise && !parsedValue && !measureFieldsEmpty)
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
@@ -169,7 +182,7 @@ export function FrontierEntrySheet({
             />
           </div>
 
-          {!exercise && (
+          {(!exercise || exercise.changes.length === 0) && (
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-700">What moves forward?</p>
               <div className="grid grid-cols-2 gap-2">
@@ -211,9 +224,16 @@ export function FrontierEntrySheet({
             metric={metric}
             primary={primary}
             duration={duration}
+            allowEmpty={!current}
             onPrimaryChange={setPrimary}
             onDurationChange={setDuration}
           />
+
+          {invalidNewMeasure && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Enter a valid performance measure, or leave the measure fields blank and add it later.
+            </p>
+          )}
 
           {invalidFrontier && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -234,7 +254,7 @@ export function FrontierEntrySheet({
             onClick={handleSubmit}
           >
             {!exercise
-              ? "Add to card"
+              ? parsedValue ? "Add to card" : "Add exercise"
               : correcting
                 ? "Save correction"
                 : nameChanged && !valueChanged
@@ -259,13 +279,15 @@ export function FrontierEntrySheet({
                     Undo last change
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setShowHistory((value) => !value)}>
-                  <History className="mr-1.5 h-3.5 w-3.5" />
-                  {showHistory ? "Hide history" : `History (${exercise.changes.length})`}
-                </Button>
+                {exercise.changes.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowHistory((value) => !value)}>
+                    <History className="mr-1.5 h-3.5 w-3.5" />
+                    {showHistory ? "Hide history" : `History (${exercise.changes.length})`}
+                  </Button>
+                )}
               </div>
 
-              {showHistory && (
+              {showHistory && exercise.changes.length > 0 && (
                 <ol className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 px-3">
                   {[...exercise.changes].reverse().map((change, index) => (
                     <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -312,6 +334,7 @@ interface FrontierValueFieldsProps {
   metric: FrontierMetric
   primary: string
   duration: string
+  allowEmpty: boolean
   onPrimaryChange: (value: string) => void
   onDurationChange: (value: string) => void
 }
@@ -320,6 +343,7 @@ function FrontierValueFields({
   metric,
   primary,
   duration,
+  allowEmpty,
   onPrimaryChange,
   onDurationChange,
 }: FrontierValueFieldsProps) {
@@ -332,15 +356,16 @@ function FrontierValueFields({
           value={primary}
           suffix="lb"
           step="any"
+          optional={allowEmpty}
           onChange={onPrimaryChange}
         />
-        <DurationField value={duration} onChange={onDurationChange} />
+        <DurationField value={duration} onChange={onDurationChange} optional />
       </div>
     )
   }
 
   if (metric === "duration-longer" || metric === "duration-faster") {
-    return <DurationField value={duration} onChange={onDurationChange} />
+    return <DurationField value={duration} onChange={onDurationChange} optional={allowEmpty} />
   }
 
   const configuration = {
@@ -356,6 +381,7 @@ function FrontierValueFields({
       value={primary}
       suffix={configuration.suffix}
       step={configuration.step}
+      optional={allowEmpty}
       onChange={onPrimaryChange}
     />
   )
@@ -367,6 +393,7 @@ function NumberField({
   value,
   suffix,
   step,
+  optional = false,
   onChange,
 }: {
   id: string
@@ -374,11 +401,14 @@ function NumberField({
   value: string
   suffix: string
   step: string
+  optional?: boolean
   onChange: (value: string) => void
 }) {
   return (
     <div className="space-y-2">
-      <label htmlFor={id} className="text-sm font-semibold text-slate-700">{label}</label>
+      <label htmlFor={id} className="text-sm font-semibold text-slate-700">
+        {label}{optional && <span className="font-normal text-slate-400"> (optional)</span>}
+      </label>
       <div className="relative">
         <Input
           id={id}
@@ -398,21 +428,31 @@ function NumberField({
   )
 }
 
-function DurationField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function DurationField({
+  value,
+  onChange,
+  optional = false,
+}: {
+  value: string
+  onChange: (value: string) => void
+  optional?: boolean
+}) {
   return (
     <div className="space-y-2">
       <label htmlFor="frontier-duration" className="text-sm font-semibold text-slate-700">
-        Time
+        Time{optional && <span className="font-normal text-slate-400"> (optional)</span>}
       </label>
       <Input
         id="frontier-duration"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         inputMode="numeric"
-        placeholder="1:30"
+        placeholder="e.g. 1:30"
         className="h-12 font-mono text-base"
       />
-      <p className="text-[11px] text-slate-400">Use 1:30, 90, or 1m30s</p>
+      <p className="text-[11px] text-slate-400">
+        {optional ? "Add now or later. Use 1:30, 90, or 1m30s" : "Use 1:30, 90, or 1m30s"}
+      </p>
     </div>
   )
 }
