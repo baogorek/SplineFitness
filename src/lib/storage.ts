@@ -9,9 +9,11 @@ import {
   ExercisePreference,
   ExerciseSetting,
 } from "@/types/workout"
+import { FrontierCard } from "@/types/frontier"
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   orderBy,
@@ -32,6 +34,7 @@ const STORAGE_KEYS = {
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
   EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
+  FRONTIER_CARDS: "strength-tracker:frontier-cards",
 } as const
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
@@ -419,5 +422,92 @@ function saveLocalExercisePreferences(prefs: Record<string, ExercisePreference>)
     localStorage.setItem(STORAGE_KEYS.EXERCISE_PREFERENCES, JSON.stringify(prefs))
   } catch (error) {
     console.warn("Error saving exercise preferences:", error)
+  }
+}
+
+function getLocalFrontierCards(): FrontierCard[] {
+  if (typeof window === "undefined") return []
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.FRONTIER_CARDS)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveLocalFrontierCards(cards: FrontierCard[]): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.FRONTIER_CARDS, JSON.stringify(cards))
+  } catch (error) {
+    console.warn("Error saving Frontier Cards:", error)
+  }
+}
+
+export async function getFrontierCards(): Promise<FrontierCard[]> {
+  const user = firebaseAuth?.currentUser
+
+  if (!firestore || !user) {
+    return getLocalFrontierCards().sort((a, b) => a.order - b.order)
+  }
+
+  try {
+    const snapshot = await getDocs(collection(firestore, "users", user.uid, "frontierCards"))
+    const cloudCards = snapshot.docs
+      .map((cardDoc) => cardDoc.data() as FrontierCard)
+      .sort((a, b) => a.order - b.order)
+
+    if (cloudCards.length > 0) {
+      return cloudCards
+    }
+
+    const localCards = getLocalFrontierCards()
+    if (localCards.length > 0) {
+      const batch = writeBatch(firestore)
+      localCards.forEach((card) => {
+        batch.set(doc(firestore!, "users", user.uid, "frontierCards", card.id), card)
+      })
+      await batch.commit()
+      localStorage.removeItem(STORAGE_KEYS.FRONTIER_CARDS)
+      return localCards.sort((a, b) => a.order - b.order)
+    }
+
+    return []
+  } catch (error) {
+    console.error("Error fetching Frontier Cards:", error)
+    return getLocalFrontierCards().sort((a, b) => a.order - b.order)
+  }
+}
+
+export async function saveFrontierCard(card: FrontierCard, wallet: FrontierCard[]): Promise<void> {
+  const user = firebaseAuth?.currentUser
+
+  if (!firestore || !user) {
+    saveLocalFrontierCards(wallet)
+    return
+  }
+
+  try {
+    await setDoc(doc(firestore, "users", user.uid, "frontierCards", card.id), card)
+  } catch (error) {
+    console.error("Error saving Frontier Card:", error)
+    saveLocalFrontierCards(wallet)
+    throw error
+  }
+}
+
+export async function deleteFrontierCard(cardId: string, wallet: FrontierCard[]): Promise<void> {
+  const user = firebaseAuth?.currentUser
+
+  if (!firestore || !user) {
+    saveLocalFrontierCards(wallet)
+    return
+  }
+
+  try {
+    await deleteDoc(doc(firestore, "users", user.uid, "frontierCards", cardId))
+  } catch (error) {
+    console.error("Error deleting Frontier Card:", error)
+    throw error
   }
 }

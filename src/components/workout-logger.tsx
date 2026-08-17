@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge } from "lucide-react"
+import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge, WalletCards } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -23,8 +23,9 @@ import {
 } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { PwaInstallBanner } from "./pwa-install-banner"
+import { FrontierWallet } from "./frontier/frontier-wallet"
 
-type AppMode = WorkoutMode | "history" | "booking"
+type AppMode = WorkoutMode | "history" | "booking" | "frontier"
 
 const workoutModes = [
   {
@@ -86,6 +87,18 @@ const workoutModes = [
     border: "border-blue-200",
     hoverBorder: "hover:border-blue-300",
     iconColor: "text-blue-600",
+  },
+  {
+    id: "frontier" as const,
+    icon: WalletCards,
+    title: "Frontier Cards",
+    subtitle: "Pocket record book",
+    description: "Carry the current edge of every exercise",
+    color: "bg-indigo-500",
+    lightBg: "bg-indigo-50",
+    border: "border-indigo-200",
+    hoverBorder: "hover:border-indigo-300",
+    iconColor: "text-indigo-600",
   },
   {
     id: "history" as const,
@@ -330,6 +343,10 @@ export function WorkoutLogger() {
 
   if (mode === "freeform") {
     return <FreeformWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "frontier") {
+    return <FrontierWallet onBack={handleModeChange} />
   }
 
   if (mode === "history") {

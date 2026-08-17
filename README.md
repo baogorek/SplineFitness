@@ -6,6 +6,7 @@ A workout tracking app with an integrated blog, built with Next.js 16.
 
 - **Circuit Training**: Timed combos with rounds, audio cues, and load metrics
 - **Traditional Workouts**: Sets, reps, and weight tracking
+- **Frontier Cards**: Location-based pocket cards that retain only exercise frontiers
 - **Workout History**: Calendar view of past workouts
 - **1-on-1 Booking**: Cal.com integration for personal training sessions
 - **Blog**: MDX-powered blog for fitness content
@@ -135,8 +136,9 @@ With a custom title for accessibility:
 
 Workout sessions are JSON-like documents stored under
 `users/{userId}/workouts/{workoutId}`. Exercise preferences are stored under
-`users/{userId}/exercisePreferences/{exerciseId}`. The rules in
-`firestore.rules` restrict both collections to their authenticated owner.
+`users/{userId}/exercisePreferences/{exerciseId}`. Frontier Cards are stored under
+`users/{userId}/frontierCards/{cardId}`. The rules in
+`firestore.rules` restrict these collections to their authenticated owner.
 
 ## Design Assets
 

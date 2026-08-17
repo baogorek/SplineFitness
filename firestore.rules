@@ -35,5 +35,17 @@ service cloud.firestore {
         && request.resource.data.durationSeconds is int
         && request.resource.data.durationSeconds > 0;
     }
+
+    match /users/{userId}/frontierCards/{cardId} {
+      allow read, delete: if ownsUserData(userId);
+      allow create, update: if ownsUserData(userId)
+        && request.resource.data.id == cardId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.exercises is list
+        && request.resource.data.order is int
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string;
+    }
   }
 }
