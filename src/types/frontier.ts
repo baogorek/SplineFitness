@@ -5,6 +5,7 @@ export type FrontierMetric =
   | "duration-faster"
   | "weight"
   | "speed"
+  | "freeform"
 
 export interface FrontierValue {
   primary: number
@@ -13,9 +14,10 @@ export interface FrontierValue {
 
 export interface FrontierChange {
   id: string
-  value: FrontierValue
-  recordedAt: string
-  kind: "progress" | "correction"
+  value?: FrontierValue
+  rawValue?: string
+  recordedAt?: string
+  kind: "progress" | "correction" | "import"
 }
 
 export interface FrontierExercise {

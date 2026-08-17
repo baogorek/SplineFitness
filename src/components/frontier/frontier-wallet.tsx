@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardPaste,
   Cloud,
   Plus,
   Smartphone,
@@ -26,7 +27,9 @@ import {
   FrontierChange,
   FrontierExercise,
 } from "@/types/frontier"
+import { SpreadsheetImportRow } from "@/lib/frontier-import"
 import { FrontierEntrySave, FrontierEntrySheet } from "./frontier-entry-sheet"
+import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
 
 interface FrontierWalletProps {
@@ -55,6 +58,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
   const [entrySheetOpen, setEntrySheetOpen] = useState(false)
+  const [importSheetOpen, setImportSheetOpen] = useState(false)
+  const [importNotice, setImportNotice] = useState<string | null>(null)
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null)
   const [locationSheetMode, setLocationSheetMode] = useState<"add" | "edit" | null>(null)
   const saveVersionRef = useRef(0)
@@ -119,6 +124,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     rememberCard(cards[nextIndex])
     setEntrySheetOpen(false)
     setEditingExerciseId(null)
+    setImportSheetOpen(false)
+    setImportNotice(null)
   }
 
   const commitCard = (updatedCard: FrontierCard) => {
@@ -132,10 +139,11 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     const now = new Date().toISOString()
 
     if (!editingExercise) {
-      const changes: FrontierChange[] = entry.value
+      const changes: FrontierChange[] = entry.value || entry.rawValue
         ? [{
             id: crypto.randomUUID(),
-            value: entry.value,
+            ...(entry.value ? { value: entry.value } : {}),
+            ...(entry.rawValue ? { rawValue: entry.rawValue } : {}),
             recordedAt: now,
             kind: "progress",
           }]
@@ -155,12 +163,15 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         updatedAt: now,
       })
     } else {
-      const nextChanges = entry.value && entry.valueAction !== "unchanged" && entry.valueAction !== "none"
+      const nextChanges = (entry.value || entry.rawValue)
+        && entry.valueAction !== "unchanged"
+        && entry.valueAction !== "none"
         ? [
             ...editingExercise.changes,
             {
               id: crypto.randomUUID(),
-              value: entry.value,
+              ...(entry.value ? { value: entry.value } : {}),
+              ...(entry.rawValue ? { rawValue: entry.rawValue } : {}),
               recordedAt: now,
               kind: entry.valueAction,
             },
@@ -184,6 +195,74 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
 
     setEntrySheetOpen(false)
     setEditingExerciseId(null)
+  }
+
+  const handleSpreadsheetImport = (rows: SpreadsheetImportRow[]) => {
+    if (!currentCard) return
+
+    const now = new Date().toISOString()
+    const nextExercises = [...currentCard.exercises]
+    const exercisesByName = new Map(
+      nextExercises.map((exercise) => [normalizeExerciseName(exercise.name), exercise])
+    )
+    let added = 0
+    let filled = 0
+    let skipped = 0
+
+    rows.forEach((row) => {
+      const changes: FrontierChange[] = row.marks.map((mark) => ({
+        id: crypto.randomUUID(),
+        ...(mark.value ? { value: mark.value } : {}),
+        rawValue: mark.rawValue,
+        kind: "import",
+      }))
+      const existing = exercisesByName.get(normalizeExerciseName(row.name))
+
+      if (existing) {
+        if (existing.changes.length === 0 && changes.length > 0) {
+          const updatedExercise: FrontierExercise = {
+            ...existing,
+            metric: row.metric,
+            changes,
+            updatedAt: now,
+          }
+          const index = nextExercises.findIndex((exercise) => exercise.id === existing.id)
+          nextExercises[index] = updatedExercise
+          exercisesByName.set(normalizeExerciseName(row.name), updatedExercise)
+          filled += 1
+        } else {
+          skipped += 1
+        }
+        return
+      }
+
+      const exercise: FrontierExercise = {
+        id: crypto.randomUUID(),
+        name: row.name,
+        metric: row.metric,
+        changes,
+        order: nextExercises.length,
+        createdAt: now,
+        updatedAt: now,
+      }
+      nextExercises.push(exercise)
+      exercisesByName.set(normalizeExerciseName(row.name), exercise)
+      added += 1
+    })
+
+    if (added > 0 || filled > 0) {
+      commitCard({
+        ...currentCard,
+        exercises: nextExercises,
+        updatedAt: now,
+      })
+    }
+
+    const imported = added + filled
+    setImportNotice(
+      `${imported} row${imported === 1 ? "" : "s"} imported${skipped > 0 ? ` · ${skipped} existing skipped` : ""}`
+    )
+    setImportSheetOpen(false)
   }
 
   const handleUndo = () => {
@@ -361,7 +440,25 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           ))}
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setImportNotice(null)
+              setImportSheetOpen(true)
+            }}
+            className="border-white/80 bg-white/75 text-indigo-700 shadow-sm"
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            Paste spreadsheet
+          </Button>
+          {importNotice && (
+            <p role="status" className="text-xs font-medium text-emerald-700">{importNotice}</p>
+          )}
+        </div>
+
+        <p className="mt-3 text-center text-xs text-slate-400">
           Swipe the card to move through your wallet.
         </p>
       </main>
@@ -389,8 +486,20 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           onDelete={locationSheetMode === "edit" ? handleDeleteLocation : undefined}
         />
       )}
+
+      {importSheetOpen && (
+        <FrontierImportSheet
+          card={currentCard}
+          onClose={() => setImportSheetOpen(false)}
+          onImport={handleSpreadsheetImport}
+        />
+      )}
     </div>
   )
+}
+
+function normalizeExerciseName(name: string): string {
+  return name.trim().toLocaleLowerCase()
 }
 
 function SaveIndicator({ status, cloud }: { status: SaveStatus; cloud: boolean }) {

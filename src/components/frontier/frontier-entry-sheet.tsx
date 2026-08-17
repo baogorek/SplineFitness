@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   formatDurationInput,
-  formatFrontierValue,
+  formatFrontierChange,
   FRONTIER_METRIC_OPTIONS,
   getCurrentFrontier,
+  getCurrentFrontierChange,
   isFrontierImprovement,
   parseDuration,
 } from "@/lib/frontier-utils"
@@ -19,6 +20,7 @@ export interface FrontierEntrySave {
   name: string
   metric: FrontierMetric
   value: FrontierValue | null
+  rawValue: string | null
   valueAction: "progress" | "correction" | "unchanged" | "none"
 }
 
@@ -41,6 +43,7 @@ export function FrontierEntrySheet({
   onUndo,
   onDelete,
 }: FrontierEntrySheetProps) {
+  const currentChange = exercise ? getCurrentFrontierChange(exercise.changes) : null
   const current = exercise ? getCurrentFrontier(exercise.changes) : null
   const [name, setName] = useState(exercise?.name ?? "")
   const [metric, setMetric] = useState<FrontierMetric>(exercise?.metric ?? "reps")
@@ -51,6 +54,9 @@ export function FrontierEntrySheet({
       : metric.startsWith("duration")
         ? formatDurationInput(current?.primary)
         : ""
+  )
+  const [customMark, setCustomMark] = useState(
+    exercise?.metric === "freeform" ? currentChange?.rawValue ?? "" : ""
   )
   const [correcting, setCorrecting] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -64,6 +70,8 @@ export function FrontierEntrySheet({
   }, [onClose])
 
   const parsedValue = useMemo<FrontierValue | null>(() => {
+    if (metric === "freeform") return null
+
     if (metric === "weight-time") {
       const weight = Number(primary)
       if (!Number.isFinite(weight) || weight <= 0) return null
@@ -86,21 +94,29 @@ export function FrontierEntrySheet({
     return { primary: value }
   }, [duration, metric, primary])
 
+  const rawValue = metric === "freeform" ? customMark.trim() || null : null
+  const hasMeasure = Boolean(parsedValue || rawValue)
   const nameChanged = Boolean(exercise && name.trim() !== exercise.name)
-  const valueChanged = parsedValue ? !valuesMatch(current, parsedValue) : false
-  const improvement = parsedValue
-    ? isFrontierImprovement(metric, current, parsedValue)
-    : false
+  const valueChanged = metric === "freeform"
+    ? Boolean(rawValue && rawValue !== (currentChange?.rawValue ?? ""))
+    : parsedValue ? !valuesMatch(current, parsedValue) : false
+  const improvement = metric === "freeform"
+    ? Boolean(rawValue && (!currentChange || valueChanged))
+    : parsedValue
+      ? isFrontierImprovement(metric, current, parsedValue)
+      : false
   const measureFieldsEmpty = metric === "weight-time"
     ? !primary.trim() && !duration.trim()
     : metric.startsWith("duration")
       ? !duration.trim()
-      : !primary.trim()
+      : metric === "freeform"
+        ? !customMark.trim()
+        : !primary.trim()
   const canSave = Boolean(
     name.trim()
       && (!exercise
-        ? parsedValue || measureFieldsEmpty
-        : parsedValue
+        ? hasMeasure || measureFieldsEmpty
+        : hasMeasure
           ? correcting || improvement || (nameChanged && !valueChanged)
           : nameChanged && measureFieldsEmpty)
   )
@@ -109,6 +125,7 @@ export function FrontierEntrySheet({
     setMetric(nextMetric)
     setPrimary("")
     setDuration("")
+    setCustomMark("")
   }
 
   const handleSubmit = () => {
@@ -117,8 +134,9 @@ export function FrontierEntrySheet({
       name: name.trim(),
       metric,
       value: parsedValue,
+      rawValue,
       valueAction: !exercise
-        ? parsedValue ? "progress" : "none"
+        ? hasMeasure ? "progress" : "none"
         : !valueChanged
           ? "unchanged"
           : correcting
@@ -133,10 +151,8 @@ export function FrontierEntrySheet({
   }
 
   const selectedMetric = FRONTIER_METRIC_OPTIONS.find((option) => option.value === metric)
-  const invalidFrontier = Boolean(
-    exercise && parsedValue && valueChanged && !improvement && !correcting
-  )
-  const invalidNewMeasure = Boolean(!exercise && !parsedValue && !measureFieldsEmpty)
+  const invalidFrontier = Boolean(exercise && hasMeasure && valueChanged && !improvement && !correcting)
+  const invalidNewMeasure = Boolean(!exercise && !hasMeasure && !measureFieldsEmpty)
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
@@ -193,6 +209,7 @@ export function FrontierEntrySheet({
                     onClick={() => handleMetricChange(option.value)}
                     className={cn(
                       "rounded-xl border p-3 text-left transition-colors",
+                      option.value === "freeform" && "col-span-2",
                       metric === option.value
                         ? "border-indigo-500 bg-indigo-50 text-indigo-950"
                         : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
@@ -208,13 +225,13 @@ export function FrontierEntrySheet({
             </div>
           )}
 
-          {exercise && current && (
+          {exercise && currentChange && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
                 Current frontier
               </p>
               <p className="mt-1 font-mono text-2xl font-bold text-indigo-950">
-                {formatFrontierValue(metric, current)}
+                {formatFrontierChange(metric, currentChange)}
               </p>
               <p className="mt-1 text-xs text-indigo-700/70">{selectedMetric?.description}</p>
             </div>
@@ -224,9 +241,11 @@ export function FrontierEntrySheet({
             metric={metric}
             primary={primary}
             duration={duration}
-            allowEmpty={!current}
+            customMark={customMark}
+            allowEmpty={!currentChange}
             onPrimaryChange={setPrimary}
             onDurationChange={setDuration}
+            onCustomMarkChange={setCustomMark}
           />
 
           {invalidNewMeasure && (
@@ -254,7 +273,7 @@ export function FrontierEntrySheet({
             onClick={handleSubmit}
           >
             {!exercise
-              ? parsedValue ? "Add to card" : "Add exercise"
+              ? hasMeasure ? "Add to card" : "Add exercise"
               : correcting
                 ? "Save correction"
                 : nameChanged && !valueChanged
@@ -293,7 +312,7 @@ export function FrontierEntrySheet({
                     <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                       <div>
                         <span className="font-mono font-semibold text-slate-800">
-                          {formatFrontierValue(exercise.metric, change.value)}
+                          {formatFrontierChange(exercise.metric, change)}
                         </span>
                         {change.kind === "correction" && (
                           <span className="ml-2 text-[10px] font-semibold uppercase text-amber-600">
@@ -304,7 +323,9 @@ export function FrontierEntrySheet({
                       <span className="text-xs text-slate-400">
                         {index === 0
                           ? "Current"
-                          : new Date(change.recordedAt).toLocaleDateString()}
+                          : change.recordedAt
+                            ? new Date(change.recordedAt).toLocaleDateString()
+                            : "Imported"}
                       </span>
                     </li>
                   ))}
@@ -334,19 +355,41 @@ interface FrontierValueFieldsProps {
   metric: FrontierMetric
   primary: string
   duration: string
+  customMark: string
   allowEmpty: boolean
   onPrimaryChange: (value: string) => void
   onDurationChange: (value: string) => void
+  onCustomMarkChange: (value: string) => void
 }
 
 function FrontierValueFields({
   metric,
   primary,
   duration,
+  customMark,
   allowEmpty,
   onPrimaryChange,
   onDurationChange,
+  onCustomMarkChange,
 }: FrontierValueFieldsProps) {
+  if (metric === "freeform") {
+    return (
+      <div className="space-y-2">
+        <label htmlFor="frontier-custom-mark" className="text-sm font-semibold text-slate-700">
+          Mark{allowEmpty && <span className="font-normal text-slate-400"> (optional)</span>}
+        </label>
+        <Input
+          id="frontier-custom-mark"
+          value={customMark}
+          onChange={(event) => onCustomMarkChange(event.target.value)}
+          placeholder="e.g. BW / 1:00 or pin 5"
+          className="h-12 font-mono text-base"
+        />
+        <p className="text-[11px] text-slate-400">Any text is allowed; the newest mark becomes current.</p>
+      </div>
+    )
+  }
+
   if (metric === "weight-time") {
     return (
       <div className="grid grid-cols-2 gap-3">

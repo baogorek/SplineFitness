@@ -1,4 +1,4 @@
-import { FrontierMetric, FrontierValue } from "@/types/frontier"
+import { FrontierChange, FrontierMetric, FrontierValue } from "@/types/frontier"
 
 export const FRONTIER_METRIC_OPTIONS: Array<{
   value: FrontierMetric
@@ -42,10 +42,20 @@ export const FRONTIER_METRIC_OPTIONS: Array<{
     shortLabel: "Speed",
     description: "A faster speed is better",
   },
+  {
+    value: "freeform",
+    label: "Custom mark",
+    shortLabel: "Custom",
+    description: "Record any text; the newest mark wins",
+  },
 ]
 
-export function getCurrentFrontier(changes: { value: FrontierValue }[]): FrontierValue | null {
+export function getCurrentFrontier(changes: { value?: FrontierValue }[]): FrontierValue | null {
   return changes.at(-1)?.value ?? null
+}
+
+export function getCurrentFrontierChange(changes: FrontierChange[]): FrontierChange | null {
+  return changes.at(-1) ?? null
 }
 
 export function isFrontierImprovement(
@@ -54,6 +64,7 @@ export function isFrontierImprovement(
   next: FrontierValue
 ): boolean {
   if (!current) return true
+  if (metric === "freeform") return true
 
   if (metric === "duration-faster") {
     return next.primary < current.primary
@@ -86,7 +97,18 @@ export function formatFrontierValue(metric: FrontierMetric, value: FrontierValue
       return `${formatNumber(value.primary)} lb`
     case "speed":
       return `${formatNumber(value.primary)} mph`
+    case "freeform":
+      return formatNumber(value.primary)
   }
+}
+
+export function formatFrontierChange(
+  metric: FrontierMetric,
+  change: FrontierChange | null
+): string {
+  if (!change) return "No mark yet"
+  if (change.rawValue) return change.rawValue
+  return formatFrontierValue(metric, change.value ?? null)
 }
 
 export function formatDuration(totalSeconds: number): string {

@@ -3,7 +3,7 @@
 import { useRef } from "react"
 import { MoreHorizontal, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { formatFrontierValue, getCurrentFrontier } from "@/lib/frontier-utils"
+import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
 import { FrontierCard, FrontierExercise } from "@/types/frontier"
 
 interface FrontierPaperCardProps {
@@ -104,7 +104,7 @@ export function FrontierPaperCard({
                         </span>
                       </span>
                       <span className="whitespace-nowrap font-mono text-sm font-bold text-indigo-950 transition-colors group-hover:text-indigo-700">
-                        {formatFrontierValue(exercise.metric, getCurrentFrontier(exercise.changes))}
+                        {formatFrontierChange(exercise.metric, getCurrentFrontierChange(exercise.changes))}
                       </span>
                     </button>
                   </li>
