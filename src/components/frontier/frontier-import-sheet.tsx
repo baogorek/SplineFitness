@@ -26,13 +26,17 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
 
   const importableRows = parsed.rows.filter((row) => {
     const existing = existingExercises.get(normalizeName(row.name))
-    return !existing || (existing.changes.length === 0 && row.marks.length > 0)
+    return !existing || row.marks.length > 0
   })
   const newExerciseCount = parsed.rows.filter(
     (row) => !existingExercises.has(normalizeName(row.name))
   ).length
-  const filledExerciseCount = importableRows.length - newExerciseCount
-  const skippedDuplicateCount = parsed.rows.length - importableRows.length
+  const appendedRows = parsed.rows.filter((row) => {
+    const existing = existingExercises.get(normalizeName(row.name))
+    return Boolean(existing && row.marks.length > 0)
+  })
+  const appendedMarkCount = appendedRows.reduce((total, row) => total + row.marks.length, 0)
+  const skippedEmptyExistingCount = parsed.rows.length - importableRows.length
   const markCount = parsed.rows.reduce((total, row) => total + row.marks.length, 0)
 
   useEffect(() => {
@@ -81,6 +85,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
           </label>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
             Put exercise names in the first column and older-to-newer marks in the columns to the right.
+            Matching exercises get new marks appended; existing history is never replaced.
           </p>
           <textarea
             id="frontier-spreadsheet-paste"
@@ -111,12 +116,21 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                   {parsed.rows.length} exercise{parsed.rows.length === 1 ? "" : "s"}
                 </SummaryPill>
                 <SummaryPill>{markCount} mark{markCount === 1 ? "" : "s"}</SummaryPill>
-                {filledExerciseCount > 0 && (
+                {newExerciseCount > 0 && (
                   <SummaryPill>
-                    {filledExerciseCount} empty row{filledExerciseCount === 1 ? "" : "s"} filled
+                    {newExerciseCount} new exercise{newExerciseCount === 1 ? "" : "s"}
                   </SummaryPill>
                 )}
-                {skippedDuplicateCount > 0 && <SummaryPill muted>{skippedDuplicateCount} existing skipped</SummaryPill>}
+                {appendedMarkCount > 0 && (
+                  <SummaryPill>
+                    {appendedMarkCount} mark{appendedMarkCount === 1 ? "" : "s"} appended
+                  </SummaryPill>
+                )}
+                {skippedEmptyExistingCount > 0 && (
+                  <SummaryPill muted>
+                    {skippedEmptyExistingCount} existing without new marks skipped
+                  </SummaryPill>
+                )}
               </div>
 
               {(parsed.skippedRows > 0 || parsed.ignoredBoundaryCells > 0) && (
@@ -138,8 +152,8 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                 <ol className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
                   {parsed.rows.map((row) => {
                     const existing = existingExercises.get(normalizeName(row.name))
-                    const willFill = Boolean(existing && existing.changes.length === 0 && row.marks.length > 0)
-                    const willSkip = Boolean(existing && !willFill)
+                    const willAppend = Boolean(existing && row.marks.length > 0)
+                    const willSkip = Boolean(existing && !willAppend)
                     const metricLabel = FRONTIER_METRIC_OPTIONS.find(
                       (option) => option.value === row.metric
                     )?.shortLabel
@@ -157,13 +171,23 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                           <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${
                             willSkip
                               ? "bg-slate-100 text-slate-400"
-                              : willFill
+                              : willAppend
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-indigo-50 text-indigo-700"
                           }`}>
-                            {willSkip ? "Skip" : willFill ? "Fill existing" : metricLabel}
+                            {willSkip
+                              ? "No marks to append"
+                              : willAppend
+                                ? `Append ${row.marks.length}`
+                                : metricLabel}
                           </span>
                         </div>
+                        {willAppend && existing && existing.metric !== row.metric && (
+                          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            Existing measure retained; pasted text will still be preserved.
+                          </p>
+                        )}
                         {row.warnings.map((warning) => (
                           <p key={warning} className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700">
                             <AlertTriangle className="h-3 w-3" />
@@ -177,7 +201,8 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
               </div>
 
               <p className="text-xs leading-relaxed text-slate-400">
-                Original text is preserved. Recognized measurements get comparison rules; everything else remains a custom mark.
+                Import is additive: existing marks stay in place and pasted marks follow them in left-to-right order.
+                Original text is preserved.
               </p>
             </div>
           )}
@@ -191,7 +216,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
             onClick={() => onImport(parsed.rows)}
           >
             {importableRows.length > 0
-              ? `Import ${importableRows.length} row${importableRows.length === 1 ? "" : "s"}`
+              ? `Import ${importableRows.length} row${importableRows.length === 1 ? "" : "s"} · keep existing data`
               : "Nothing new to import"}
           </Button>
         </div>

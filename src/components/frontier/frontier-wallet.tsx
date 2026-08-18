@@ -206,7 +206,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       nextExercises.map((exercise) => [normalizeExerciseName(exercise.name), exercise])
     )
     let added = 0
-    let filled = 0
+    let appendedRows = 0
+    let appendedMarks = 0
     let skipped = 0
 
     rows.forEach((row) => {
@@ -219,17 +220,17 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       const existing = exercisesByName.get(normalizeExerciseName(row.name))
 
       if (existing) {
-        if (existing.changes.length === 0 && changes.length > 0) {
+        if (changes.length > 0) {
           const updatedExercise: FrontierExercise = {
             ...existing,
-            metric: row.metric,
-            changes,
+            changes: [...existing.changes, ...changes],
             updatedAt: now,
           }
           const index = nextExercises.findIndex((exercise) => exercise.id === existing.id)
           nextExercises[index] = updatedExercise
           exercisesByName.set(normalizeExerciseName(row.name), updatedExercise)
-          filled += 1
+          appendedRows += 1
+          appendedMarks += changes.length
         } else {
           skipped += 1
         }
@@ -250,7 +251,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       added += 1
     })
 
-    if (added > 0 || filled > 0) {
+    if (added > 0 || appendedRows > 0) {
       commitCard({
         ...currentCard,
         exercises: nextExercises,
@@ -258,9 +259,16 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       })
     }
 
-    const imported = added + filled
+    const imported = added + appendedRows
+    const summary = [
+      added > 0 ? `${added} exercise${added === 1 ? "" : "s"} added` : null,
+      appendedMarks > 0
+        ? `${appendedMarks} mark${appendedMarks === 1 ? "" : "s"} appended to ${appendedRows} existing`
+        : null,
+      skipped > 0 ? `${skipped} empty existing row${skipped === 1 ? "" : "s"} skipped` : null,
+    ].filter(Boolean)
     setImportNotice(
-      `${imported} row${imported === 1 ? "" : "s"} imported${skipped > 0 ? ` · ${skipped} existing skipped` : ""}`
+      imported > 0 ? summary.join(" · ") : "Nothing new to import"
     )
     setImportSheetOpen(false)
   }
@@ -410,6 +418,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         </div>
 
         <FrontierPaperCard
+          key={currentCard.id}
           card={currentCard}
           onExerciseClick={(exercise) => {
             setEditingExerciseId(exercise.id)
