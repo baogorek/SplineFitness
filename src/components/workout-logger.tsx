@@ -20,6 +20,7 @@ import {
   getFreeformProgress,
   getIntervalProgress,
   getSitProgress,
+  getVo2MaxProgress,
 } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { PwaInstallBanner } from "./pwa-install-banner"
@@ -296,6 +297,9 @@ export function WorkoutLogger() {
       }
       if (getSitProgress()) {
         return "sit"
+      }
+      if (getVo2MaxProgress()) {
+        return "vo2max"
       }
       return null
     }

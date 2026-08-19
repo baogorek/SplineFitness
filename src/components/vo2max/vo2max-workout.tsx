@@ -22,16 +22,22 @@ import { useAudio } from "@/hooks/use-audio"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { useTimer } from "@/hooks/use-timer"
 import { useWakeLock } from "@/hooks/use-wake-lock"
-import { saveWorkoutSession } from "@/lib/storage"
+import {
+  clearVo2MaxProgress,
+  getVo2MaxProgress,
+  saveVo2MaxProgress,
+  saveWorkoutSession,
+} from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { useAuth } from "@/components/auth-provider"
-import { Vo2MaxWorkoutSession } from "@/types/workout"
+import { Vo2MaxSessionProgress, Vo2MaxWorkoutSession } from "@/types/workout"
+import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
 interface Vo2MaxWorkoutProps {
   onModeChange: () => void
 }
 
-type Vo2Stage = "setup" | "timer" | "entry" | "complete"
+type Vo2Stage = "setup" | "resume-prompt" | "timer" | "entry" | "complete"
 
 const DEFAULT_START_OFFSET_MILES = 0.1
 const DEFAULT_DURATION_SECONDS = 12 * 60
@@ -115,7 +121,9 @@ function Vo2MaxResultPanel({ value }: { value: number }) {
 }
 
 export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
-  const [stage, setStage] = useState<Vo2Stage>("setup")
+  const [initialResume] = useState<Vo2MaxSessionProgress | null>(() => getVo2MaxProgress())
+  const [stage, setStage] = useState<Vo2Stage>(() => initialResume ? "resume-prompt" : "setup")
+  const [pendingResume, setPendingResume] = useState<Vo2MaxSessionProgress | null>(initialResume)
   const [startOffsetInput, setStartOffsetInput] = useState(formatDistanceInput(DEFAULT_START_OFFSET_MILES))
   const [setupError, setSetupError] = useState("")
   const [testMode, setTestMode] = useState(false)
@@ -135,6 +143,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
   const startedAtRef = useRef("")
   const completedAtRef = useRef("")
   const lastTickRemainingRef = useRef(-1)
+  const [resumeDetectedAt] = useState(() => Date.now())
   const speedMultiplier = testMode ? 12 : 1
 
   const handleTimerComplete = useCallback(() => {
@@ -154,6 +163,8 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     start: startTimer,
     pause: pauseTimer,
     reset: resetTimer,
+    resetTo: resetTimerTo,
+    getElapsedSeconds,
   } = useTimer({
     targetSeconds: DEFAULT_DURATION_SECONDS,
     onTick: (remaining) => {
@@ -184,6 +195,51 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
       audio.stopKeepalive()
     }
   }, [audioKeepaliveActive, audio])
+
+  const saveProgressSnapshot = useCallback(() => {
+    if (stage !== "timer" && stage !== "entry") return
+    const savedAtMs = Date.now()
+    saveVo2MaxProgress({
+      stage,
+      startOffsetInput,
+      resultStartOffsetInput,
+      timerStarted,
+      elapsedSeconds: getElapsedSeconds(savedAtMs),
+      timerRunning: isRunning,
+      startedAt: startedAtRef.current,
+      completedAt: completedAtRef.current,
+      endedEarly,
+      finishedDurationSeconds,
+      finalDistanceInput,
+      savedAt: new Date(savedAtMs).toISOString(),
+    })
+  }, [
+    stage,
+    startOffsetInput,
+    resultStartOffsetInput,
+    timerStarted,
+    getElapsedSeconds,
+    isRunning,
+    endedEarly,
+    finishedDurationSeconds,
+    finalDistanceInput,
+  ])
+
+  useEffect(() => {
+    saveProgressSnapshot()
+  }, [saveProgressSnapshot, elapsedSeconds])
+
+  useEffect(() => {
+    const saveIfHidden = () => {
+      if (document.visibilityState === "hidden") saveProgressSnapshot()
+    }
+    window.addEventListener("pagehide", saveProgressSnapshot)
+    document.addEventListener("visibilitychange", saveIfHidden)
+    return () => {
+      window.removeEventListener("pagehide", saveProgressSnapshot)
+      document.removeEventListener("visibilitychange", saveIfHidden)
+    }
+  }, [saveProgressSnapshot])
 
   const setupStartOffsetMiles = useMemo(() => parseDecimalInput(startOffsetInput), [startOffsetInput])
   const currentStartOffsetMiles = useMemo(
@@ -280,6 +336,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     lastTickRemainingRef.current = -1
     pauseTimer()
     resetTimer()
+    clearVo2MaxProgress()
     setStage("timer")
   }, [pauseTimer, resetCalculation, resetTimer, startOffsetInput])
 
@@ -301,17 +358,47 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     startedAtRef.current = ""
     completedAtRef.current = ""
     lastTickRemainingRef.current = -1
+    clearVo2MaxProgress()
     setStage("setup")
   }, [pauseTimer, resetTimer])
 
   const handleFinishEarly = useCallback(() => {
     if (!timerStarted) return
+    const finalElapsedSeconds = getElapsedSeconds()
     pauseTimer()
     completedAtRef.current = new Date().toISOString()
-    setFinishedDurationSeconds(Math.max(1, elapsedSeconds))
+    setFinishedDurationSeconds(Math.max(1, finalElapsedSeconds))
     setEndedEarly(true)
     setStage("entry")
-  }, [elapsedSeconds, pauseTimer, timerStarted])
+  }, [getElapsedSeconds, pauseTimer, timerStarted])
+
+  const handleResume = useCallback(() => {
+    if (!pendingResume) return
+    setStartOffsetInput(pendingResume.startOffsetInput)
+    setResultStartOffsetInput(pendingResume.resultStartOffsetInput)
+    setTimerStarted(pendingResume.timerStarted)
+    setEndedEarly(pendingResume.endedEarly)
+    setFinishedDurationSeconds(pendingResume.finishedDurationSeconds)
+    setFinalDistanceInput(pendingResume.finalDistanceInput)
+    startedAtRef.current = pendingResume.startedAt
+    completedAtRef.current = pendingResume.completedAt
+    resetTimerTo(restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.elapsedSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: pendingResume.timerRunning,
+      restoredAtMs: resumeDetectedAt,
+      targetSeconds: DEFAULT_DURATION_SECONDS,
+    }))
+    setPendingResume(null)
+    setStage(pendingResume.stage)
+    if (pendingResume.stage === "timer" && pendingResume.timerRunning) startTimer()
+  }, [pendingResume, resetTimerTo, startTimer, resumeDetectedAt])
+
+  const handleDiscardResume = useCallback(() => {
+    clearVo2MaxProgress()
+    setPendingResume(null)
+    setStage("setup")
+  }, [])
 
   const handleSaveResult = useCallback(async () => {
     if (!calculatedMetrics || finalDistanceMiles === null || currentStartOffsetMiles === null) return
@@ -336,10 +423,12 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
 
     setIsSaving(true)
     setCompletedSessionData(session)
+    clearVo2MaxProgress()
     if (FEATURES.AUTH_ENABLED) {
       const result = await saveWorkoutSession(session)
       setSavedToHistory(result !== null)
     }
+    clearVo2MaxProgress()
     setIsSaving(false)
     setStage("complete")
   }, [
@@ -365,6 +454,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     startedAtRef.current = ""
     completedAtRef.current = ""
     lastTickRemainingRef.current = -1
+    clearVo2MaxProgress()
     setStage("setup")
   }, [pauseTimer, resetCalculation, resetTimer, resultStartOffsetInput])
 
@@ -400,6 +490,32 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
       details,
     })
     return `https://calendar.google.com/calendar/render?${params.toString()}`
+  }
+
+  if (stage === "resume-prompt" && pendingResume) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-5 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-cyan-600">
+            <Gauge className="h-10 w-10 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Resume VO2 Max Test?</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your in-progress test was saved at {new Date(pendingResume.savedAt).toLocaleString()}.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <Button onClick={handleResume} className="h-12 font-semibold">
+              Resume
+            </Button>
+            <Button variant="outline" onClick={handleDiscardResume} className="h-12">
+              Start Fresh
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (stage === "complete" && completedSessionData) {

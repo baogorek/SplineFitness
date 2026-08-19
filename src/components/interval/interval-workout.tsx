@@ -18,6 +18,7 @@ import {
 import { IntervalPhase, IntervalSessionProgress, IntervalWorkoutSession } from "@/types/workout"
 import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
+import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 import {
   INTERVAL_SPEECH_CUES,
   INTERVAL_COMPLETE_CUE,
@@ -51,13 +52,18 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const setNotesRef = useRef<Record<number, string>>({})
   const noteInputRef = useRef<HTMLInputElement | null>(null)
-  const restoredIntervalElapsedRef = useRef<number | null>(null)
+  const restoredIntervalRef = useRef<{ elapsedSeconds: number; isRunning: boolean } | null>(null)
   const completionInProgressRef = useRef(false)
+  const [resumeDetectedAt] = useState(() => Date.now())
 
   const speedMultiplier = testMode ? 12 : 1
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
   const restTimer = useTimer({ countUp: true, speedMultiplier })
+  const getWorkoutElapsedSeconds = workoutTimer.getElapsedSeconds
+  const getRestElapsedSeconds = restTimer.getElapsedSeconds
+  const workoutTimerRunning = workoutTimer.isRunning
+  const restTimerRunning = restTimer.isRunning
 
   useEffect(() => {
     const saved = getIntervalProgress()
@@ -75,11 +81,11 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       completedAt: new Date().toISOString(),
       totalSets: TOTAL_SETS,
       completedSets,
-      totalTimeSeconds: workoutTimer.elapsedSeconds,
+      totalTimeSeconds: getWorkoutElapsedSeconds(),
       ...(Object.keys(filtered).length > 0 && { setNotes: filtered }),
       ...(endedEarly && { endedEarly: true }),
     }
-  }, [workoutTimer.elapsedSeconds])
+  }, [getWorkoutElapsedSeconds])
 
   const intervalTimer = useTimer({
     targetSeconds: INTERVAL_DURATION_SECONDS,
@@ -118,6 +124,8 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     },
     speedMultiplier,
   })
+  const getIntervalElapsedSeconds = intervalTimer.getElapsedSeconds
+  const intervalTimerRunning = intervalTimer.isRunning
 
   const clearCountdownTimeouts = useCallback(() => {
     countdownTimeoutsRef.current.forEach(clearTimeout)
@@ -138,17 +146,17 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   useEffect(() => {
     if (phase !== "interval") return
 
-    const restoredElapsed = restoredIntervalElapsedRef.current
-    if (restoredElapsed === null) return
+    const restored = restoredIntervalRef.current
+    if (restored === null) return
 
     spokenCuesRef.current = new Set(
       INTERVAL_SPEECH_CUES
-        .filter((cue) => cue.elapsedSeconds <= restoredElapsed)
+        .filter((cue) => cue.elapsedSeconds <= restored.elapsedSeconds)
         .map((cue) => cue.elapsedSeconds)
     )
-    intervalTimer.resetTo(restoredElapsed)
-    restoredIntervalElapsedRef.current = null
-    intervalTimer.start()
+    intervalTimer.resetTo(restored.elapsedSeconds)
+    restoredIntervalRef.current = null
+    if (restored.isRunning) intervalTimer.start()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
@@ -224,15 +232,19 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     if (!workoutStarted && phase === "ready" && currentSet === 1 && !currentNote.trim()) return
 
     const checkpointPhase = phase === "countdown" ? "ready" : phase
+    const savedAtMs = Date.now()
     saveIntervalProgress({
       phase: checkpointPhase,
       currentSet,
       workoutStarted,
       startedAt: startedAtRef.current,
-      savedAt: new Date().toISOString(),
-      workoutTimerSeconds: workoutTimer.elapsedSeconds,
-      restTimerSeconds: restTimer.elapsedSeconds,
-      intervalElapsedSeconds: phase === "interval" ? intervalTimer.elapsedSeconds : 0,
+      savedAt: new Date(savedAtMs).toISOString(),
+      workoutTimerSeconds: getWorkoutElapsedSeconds(savedAtMs),
+      restTimerSeconds: getRestElapsedSeconds(savedAtMs),
+      intervalElapsedSeconds: phase === "interval" ? getIntervalElapsedSeconds(savedAtMs) : 0,
+      workoutTimerRunning,
+      restTimerRunning,
+      intervalTimerRunning: phase === "interval" && intervalTimerRunning,
       currentNote,
       setNotes: { ...setNotesRef.current },
     })
@@ -242,14 +254,22 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     workoutStarted,
     currentSet,
     currentNote,
-    workoutTimer.elapsedSeconds,
-    restTimer.elapsedSeconds,
-    intervalTimer.elapsedSeconds,
+    getWorkoutElapsedSeconds,
+    getRestElapsedSeconds,
+    getIntervalElapsedSeconds,
+    workoutTimerRunning,
+    restTimerRunning,
+    intervalTimerRunning,
   ])
 
   useEffect(() => {
     saveProgressSnapshot()
-  }, [saveProgressSnapshot])
+  }, [
+    saveProgressSnapshot,
+    workoutTimer.elapsedSeconds,
+    restTimer.elapsedSeconds,
+    intervalTimer.elapsedSeconds,
+  ])
 
   useEffect(() => {
     const handlePageHide = () => {
@@ -349,6 +369,23 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const handleResume = useCallback(() => {
     if (!pendingResume) return
 
+    const restoredAtMs = resumeDetectedAt
+    const workoutWasRunning = pendingResume.workoutTimerRunning ?? pendingResume.workoutStarted
+    const restWasRunning = pendingResume.restTimerRunning ?? (pendingResume.restTimerSeconds > 0)
+    const intervalWasRunning = pendingResume.intervalTimerRunning ?? (pendingResume.phase === "interval")
+    const restoredWorkoutElapsed = restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.workoutTimerSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: pendingResume.workoutTimerRunning === true,
+      restoredAtMs,
+    })
+    const restoredRestElapsed = restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.restTimerSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: pendingResume.restTimerRunning === true,
+      restoredAtMs,
+    })
+
     setWorkoutStarted(pendingResume.workoutStarted)
     startedAtRef.current = pendingResume.startedAt
     setCurrentSet(pendingResume.currentSet)
@@ -356,8 +393,8 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     setNoteEditorOpen(false)
     setNotesRef.current = { ...pendingResume.setNotes }
     setCountdownDisplay("")
-    workoutTimer.resetTo(pendingResume.workoutTimerSeconds)
-    restTimer.resetTo(pendingResume.restTimerSeconds)
+    workoutTimer.resetTo(restoredWorkoutElapsed)
+    restTimer.resetTo(restoredRestElapsed)
     intervalTimer.pause()
     intervalTimer.reset()
     spokenCuesRef.current.clear()
@@ -369,19 +406,28 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
       return
     }
 
-    workoutTimer.start()
+    if (workoutWasRunning) workoutTimer.start()
 
     if (pendingResume.phase === "interval") {
-      restoredIntervalElapsedRef.current = pendingResume.intervalElapsedSeconds
+      restoredIntervalRef.current = {
+        elapsedSeconds: restoreElapsedSeconds({
+          elapsedSeconds: pendingResume.intervalElapsedSeconds,
+          savedAt: pendingResume.savedAt,
+          wasRunning: pendingResume.intervalTimerRunning === true,
+          restoredAtMs,
+          targetSeconds: INTERVAL_DURATION_SECONDS,
+        }),
+        isRunning: intervalWasRunning,
+      }
       setPhase("interval")
       return
     }
 
-    if (pendingResume.restTimerSeconds > 0) {
+    if (restWasRunning) {
       restTimer.start()
     }
     setPhase("ready")
-  }, [pendingResume, workoutTimer, restTimer, intervalTimer, clearCountdownTimeouts])
+  }, [pendingResume, workoutTimer, restTimer, intervalTimer, clearCountdownTimeouts, resumeDetectedAt])
 
   const handleDiscardResume = useCallback(() => {
     clearIntervalProgress()

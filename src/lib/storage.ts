@@ -6,6 +6,7 @@ import {
   SitSessionProgress,
   CircuitSessionProgress,
   FreeformSessionProgress,
+  Vo2MaxSessionProgress,
   ExercisePreference,
   ExerciseSetting,
 } from "@/types/workout"
@@ -31,6 +32,7 @@ const STORAGE_KEYS = {
   SIT_PROGRESS: "strength-tracker:sit-progress",
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   FREEFORM_PROGRESS: "strength-tracker:freeform-progress",
+  VO2MAX_PROGRESS: "strength-tracker:vo2max-progress",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
   EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
@@ -138,6 +140,7 @@ export function clearWorkoutProgress(mode: ActiveWorkoutSession["mode"]): void {
       clearFreeformProgress()
       break
     case "vo2max":
+      clearVo2MaxProgress()
       break
   }
 }
@@ -148,6 +151,7 @@ export async function clearProgressAlreadySavedToHistory(): Promise<void> {
     { mode: "freeform" as const, progress: getFreeformProgress() },
     { mode: "interval" as const, progress: getIntervalProgress() },
     { mode: "sit" as const, progress: getSitProgress() },
+    { mode: "vo2max" as const, progress: getVo2MaxProgress() },
   ].filter((entry) => entry.progress !== null)
 
   if (savedProgress.length === 0) return
@@ -268,6 +272,34 @@ export function getFreeformProgress(): FreeformSessionProgress | null {
 export function clearFreeformProgress(): void {
   if (typeof window === "undefined") return
   localStorage.removeItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+}
+
+export function saveVo2MaxProgress(progress: Vo2MaxSessionProgress): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.VO2MAX_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving VO2 Max progress:", error)
+  }
+}
+
+export function getVo2MaxProgress(): Vo2MaxSessionProgress | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.VO2MAX_PROGRESS)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearVo2MaxProgress(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.VO2MAX_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing VO2 Max progress:", error)
+  }
 }
 
 export function formatTime(seconds: number): string {

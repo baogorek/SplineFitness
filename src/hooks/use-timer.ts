@@ -38,11 +38,21 @@ export function useTimer(options: UseTimerOptions = {}) {
     onTickRef.current = onTick
   }, [onTick])
 
+  const getElapsedSeconds = useCallback((nowMs = Date.now()) => {
+    const realSinceStart = startTimeRef.current
+      ? (nowMs - startTimeRef.current) / 1000
+      : 0
+    const elapsed = Math.floor(
+      pausedAccumulatorRef.current + realSinceStart * speedMultiplier
+    )
+
+    return targetSeconds ? Math.min(targetSeconds, elapsed) : elapsed
+  }, [targetSeconds, speedMultiplier])
+
   const recalculate = useCallback(() => {
     if (!startTimeRef.current) return
 
-    const realSinceStart = (Date.now() - startTimeRef.current) / 1000
-    const newElapsed = Math.floor(pausedAccumulatorRef.current + realSinceStart * speedMultiplier)
+    const newElapsed = getElapsedSeconds()
 
     setElapsedSeconds(newElapsed)
 
@@ -62,7 +72,7 @@ export function useTimer(options: UseTimerOptions = {}) {
         onCompleteRef.current?.(newElapsed)
       }
     }
-  }, [targetSeconds, speedMultiplier])
+  }, [targetSeconds, getElapsedSeconds])
 
   useEffect(() => {
     if (isRunning) {
@@ -70,20 +80,25 @@ export function useTimer(options: UseTimerOptions = {}) {
       completedRef.current = false
       const intervalMs = Math.max(50, 1000 / speedMultiplier)
       intervalRef.current = setInterval(recalculate, intervalMs)
+      const immediateTimeout = setTimeout(recalculate, 0)
 
       const handleVisibility = () => {
         if (document.visibilityState === "visible") {
           recalculate()
         }
       }
+      const handlePageShow = () => recalculate()
       document.addEventListener("visibilitychange", handleVisibility)
+      window.addEventListener("pageshow", handlePageShow)
 
       return () => {
+        clearTimeout(immediateTimeout)
         if (intervalRef.current) {
           clearInterval(intervalRef.current)
           intervalRef.current = null
         }
         document.removeEventListener("visibilitychange", handleVisibility)
+        window.removeEventListener("pageshow", handlePageShow)
         if (startTimeRef.current) {
           pausedAccumulatorRef.current += (Date.now() - startTimeRef.current) / 1000 * speedMultiplier
           startTimeRef.current = 0
@@ -131,6 +146,7 @@ export function useTimer(options: UseTimerOptions = {}) {
     pause,
     reset,
     resetTo,
+    getElapsedSeconds,
     formattedTime,
   }
 }

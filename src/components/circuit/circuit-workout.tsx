@@ -21,6 +21,7 @@ import { useAudio } from "@/hooks/use-audio"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { scheduleCountdownTicks } from "@/lib/countdown-utils"
+import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 import {
   saveWorkoutSession,
   getExercisePreferences,
@@ -55,6 +56,8 @@ type Phase =
   | "weak-link-practice"
   | "workout-complete"
 
+type PersistedCircuitPhase = NonNullable<CircuitSessionProgress["phase"]>
+
 interface CircuitWorkoutProps {
   onModeChange: () => void
 }
@@ -80,6 +83,21 @@ function formatSavedAtLabel(savedAt: string): string {
 
 function getEffectiveTransitionDuration(sub: SubExercise): number {
   return Math.max(MIN_TRANSITION_SECONDS, sub.prepTimeSeconds || 0)
+}
+
+function getPersistedPhase(phase: Phase): PersistedCircuitPhase {
+  switch (phase) {
+    case "transition":
+    case "timing":
+    case "input":
+    case "round-complete":
+      return phase
+    case "weak-link-select":
+    case "weak-link-practice":
+      return "round-complete"
+    default:
+      return "ready"
+  }
 }
 
 function buildCompactConfig(session: CircuitWorkoutSession): string {
@@ -218,6 +236,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const resumeAfterTransitionRef = useRef(false)
   const transitionExerciseDurationRef = useRef(60)
   const audioLogCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [resumeDetectedAt] = useState(() => Date.now())
 
   const { signInWithGoogle } = useAuth()
 
@@ -386,6 +405,19 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
   const roundTimer = useTimer({ countUp: true, speedMultiplier })
   const resetRoundTimerTo = roundTimer.resetTo
+  const getRoundElapsedSeconds = roundTimer.getElapsedSeconds
+  const getComboElapsedSeconds = comboTimer.getElapsedSeconds
+  const getTransitionElapsedSeconds = transitionTimer.getElapsedSeconds
+  const roundTimerRunning = roundTimer.isRunning
+  const comboTimerRunning = comboTimer.isRunning
+  const transitionTimerRunning = transitionTimer.isRunning
+  const startRoundTimer = roundTimer.start
+  const startComboTimer = comboTimer.start
+  const pauseComboTimer = comboTimer.pause
+  const resetComboTimerTo = comboTimer.resetTo
+  const startTransitionTimer = transitionTimer.start
+  const pauseTransitionTimer = transitionTimer.pause
+  const resetTransitionTimerTo = transitionTimer.resetTo
 
   const handleTestAudio = () => {
     audio.playMinuteBeep()
@@ -405,13 +437,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     }, 1800)
   }, [audio])
 
-  useEffect(() => {
+  const saveProgressSnapshot = useCallback(() => {
     if (
       savingRef.current ||
       phase === "setup" ||
       phase === "resume-prompt" ||
       phase === "workout-complete"
     ) return
+    const savedAtMs = Date.now()
     saveCircuitProgress({
       variant: activeWorkout,
       exerciseSettings,
@@ -422,14 +455,79 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       rounds,
       currentRoundResults,
       weakLinks,
-      roundTimerSeconds: roundTimer.elapsedSeconds,
+      roundTimerSeconds: getRoundElapsedSeconds(savedAtMs),
+      roundTimerRunning,
+      phase: getPersistedPhase(phase),
+      comboTimerSeconds: getComboElapsedSeconds(savedAtMs),
+      comboTimerRunning,
+      transitionTimerSeconds: getTransitionElapsedSeconds(savedAtMs),
+      transitionTimerRunning,
+      transitionDuration,
+      transitionExerciseName,
+      transitionEquipmentNote,
+      transitionExerciseDuration: transitionExerciseDurationRef.current,
+      resumeAfterTransition: resumeAfterTransitionRef.current,
+      isFirstCombo: isFirstComboRef.current,
       startedAt: workoutStartRef.current || new Date().toISOString(),
-      savedAt: new Date().toISOString(),
+      savedAt: new Date(savedAtMs).toISOString(),
     })
-  }, [phase, activeWorkout, exerciseSettings, exerciseChoices, exerciseEquipment, currentRound, currentComboIndex, rounds, currentRoundResults, weakLinks, roundTimer.elapsedSeconds])
+  }, [
+    phase,
+    activeWorkout,
+    exerciseSettings,
+    exerciseChoices,
+    exerciseEquipment,
+    currentRound,
+    currentComboIndex,
+    rounds,
+    currentRoundResults,
+    weakLinks,
+    getRoundElapsedSeconds,
+    getComboElapsedSeconds,
+    getTransitionElapsedSeconds,
+    roundTimerRunning,
+    comboTimerRunning,
+    transitionTimerRunning,
+    transitionDuration,
+    transitionExerciseName,
+    transitionEquipmentNote,
+  ])
+
+  useEffect(() => {
+    saveProgressSnapshot()
+  }, [
+    saveProgressSnapshot,
+    roundTimer.elapsedSeconds,
+    comboTimer.elapsedSeconds,
+    transitionTimer.elapsedSeconds,
+  ])
+
+  useEffect(() => {
+    const saveIfHidden = () => {
+      if (document.visibilityState === "hidden") saveProgressSnapshot()
+    }
+    window.addEventListener("pagehide", saveProgressSnapshot)
+    document.addEventListener("visibilitychange", saveIfHidden)
+    return () => {
+      window.removeEventListener("pagehide", saveProgressSnapshot)
+      document.removeEventListener("visibilitychange", saveIfHidden)
+    }
+  }, [saveProgressSnapshot])
 
   const handleResume = useCallback(() => {
     if (!pendingResume) return
+    const restoredAtMs = resumeDetectedAt
+    const restoredPhase = pendingResume.phase ?? "ready"
+    const roundWasRunning = pendingResume.roundTimerRunning ?? false
+    const comboWasRunning = pendingResume.comboTimerRunning ?? restoredPhase === "timing"
+    const transitionWasRunning = pendingResume.transitionTimerRunning
+      ?? restoredPhase === "transition"
+    const savedCombo = circuitWorkouts[pendingResume.variant].combos[pendingResume.currentComboIndex]
+    const savedComboTargetSeconds = savedCombo?.subExercises.reduce(
+      (sum, sub) => sum + (pendingResume.exerciseSettings[sub.id]?.durationSeconds || 60),
+      0
+    )
+
     setActiveWorkout(pendingResume.variant)
     setExerciseSettings(pendingResume.exerciseSettings)
     setExerciseChoices(pendingResume.exerciseChoices || {})
@@ -439,13 +537,54 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
     setRounds(pendingResume.rounds)
     setCurrentRoundResults(pendingResume.currentRoundResults)
     setWeakLinks(pendingResume.weakLinks)
-    if (pendingResume.roundTimerSeconds) {
-      resetRoundTimerTo(pendingResume.roundTimerSeconds)
-    }
+    setTransitionDuration(pendingResume.transitionDuration ?? 5)
+    setTransitionExerciseName(pendingResume.transitionExerciseName ?? "")
+    setTransitionEquipmentNote(pendingResume.transitionEquipmentNote ?? "")
+    transitionExerciseDurationRef.current = pendingResume.transitionExerciseDuration ?? 60
+    resumeAfterTransitionRef.current = pendingResume.resumeAfterTransition ?? false
+    setIsResumeTransition(pendingResume.resumeAfterTransition ?? false)
+    isFirstComboRef.current = pendingResume.isFirstCombo ?? false
+    resetRoundTimerTo(restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.roundTimerSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: roundWasRunning,
+      restoredAtMs,
+    }))
+    pauseComboTimer()
+    resetComboTimerTo(restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.comboTimerSeconds ?? 0,
+      savedAt: pendingResume.savedAt,
+      wasRunning: comboWasRunning,
+      restoredAtMs,
+      targetSeconds: savedComboTargetSeconds,
+    }))
+    pauseTransitionTimer()
+    resetTransitionTimerTo(restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.transitionTimerSeconds ?? 0,
+      savedAt: pendingResume.savedAt,
+      wasRunning: transitionWasRunning,
+      restoredAtMs,
+      targetSeconds: pendingResume.transitionDuration ?? 5,
+    }))
     workoutStartRef.current = pendingResume.startedAt
     setPendingResume(null)
-    setPhase("ready")
-  }, [pendingResume, resetRoundTimerTo])
+    setPhase(restoredPhase)
+
+    if (roundWasRunning) startRoundTimer()
+    if (restoredPhase === "timing" && comboWasRunning) startComboTimer()
+    if (restoredPhase === "transition" && transitionWasRunning) startTransitionTimer()
+  }, [
+    pendingResume,
+    resetRoundTimerTo,
+    pauseComboTimer,
+    resetComboTimerTo,
+    pauseTransitionTimer,
+    resetTransitionTimerTo,
+    startRoundTimer,
+    startComboTimer,
+    startTransitionTimer,
+    resumeDetectedAt,
+  ])
 
   const handleDiscardResume = useCallback(() => {
     clearCircuitProgress()
@@ -589,7 +728,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         roundTimer.pause()
         const roundData: CircuitRoundData = {
           round: currentRound,
-          totalTimeSeconds: roundTimer.elapsedSeconds,
+          totalTimeSeconds: roundTimer.getElapsedSeconds(),
           comboResults: updatedResults,
           completedAt: new Date().toISOString(),
         }

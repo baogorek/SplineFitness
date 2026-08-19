@@ -119,6 +119,18 @@ export interface CircuitSessionProgress {
   weakLinks: WeakLinkEntry[]
   exerciseEquipment?: Record<string, string>
   roundTimerSeconds: number
+  roundTimerRunning?: boolean
+  phase?: "ready" | "transition" | "timing" | "input" | "round-complete"
+  comboTimerSeconds?: number
+  comboTimerRunning?: boolean
+  transitionTimerSeconds?: number
+  transitionTimerRunning?: boolean
+  transitionDuration?: number
+  transitionExerciseName?: string
+  transitionEquipmentNote?: string
+  transitionExerciseDuration?: number
+  resumeAfterTransition?: boolean
+  isFirstCombo?: boolean
   startedAt: string
   savedAt: string
 }
@@ -151,6 +163,9 @@ export interface IntervalSessionProgress {
   workoutTimerSeconds: number
   restTimerSeconds: number
   intervalElapsedSeconds: number
+  workoutTimerRunning?: boolean
+  restTimerRunning?: boolean
+  intervalTimerRunning?: boolean
   currentNote: string
   setNotes: Record<number, string>
 }
@@ -179,6 +194,7 @@ export interface FreeformWorkoutSession {
 export interface FreeformSessionProgress {
   exercises: FreeformExercise[]
   elapsedSeconds: number
+  timerRunning?: boolean
   startedAt: string
   savedAt: string
 }
@@ -209,6 +225,8 @@ export interface SitSessionProgress {
   warmupCountdown: number
   workoutTimerSeconds: number
   phaseTimerElapsedSeconds: number
+  workoutTimerRunning?: boolean
+  phaseTimerRunning?: boolean
   phasesCompleted: number
   startedAt: string
   savedAt: string
@@ -231,6 +249,21 @@ export interface Vo2MaxWorkoutSession {
   inclinePercent: number
   notes?: string
   endedEarly: boolean
+}
+
+export interface Vo2MaxSessionProgress {
+  stage: "timer" | "entry"
+  startOffsetInput: string
+  resultStartOffsetInput: string
+  timerStarted: boolean
+  elapsedSeconds: number
+  timerRunning: boolean
+  startedAt: string
+  completedAt: string
+  endedEarly: boolean
+  finishedDurationSeconds: number
+  finalDistanceInput: string
+  savedAt: string
 }
 
 export interface LegacyProgramWorkoutSession {

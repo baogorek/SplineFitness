@@ -20,6 +20,7 @@ import {
 import { SprintRecord, SitSessionProgress, SitWorkoutSession } from "@/types/workout"
 import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
+import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 import {
   SitPhase,
   GENERAL_WARMUP_SECONDS,
@@ -92,6 +93,21 @@ function getResumeCheckpointLabel(progress: SitSessionProgress): string {
   }
 }
 
+function getPhaseTargetSeconds(phase: SitPhase): number {
+  switch (phase) {
+    case "general-warmup": return GENERAL_WARMUP_SECONDS
+    case "post-warmup-shakeout": return POST_WARMUP_SHAKEOUT_SECONDS
+    case "tissue-prep-work": return TISSUE_PREP_WORK_SECONDS
+    case "tissue-prep-rest": return TISSUE_PREP_REST_SECONDS
+    case "adductor-squeeze": return ADDUCTOR_SQUEEZE_SECONDS
+    case "neural-left":
+    case "neural-right": return NEURAL_HOLD_SECONDS
+    case "neural-switch": return NEURAL_SWITCH_SECONDS
+    case "washout": return WASHOUT_SECONDS
+    default: return 0
+  }
+}
+
 export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [phase, setPhase] = useState<SitPhase>("ready")
   const [tissuePrepSet, setTissuePrepSet] = useState(1)
@@ -118,8 +134,13 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const firedCuesRef = useRef<Set<string>>(new Set())
   const phasesCompletedRef = useRef(0)
   const lastTickRemainingRef = useRef<number>(-1)
-  const restoreTimedPhaseRef = useRef<{ phase: SitPhase; elapsedSeconds: number } | null>(null)
+  const restoreTimedPhaseRef = useRef<{
+    phase: SitPhase
+    elapsedSeconds: number
+    isRunning: boolean
+  } | null>(null)
   const completionInProgressRef = useRef(false)
+  const [resumeDetectedAt] = useState(() => Date.now())
 
   const speedMultiplier = testMode ? 12 : 1
 
@@ -162,21 +183,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   }, [phase])
 
   const workoutTimer = useTimer({ countUp: true, speedMultiplier })
+  const getWorkoutElapsedSeconds = workoutTimer.getElapsedSeconds
+  const workoutTimerRunning = workoutTimer.isRunning
 
-  const phaseTargetSeconds = useMemo(() => {
-    switch (phase) {
-      case "general-warmup": return GENERAL_WARMUP_SECONDS
-      case "post-warmup-shakeout": return POST_WARMUP_SHAKEOUT_SECONDS
-      case "tissue-prep-work": return TISSUE_PREP_WORK_SECONDS
-      case "tissue-prep-rest": return TISSUE_PREP_REST_SECONDS
-      case "adductor-squeeze": return ADDUCTOR_SQUEEZE_SECONDS
-      case "neural-left":
-      case "neural-right": return NEURAL_HOLD_SECONDS
-      case "neural-switch": return NEURAL_SWITCH_SECONDS
-      case "washout": return WASHOUT_SECONDS
-      default: return 0
-    }
-  }, [phase])
+  const phaseTargetSeconds = useMemo(() => getPhaseTargetSeconds(phase), [phase])
 
   const phaseTimer = useTimer({
     targetSeconds: phaseTargetSeconds || undefined,
@@ -230,6 +240,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     },
     speedMultiplier,
   })
+  const getPhaseElapsedSeconds = phaseTimer.getElapsedSeconds
+  const phaseTimerRunning = phaseTimer.isRunning
 
   const clearCountdownTimeouts = useCallback(() => {
     countdownTimeoutsRef.current.forEach(clearTimeout)
@@ -253,7 +265,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     if (restoredPhase?.phase === phase) {
       restoreTimedPhaseRef.current = null
       phaseTimer.resetTo(restoredPhase.elapsedSeconds)
-      phaseTimer.start()
+      if (restoredPhase.isRunning) phaseTimer.start()
       const speechCue = PHASE_SPEECH_CUES[phase]
       if (speechCue) {
         audio.speak(`Resuming. ${speechCue}`)
@@ -282,6 +294,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     }
 
     const checkpointPhase = phase === "sprint-active" ? "sprint-ready" : phase
+    const savedAtMs = Date.now()
     saveSitProgress({
       phase: checkpointPhase,
       tissuePrepSet,
@@ -289,11 +302,15 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       sprintHistory,
       bestTime,
       warmupCountdown,
-      workoutTimerSeconds: workoutTimer.elapsedSeconds,
-      phaseTimerElapsedSeconds: TIMED_PHASES.includes(phase) ? phaseTimer.elapsedSeconds : 0,
+      workoutTimerSeconds: getWorkoutElapsedSeconds(savedAtMs),
+      phaseTimerElapsedSeconds: TIMED_PHASES.includes(phase)
+        ? getPhaseElapsedSeconds(savedAtMs)
+        : 0,
+      workoutTimerRunning,
+      phaseTimerRunning: TIMED_PHASES.includes(phase) && phaseTimerRunning,
       phasesCompleted: phasesCompletedRef.current,
       startedAt: startedAtRef.current,
-      savedAt: new Date().toISOString(),
+      savedAt: new Date(savedAtMs).toISOString(),
     })
   }, [
     phase,
@@ -302,14 +319,16 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     sprintHistory,
     bestTime,
     warmupCountdown,
-    workoutTimer.elapsedSeconds,
-    phaseTimer.elapsedSeconds,
+    getWorkoutElapsedSeconds,
+    getPhaseElapsedSeconds,
+    workoutTimerRunning,
+    phaseTimerRunning,
     pendingResume,
   ])
 
   useEffect(() => {
     saveProgressSnapshot()
-  }, [saveProgressSnapshot])
+  }, [saveProgressSnapshot, workoutTimer.elapsedSeconds, phaseTimer.elapsedSeconds])
 
   useEffect(() => {
     const handlePageHide = () => {
@@ -424,6 +443,18 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const handleResume = useCallback(() => {
     if (!pendingResume) return
 
+    const restoredAtMs = resumeDetectedAt
+    const workoutWasRunning = pendingResume.workoutTimerRunning
+      ?? (pendingResume.phase !== "warmup-countdown")
+    const phaseWasRunning = pendingResume.phaseTimerRunning
+      ?? TIMED_PHASES.includes(pendingResume.phase)
+    const restoredWorkoutElapsed = restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.workoutTimerSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: pendingResume.workoutTimerRunning === true,
+      restoredAtMs,
+    })
+
     workoutStartedRef.current = true
     startedAtRef.current = pendingResume.startedAt
     phasesCompletedRef.current = pendingResume.phasesCompleted
@@ -437,7 +468,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     setShowDropModal(false)
     setPendingShortMA(null)
     setPendingLongMA(null)
-    workoutTimer.resetTo(pendingResume.workoutTimerSeconds)
+    workoutTimer.resetTo(restoredWorkoutElapsed)
     setPendingResume(null)
 
     if (pendingResume.phase === "warmup-countdown") {
@@ -448,16 +479,23 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     if (TIMED_PHASES.includes(pendingResume.phase)) {
       restoreTimedPhaseRef.current = {
         phase: pendingResume.phase,
-        elapsedSeconds: pendingResume.phaseTimerElapsedSeconds,
+        elapsedSeconds: restoreElapsedSeconds({
+          elapsedSeconds: pendingResume.phaseTimerElapsedSeconds,
+          savedAt: pendingResume.savedAt,
+          wasRunning: pendingResume.phaseTimerRunning === true,
+          restoredAtMs,
+          targetSeconds: getPhaseTargetSeconds(pendingResume.phase) || undefined,
+        }),
+        isRunning: phaseWasRunning,
       }
-      workoutTimer.start()
+      if (workoutWasRunning) workoutTimer.start()
       setPhase(pendingResume.phase)
       return
     }
 
-    workoutTimer.start()
+    if (workoutWasRunning) workoutTimer.start()
     setPhase(pendingResume.phase)
-  }, [pendingResume, startWarmupCountdown, workoutTimer])
+  }, [pendingResume, startWarmupCountdown, workoutTimer, resumeDetectedAt])
 
   const handleDiscardResume = useCallback(() => {
     clearSitProgress()
@@ -538,7 +576,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       mode: "sit",
       startedAt: startedAtRef.current,
       completedAt: new Date().toISOString(),
-      totalTimeSeconds: workoutTimer.elapsedSeconds,
+      totalTimeSeconds: getWorkoutElapsedSeconds(),
       sprintTimes: sprintHistory,
       bestSprintTimeSeconds: bestTime,
       phasesCompleted: phasesCompletedRef.current,
@@ -552,7 +590,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     }
     clearSitProgress()
     setPhase("complete")
-  }, [workoutTimer, phaseTimer, sprintHistory, bestTime, clearCountdownTimeouts])
+  }, [workoutTimer, phaseTimer, sprintHistory, bestTime, clearCountdownTimeouts, getWorkoutElapsedSeconds])
 
   const handleEndWorkout = useCallback(() => {
     saveAndComplete(sprintHistory.length === 0)

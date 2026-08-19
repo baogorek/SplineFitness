@@ -9,6 +9,7 @@ import { useTimer } from "@/hooks/use-timer"
 import { saveWorkoutSession, saveFreeformProgress, getFreeformProgress, clearFreeformProgress } from "@/lib/storage"
 import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
+import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
 interface FreeformWorkoutProps {
   onModeChange: () => void
@@ -98,8 +99,11 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   const [savedToHistory, setSavedToHistory] = useState(false)
   const startedAtRef = useRef(new Date().toISOString())
   const savingRef = useRef(false)
+  const [resumeDetectedAt] = useState(() => Date.now())
   const timer = useTimer({ countUp: true })
   const startTimer = timer.start
+  const getTimerElapsedSeconds = timer.getElapsedSeconds
+  const timerRunning = timer.isRunning
   const { signInWithGoogle } = useAuth()
 
   useEffect(() => {
@@ -108,25 +112,49 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
     }
   }, [phase, pendingResume, startTimer])
 
-  useEffect(() => {
+  const saveProgressSnapshot = useCallback(() => {
     if (phase !== "workout" || savingRef.current) return
+    const savedAtMs = Date.now()
     saveFreeformProgress({
       exercises,
-      elapsedSeconds: timer.elapsedSeconds,
+      elapsedSeconds: getTimerElapsedSeconds(savedAtMs),
+      timerRunning,
       startedAt: startedAtRef.current,
-      savedAt: new Date().toISOString(),
+      savedAt: new Date(savedAtMs).toISOString(),
     })
-  }, [phase, exercises, timer.elapsedSeconds])
+  }, [phase, exercises, getTimerElapsedSeconds, timerRunning])
+
+  useEffect(() => {
+    saveProgressSnapshot()
+  }, [saveProgressSnapshot, timer.elapsedSeconds])
+
+  useEffect(() => {
+    const saveIfHidden = () => {
+      if (document.visibilityState === "hidden") saveProgressSnapshot()
+    }
+    window.addEventListener("pagehide", saveProgressSnapshot)
+    document.addEventListener("visibilitychange", saveIfHidden)
+    return () => {
+      window.removeEventListener("pagehide", saveProgressSnapshot)
+      document.removeEventListener("visibilitychange", saveIfHidden)
+    }
+  }, [saveProgressSnapshot])
 
   const handleResume = useCallback(() => {
     if (!pendingResume) return
     setExercises(pendingResume.exercises)
     startedAtRef.current = pendingResume.startedAt
-    timer.resetTo(pendingResume.elapsedSeconds)
-    timer.start()
+    const wasRunning = pendingResume.timerRunning ?? true
+    timer.resetTo(restoreElapsedSeconds({
+      elapsedSeconds: pendingResume.elapsedSeconds,
+      savedAt: pendingResume.savedAt,
+      wasRunning: pendingResume.timerRunning === true,
+      restoredAtMs: resumeDetectedAt,
+    }))
+    if (wasRunning) timer.start()
     setPendingResume(null)
     setPhase("workout")
-  }, [pendingResume, timer])
+  }, [pendingResume, timer, resumeDetectedAt])
 
   const handleDiscardResume = useCallback(() => {
     clearFreeformProgress()
