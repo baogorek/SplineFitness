@@ -13,11 +13,22 @@ import {
   isFrontierImprovement,
   parseDuration,
 } from "@/lib/frontier-utils"
+import {
+  FRONTIER_BODY_PARTS,
+  getFrontierExerciseStructure,
+} from "@/lib/frontier-structure"
 import { cn } from "@/lib/utils"
-import { FrontierExercise, FrontierMetric, FrontierValue } from "@/types/frontier"
+import {
+  FrontierBodyPart,
+  FrontierExercise,
+  FrontierMetric,
+  FrontierValue,
+} from "@/types/frontier"
 
 export interface FrontierEntrySave {
   name: string
+  equipment: string
+  bodyPart: FrontierBodyPart
   metric: FrontierMetric
   value: FrontierValue | null
   rawValue: string | null
@@ -26,6 +37,7 @@ export interface FrontierEntrySave {
 
 interface FrontierEntrySheetProps {
   exercise: FrontierExercise | null
+  equipmentOptions: string[]
   onClose: () => void
   onSave: (entry: FrontierEntrySave) => void
   onUndo?: () => void
@@ -38,14 +50,20 @@ function valuesMatch(a: FrontierValue | null, b: FrontierValue): boolean {
 
 export function FrontierEntrySheet({
   exercise,
+  equipmentOptions,
   onClose,
   onSave,
   onUndo,
   onDelete,
 }: FrontierEntrySheetProps) {
+  const initialStructure = exercise ? getFrontierExerciseStructure(exercise) : null
   const currentChange = exercise ? getCurrentFrontierChange(exercise.changes) : null
   const current = exercise ? getCurrentFrontier(exercise.changes) : null
-  const [name, setName] = useState(exercise?.name ?? "")
+  const [name, setName] = useState(initialStructure?.name ?? "")
+  const [equipment, setEquipment] = useState(initialStructure?.equipment ?? "")
+  const [bodyPart, setBodyPart] = useState<FrontierBodyPart | "">(
+    initialStructure?.bodyPart ?? ""
+  )
   const [metric, setMetric] = useState<FrontierMetric>(exercise?.metric ?? "reps")
   const [primary, setPrimary] = useState(current ? String(current.primary) : "")
   const [duration, setDuration] = useState(
@@ -96,7 +114,14 @@ export function FrontierEntrySheet({
 
   const rawValue = metric === "freeform" ? customMark.trim() || null : null
   const hasMeasure = Boolean(parsedValue || rawValue)
-  const nameChanged = Boolean(exercise && name.trim() !== exercise.name)
+  const detailsChanged = Boolean(
+    exercise
+      && (
+        name.trim() !== initialStructure?.name
+        || equipment.trim() !== initialStructure?.equipment
+        || bodyPart !== initialStructure?.bodyPart
+      )
+  )
   const valueChanged = metric === "freeform"
     ? Boolean(rawValue && rawValue !== (currentChange?.rawValue ?? ""))
     : parsedValue ? !valuesMatch(current, parsedValue) : false
@@ -114,11 +139,13 @@ export function FrontierEntrySheet({
         : !primary.trim()
   const canSave = Boolean(
     name.trim()
+      && equipment.trim()
+      && bodyPart
       && (!exercise
         ? hasMeasure || measureFieldsEmpty
         : hasMeasure
-          ? correcting || improvement || (nameChanged && !valueChanged)
-          : nameChanged && measureFieldsEmpty)
+          ? correcting || improvement || (detailsChanged && !valueChanged)
+          : detailsChanged && measureFieldsEmpty)
   )
 
   const handleMetricChange = (nextMetric: FrontierMetric) => {
@@ -129,9 +156,11 @@ export function FrontierEntrySheet({
   }
 
   const handleSubmit = () => {
-    if (!canSave) return
+    if (!canSave || !bodyPart) return
     onSave({
       name: name.trim(),
+      equipment: equipment.trim(),
+      bodyPart,
       metric,
       value: parsedValue,
       rawValue,
@@ -175,7 +204,7 @@ export function FrontierEntrySheet({
               {exercise ? (correcting ? "Correct the card" : "Move the frontier") : "New exercise"}
             </p>
             <h2 id="frontier-entry-title" className="mt-1 text-xl font-bold text-slate-900">
-              {exercise?.name ?? "Add a row"}
+              {initialStructure?.name ?? "Add a row"}
             </h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
@@ -185,6 +214,49 @@ export function FrontierEntrySheet({
 
         <div className="space-y-5">
           <div className="space-y-2">
+            <label htmlFor="frontier-equipment" className="text-sm font-semibold text-slate-700">
+              Equipment
+            </label>
+            <Input
+              id="frontier-equipment"
+              list="frontier-equipment-options"
+              value={equipment}
+              onChange={(event) => setEquipment(event.target.value)}
+              placeholder="e.g. Multitrainer or Cable by mirrors"
+              autoComplete="off"
+              autoFocus={!exercise}
+              className="h-11"
+            />
+            <datalist id="frontier-equipment-options">
+              {equipmentOptions.map((option) => <option key={option} value={option} />)}
+            </datalist>
+            <p className="text-[11px] text-slate-400">
+              Equipment names belong only to this location card.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-700">Body part</p>
+            <div className="grid grid-cols-3 gap-2">
+              {FRONTIER_BODY_PARTS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setBodyPart(option)}
+                  className={cn(
+                    "rounded-lg border px-2 py-2 text-xs font-semibold transition-colors",
+                    bodyPart === option
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <label htmlFor="frontier-name" className="text-sm font-semibold text-slate-700">
               Exercise
             </label>
@@ -193,7 +265,6 @@ export function FrontierEntrySheet({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Exercise name"
-              autoFocus={!exercise}
               className="h-11"
             />
           </div>
@@ -274,10 +345,10 @@ export function FrontierEntrySheet({
           >
             {!exercise
               ? hasMeasure ? "Add to card" : "Add exercise"
-              : correcting
-                ? "Save correction"
-                : nameChanged && !valueChanged
-                  ? "Save name"
+                : correcting
+                  ? "Save correction"
+                : detailsChanged && !valueChanged
+                  ? "Save exercise"
                   : "Update frontier"}
           </Button>
 

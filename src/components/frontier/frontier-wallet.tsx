@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   Check,
@@ -28,6 +28,12 @@ import {
   FrontierExercise,
 } from "@/types/frontier"
 import { SpreadsheetImportRow } from "@/lib/frontier-import"
+import {
+  frontierExerciseIdentity,
+  getFrontierExerciseStructure,
+  normalizeFrontierCard,
+  normalizeFrontierEquipment,
+} from "@/lib/frontier-structure"
 import { FrontierEntrySave, FrontierEntrySheet } from "./frontier-entry-sheet"
 import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
@@ -76,7 +82,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       const storedCards = await getFrontierCards()
       if (cancelled) return
 
-      let nextCards = storedCards
+      let nextCards = storedCards.map(normalizeFrontierCard)
       if (nextCards.length === 0) {
         const anywhere = createCard("Anywhere", 0)
         nextCards = [anywhere]
@@ -108,6 +114,14 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   }, [])
 
   const currentCard = cards[currentIndex] ?? null
+  const equipmentOptions = useMemo(() => {
+    const options = new Map<string, string>()
+    currentCard?.exercises.forEach((exercise) => {
+      const equipment = getFrontierExerciseStructure(exercise).equipment
+      if (equipment) options.set(equipment.toLocaleLowerCase(), equipment)
+    })
+    return [...options.values()]
+  }, [currentCard])
   const editingExercise = currentCard?.exercises.find(
     (exercise) => exercise.id === editingExerciseId
   ) ?? null
@@ -137,6 +151,10 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const handleEntrySave = (entry: FrontierEntrySave) => {
     if (!currentCard) return
     const now = new Date().toISOString()
+    const normalizedEquipment = normalizeFrontierEquipment(entry.equipment)
+    const equipment = equipmentOptions.find(
+      (option) => option.toLocaleLowerCase() === normalizedEquipment.toLocaleLowerCase()
+    ) ?? normalizedEquipment
 
     if (!editingExercise) {
       const changes: FrontierChange[] = entry.value || entry.rawValue
@@ -151,6 +169,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       const exercise: FrontierExercise = {
         id: crypto.randomUUID(),
         name: entry.name,
+        equipment,
+        bodyPart: entry.bodyPart,
         metric: entry.metric,
         changes,
         order: currentCard.exercises.length,
@@ -180,6 +200,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       const updatedExercise: FrontierExercise = {
         ...editingExercise,
         name: entry.name,
+        equipment,
+        bodyPart: entry.bodyPart,
         metric: entry.metric,
         changes: nextChanges,
         updatedAt: now,
@@ -203,7 +225,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     const now = new Date().toISOString()
     const nextExercises = [...currentCard.exercises]
     const exercisesByName = new Map(
-      nextExercises.map((exercise) => [normalizeExerciseName(exercise.name), exercise])
+      nextExercises.map((exercise) => [frontierExerciseIdentity(exercise), exercise])
     )
     let added = 0
     let appendedRows = 0
@@ -217,7 +239,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         rawValue: mark.rawValue,
         kind: "import",
       }))
-      const existing = exercisesByName.get(normalizeExerciseName(row.name))
+      const rowIdentity = frontierExerciseIdentity(row)
+      const existing = exercisesByName.get(rowIdentity)
 
       if (existing) {
         if (changes.length > 0) {
@@ -228,7 +251,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           }
           const index = nextExercises.findIndex((exercise) => exercise.id === existing.id)
           nextExercises[index] = updatedExercise
-          exercisesByName.set(normalizeExerciseName(row.name), updatedExercise)
+          exercisesByName.set(rowIdentity, updatedExercise)
           appendedRows += 1
           appendedMarks += changes.length
         } else {
@@ -240,6 +263,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       const exercise: FrontierExercise = {
         id: crypto.randomUUID(),
         name: row.name,
+        ...(row.equipment ? { equipment: row.equipment } : {}),
+        ...(row.bodyPart ? { bodyPart: row.bodyPart } : {}),
         metric: row.metric,
         changes,
         order: nextExercises.length,
@@ -247,7 +272,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         updatedAt: now,
       }
       nextExercises.push(exercise)
-      exercisesByName.set(normalizeExerciseName(row.name), exercise)
+      exercisesByName.set(rowIdentity, exercise)
       added += 1
     })
 
@@ -383,7 +408,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-col px-3 pb-8 pt-6 sm:px-6 sm:pt-8">
+      <main className="mx-auto flex w-full max-w-3xl flex-col px-2 pb-8 pt-6 sm:px-6 sm:pt-8">
         <div className="mb-4 flex items-center justify-between px-2 sm:px-8">
           <Button
             variant="outline"
@@ -475,6 +500,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       {entrySheetOpen && (
         <FrontierEntrySheet
           exercise={editingExercise}
+          equipmentOptions={equipmentOptions}
           onClose={() => {
             setEntrySheetOpen(false)
             setEditingExerciseId(null)
@@ -505,10 +531,6 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       )}
     </div>
   )
-}
-
-function normalizeExerciseName(name: string): string {
-  return name.trim().toLocaleLowerCase()
 }
 
 function SaveIndicator({ status, cloud }: { status: SaveStatus; cloud: boolean }) {

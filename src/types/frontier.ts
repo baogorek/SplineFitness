@@ -7,6 +7,14 @@ export type FrontierMetric =
   | "speed"
   | "freeform"
 
+export type FrontierBodyPart =
+  | "Legs"
+  | "Back"
+  | "Shoulders"
+  | "Core"
+  | "Chest"
+  | "Arms"
+
 export interface FrontierValue {
   primary: number
   secondary?: number
@@ -23,6 +31,10 @@ export interface FrontierChange {
 export interface FrontierExercise {
   id: string
   name: string
+  /** Location-specific station name. Optional only for cards saved before structured organization. */
+  equipment?: string
+  /** A simple organizational category, not an anatomical classification. */
+  bodyPart?: FrontierBodyPart
   metric: FrontierMetric
   changes: FrontierChange[]
   order: number

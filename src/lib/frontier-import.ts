@@ -1,5 +1,11 @@
 import { parseDuration } from "@/lib/frontier-utils"
-import { FrontierMetric, FrontierValue } from "@/types/frontier"
+import {
+  frontierExerciseIdentity,
+  normalizeFrontierBodyPart,
+  normalizeFrontierEquipment,
+  parseFrontierExerciseName,
+} from "@/lib/frontier-structure"
+import { FrontierBodyPart, FrontierMetric, FrontierValue } from "@/types/frontier"
 
 export interface SpreadsheetImportMark {
   rawValue: string
@@ -9,6 +15,8 @@ export interface SpreadsheetImportMark {
 export interface SpreadsheetImportRow {
   sourceRow: number
   name: string
+  equipment?: string
+  bodyPart?: FrontierBodyPart
   metric: FrontierMetric
   marks: SpreadsheetImportMark[]
   warnings: string[]
@@ -26,6 +34,13 @@ interface StructuredMark {
   value: FrontierValue
 }
 
+interface StructuredHeader {
+  rowIndex: number
+  equipmentColumn: number
+  bodyPartColumn: number
+  exerciseColumn: number
+}
+
 export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
   const table = parseTabularText(text.replace(/^\uFEFF/, ""))
   const rows: SpreadsheetImportRow[] = []
@@ -33,13 +48,43 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
   let suggestedCardName: string | null = null
   let skippedRows = 0
   let ignoredBoundaryCells = 0
+  const structuredHeader = findStructuredHeader(table)
 
   table.forEach((sourceCells, rowIndex) => {
     const cells = sourceCells.map(normalizeCell)
     if (cells.every((cell) => !cell)) return
 
-    const name = cells[0] ?? ""
-    const remainingValues = cells.slice(1).filter(Boolean)
+    if (structuredHeader && rowIndex < structuredHeader.rowIndex) {
+      const nonBoundaryValues = cells.filter((cell) => cell && !isBoundaryCell(cell))
+      ignoredBoundaryCells += cells.filter((cell) => isBoundaryCell(cell)).length
+      if (!suggestedCardName && nonBoundaryValues.length === 1) {
+        suggestedCardName = nonBoundaryValues[0]
+      }
+      return
+    }
+    if (structuredHeader && rowIndex === structuredHeader.rowIndex) return
+
+    const sourceName = structuredHeader
+      ? cells[structuredHeader.exerciseColumn] ?? ""
+      : cells[0] ?? ""
+    const parsedName = structuredHeader ? null : parseFrontierExerciseName(sourceName)
+    const name = parsedName?.name ?? sourceName
+    const equipmentValue = structuredHeader
+      ? cells[structuredHeader.equipmentColumn] ?? ""
+      : parsedName?.equipment ?? ""
+    const equipment = equipmentValue ? normalizeFrontierEquipment(equipmentValue) : undefined
+    const bodyPartValue = structuredHeader
+      ? cells[structuredHeader.bodyPartColumn] ?? ""
+      : parsedName?.bodyPart
+    const bodyPart = normalizeFrontierBodyPart(bodyPartValue) ?? undefined
+    const markStart = structuredHeader
+      ? Math.max(
+          structuredHeader.equipmentColumn,
+          structuredHeader.bodyPartColumn,
+          structuredHeader.exerciseColumn
+        ) + 1
+      : 1
+    const remainingValues = cells.slice(markStart).filter(Boolean)
 
     if (!name) {
       const nonBoundaryValues = remainingValues.filter((cell) => !isBoundaryCell(cell))
@@ -55,7 +100,7 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
     if (/^exercise(?:\s+name)?$/i.test(name)) return
 
     const rawMarks: string[] = []
-    cells.slice(1).forEach((cell) => {
+    cells.slice(markStart).forEach((cell) => {
       if (!cell) return
       if (isBoundaryCell(cell)) {
         ignoredBoundaryCells += 1
@@ -68,6 +113,13 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
     const metric = inferRowMetric(parsedMarks)
     const warnings: string[] = []
 
+    if (structuredHeader && !equipment) {
+      warnings.push("Equipment is missing; this exercise will be ungrouped")
+    }
+    if (structuredHeader && !bodyPart) {
+      warnings.push("Body part must be Legs, Back, Shoulders, Core, Chest, or Arms")
+    }
+
     if (rawMarks.some((mark) => /^\d+(?:\.\d+)?\s*b\s*\//i.test(mark))) {
       warnings.push("Possible weight-unit typo kept as a custom mark")
     }
@@ -78,7 +130,7 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
       return { rawValue, value: parsed.value }
     })
 
-    const normalizedName = name.toLocaleLowerCase()
+    const normalizedName = frontierExerciseIdentity({ name, equipment, bodyPart })
     const duplicate = rowsByName.get(normalizedName)
     if (duplicate) {
       const mergedRawMarks = [...duplicate.marks.map((mark) => mark.rawValue), ...rawMarks]
@@ -96,6 +148,8 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
     const row: SpreadsheetImportRow = {
       sourceRow: rowIndex + 1,
       name,
+      ...(equipment ? { equipment } : {}),
+      ...(bodyPart ? { bodyPart } : {}),
       metric,
       marks,
       warnings,
@@ -110,6 +164,19 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
     skippedRows,
     ignoredBoundaryCells,
   }
+}
+
+function findStructuredHeader(table: string[][]): StructuredHeader | null {
+  for (let rowIndex = 0; rowIndex < table.length; rowIndex += 1) {
+    const cells = table[rowIndex].map((cell) => normalizeCell(cell).toLocaleLowerCase())
+    const equipmentColumn = cells.findIndex((cell) => /^(?:equipment|station)$/.test(cell))
+    const bodyPartColumn = cells.findIndex((cell) => /^(?:body\s*part|area)$/.test(cell))
+    const exerciseColumn = cells.findIndex((cell) => /^exercise(?:\s+name)?$/.test(cell))
+    if (equipmentColumn >= 0 && bodyPartColumn >= 0 && exerciseColumn >= 0) {
+      return { rowIndex, equipmentColumn, bodyPartColumn, exerciseColumn }
+    }
+  }
+  return null
 }
 
 export function parseTabularText(text: string): string[][] {

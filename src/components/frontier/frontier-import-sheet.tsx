@@ -7,6 +7,7 @@ import {
   parseSpreadsheetPaste,
   SpreadsheetImportRow,
 } from "@/lib/frontier-import"
+import { frontierExerciseIdentity } from "@/lib/frontier-structure"
 import { FRONTIER_METRIC_OPTIONS } from "@/lib/frontier-utils"
 import { FrontierCard } from "@/types/frontier"
 
@@ -20,19 +21,19 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
   const [paste, setPaste] = useState("")
   const parsed = useMemo(() => parseSpreadsheetPaste(paste), [paste])
   const existingExercises = useMemo(
-    () => new Map(card.exercises.map((exercise) => [normalizeName(exercise.name), exercise])),
+    () => new Map(card.exercises.map((exercise) => [frontierExerciseIdentity(exercise), exercise])),
     [card.exercises]
   )
 
   const importableRows = parsed.rows.filter((row) => {
-    const existing = existingExercises.get(normalizeName(row.name))
+    const existing = existingExercises.get(frontierExerciseIdentity(row))
     return !existing || row.marks.length > 0
   })
   const newExerciseCount = parsed.rows.filter(
-    (row) => !existingExercises.has(normalizeName(row.name))
+    (row) => !existingExercises.has(frontierExerciseIdentity(row))
   ).length
   const appendedRows = parsed.rows.filter((row) => {
-    const existing = existingExercises.get(normalizeName(row.name))
+    const existing = existingExercises.get(frontierExerciseIdentity(row))
     return Boolean(existing && row.marks.length > 0)
   })
   const appendedMarkCount = appendedRows.reduce((total, row) => total + row.marks.length, 0)
@@ -84,14 +85,14 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
             Copied cells
           </label>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            Put exercise names in the first column and older-to-newer marks in the columns to the right.
-            Matching exercises get new marks appended; existing history is never replaced.
+            Use names like “MT - Shoulders - Shoulder Press,” or columns headed Equipment,
+            Body Part, and Exercise. Put older-to-newer marks to the right.
           </p>
           <textarea
             id="frontier-spreadsheet-paste"
             value={paste}
             onChange={(event) => setPaste(event.target.value)}
-            placeholder={"Exercise name\t20 lb / 1:00\t20 lb / 1:30"}
+            placeholder={"MT - Shoulders - Shoulder Press\t20 lb / 1:00\t20 lb / 1:30"}
             autoFocus
             spellCheck={false}
             className="mt-3 min-h-28 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-sm text-slate-800 shadow-inner outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
@@ -151,7 +152,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                 </div>
                 <ol className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
                   {parsed.rows.map((row) => {
-                    const existing = existingExercises.get(normalizeName(row.name))
+                    const existing = existingExercises.get(frontierExerciseIdentity(row))
                     const willAppend = Boolean(existing && row.marks.length > 0)
                     const willSkip = Boolean(existing && !willAppend)
                     const metricLabel = FRONTIER_METRIC_OPTIONS.find(
@@ -161,7 +162,12 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                       <li key={`${row.sourceRow}-${row.name}`} className="px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
+                            <p className="text-sm font-semibold text-slate-800">{row.name}</p>
+                            {(row.equipment || row.bodyPart) && (
+                              <p className="mt-0.5 text-[11px] font-medium text-indigo-500">
+                                {[row.equipment, row.bodyPart].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
                             <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
                               {row.marks.length > 0
                                 ? row.marks.map((mark) => mark.rawValue).join("  →  ")
@@ -223,10 +229,6 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
       </section>
     </div>
   )
-}
-
-function normalizeName(name: string): string {
-  return name.trim().toLocaleLowerCase()
 }
 
 function SummaryPill({
