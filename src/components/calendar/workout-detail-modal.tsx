@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
-import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession, Vo2MaxWorkoutSession } from "@/types/workout"
+import { Activity, X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
+import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession, LissCoreWorkoutSession, Vo2MaxWorkoutSession } from "@/types/workout"
+import { formatCableSetup } from "@/data/liss-core"
 import { formatDisplayDate } from "./calendar-utils"
 
 interface WorkoutDetailModalProps {
@@ -101,6 +102,71 @@ function Vo2MaxDataView({ session }: { session: Vo2MaxWorkoutSession }) {
   )
 }
 
+function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
+  const setupRows = session.cableSetup.useSideSpecificRotation
+    ? [
+        ["Rotation — left", session.cableSetup.rotationLeft ?? session.cableSetup.rotation],
+        ["Rotation — right", session.cableSetup.rotationRight ?? session.cableSetup.rotation],
+        ["Crunch", session.cableSetup.crunch],
+        ["Anti-flexion", session.cableSetup.antiFlexion],
+      ] as const
+    : [
+        ["Rotation", session.cableSetup.rotation],
+        ["Crunch", session.cableSetup.crunch],
+        ["Anti-flexion", session.cableSetup.antiFlexion],
+      ] as const
+  const ratingLabels = {
+    "too-easy": "Too Easy",
+    "about-right": "About Right",
+    "too-hard": "Too Hard",
+  } as const
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Total</p>
+          <p className="mt-1 font-mono text-lg font-bold">{formatDuration(session.totalTimeSeconds)}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Intervals</p>
+          <p className="mt-1 text-sm font-bold">{session.completedIntervals} completed</p>
+          <p className="text-xs text-muted-foreground">{session.skippedIntervals} skipped</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Treadmill</p>
+          <p className="mt-1 font-mono text-sm font-bold">{formatDuration(session.lissSeconds)}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Core endurance</p>
+          <p className="mt-1 font-mono text-sm font-bold">{formatDuration(session.abdominalSeconds)} abdominal</p>
+          <p className="text-xs text-muted-foreground">{formatDuration(session.extensorSeconds)} extensor</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {setupRows.map(([label, setup]) => (
+          <div key={label} className="rounded-lg border p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-1 text-sm text-foreground">{formatCableSetup(setup) ?? "Not recorded"}</p>
+            {setup.setupNote && <p className="mt-1 text-xs text-muted-foreground">{setup.setupNote}</p>}
+          </div>
+        ))}
+      </div>
+
+      {session.difficultyRatings && Object.keys(session.difficultyRatings).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(session.difficultyRatings).map(([exercise, rating]) => (
+            rating ? <Badge key={exercise} variant="outline" className="text-[10px] capitalize">{exercise.replace("anti-flexion", "Anti-flexion")}: {ratingLabels[rating]}</Badge> : null
+          ))}
+        </div>
+      )}
+      {session.endedEarly && <p className="text-xs font-medium text-amber-600">Workout ended early</p>}
+      {session.notes && <p className="rounded-lg bg-muted/50 p-3 text-sm text-foreground">{session.notes}</p>}
+    </div>
+  )
+}
+
 function WorkoutDataView({ session }: { session: WorkoutSession }) {
   if (session.mode === "freeform" || (session.mode as string) === "traditional") {
     const freeformSession = session as FreeformWorkoutSession
@@ -110,6 +176,9 @@ function WorkoutDataView({ session }: { session: WorkoutSession }) {
   }
   if (session.mode === "vo2max") {
     return <Vo2MaxDataView session={session} />
+  }
+  if (session.mode === "liss-core") {
+    return <LissCoreDataView session={session} />
   }
   return (
     <div className="space-y-3">
@@ -149,6 +218,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                   <Timer className="h-4 w-4 text-red-500" />
                 ) : entry.session.mode === "sit" ? (
                   <Zap className="h-4 w-4 text-green-500" />
+                ) : entry.session.mode === "liss-core" ? (
+                  <Activity className="h-4 w-4 text-violet-500" />
                 ) : entry.session.mode === "vo2max" ? (
                   <Gauge className="h-4 w-4 text-cyan-500" />
                 ) : entry.session.mode === "coached" ? (
@@ -163,6 +234,8 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
                     ? "4x4 Interval"
                     : entry.session.mode === "sit"
                     ? "SIT Sprint"
+                    : entry.session.mode === "liss-core"
+                    ? "LISS + Core Endurance"
                     : entry.session.mode === "vo2max"
                     ? "VO2 Max"
                     : entry.session.mode === "coached"

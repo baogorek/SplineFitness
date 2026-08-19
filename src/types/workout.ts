@@ -1,4 +1,4 @@
-export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "vo2max"
+export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "liss-core" | "vo2max"
 export type WorkoutVariant = "A" | "B"
 export type SitPhase =
   | "ready"
@@ -232,6 +232,100 @@ export interface SitSessionProgress {
   savedAt: string
 }
 
+// LISS + Core Endurance Types
+export type CoreExerciseId = "rotation" | "crunch" | "anti-flexion"
+export type CoreDifficulty = "too-easy" | "about-right" | "too-hard"
+export type LissCoreStepKind = "work" | "transition" | "reset"
+export type LissCoreWorkCategory = "liss" | "abdominal" | "extensor"
+
+export interface LissCoreTemplate {
+  lissDurationSeconds: number
+  rounds: number
+  treadmillTransitionSeconds: number
+  betweenExerciseSeconds: number
+  betweenRoundSeconds: number
+  rotationSideDurationSeconds: number
+  crunchDurationSeconds: number
+  antiFlexionHoldCount: number
+  antiFlexionHoldDurationSeconds: number
+  antiFlexionResetSeconds: number
+  exerciseOrder: CoreExerciseId[]
+}
+
+export interface CableExerciseSetup {
+  weight?: number
+  pulleyPosition?: string
+  attachment?: string
+  setupNote?: string
+}
+
+export interface LissCoreCableSetup {
+  useSideSpecificRotation: boolean
+  rotation: CableExerciseSetup
+  rotationLeft?: CableExerciseSetup
+  rotationRight?: CableExerciseSetup
+  crunch: CableExerciseSetup
+  antiFlexion: CableExerciseSetup
+}
+
+export interface LissCoreStep {
+  id: string
+  kind: LissCoreStepKind
+  label: string
+  durationSeconds: number
+  exerciseId?: "treadmill" | CoreExerciseId
+  substep?: string
+  round?: number
+  side?: "left" | "right"
+  holdNumber?: number
+  workCategory?: LissCoreWorkCategory
+  transitionType?: "to-circuit" | "between-exercises" | "between-rounds" | "hold-reset"
+  instructions?: string
+}
+
+export interface LissCoreStepResult {
+  stepId: string
+  stepIndex: number
+  status: "completed" | "skipped"
+  elapsedSeconds: number
+}
+
+export interface LissCoreWorkoutSession {
+  mode: "liss-core"
+  startedAt: string
+  completedAt?: string
+  totalTimeSeconds: number
+  template: LissCoreTemplate
+  cableSetup: LissCoreCableSetup
+  stepResults: LissCoreStepResult[]
+  lissSeconds: number
+  abdominalSeconds: number
+  extensorSeconds: number
+  completedIntervals: number
+  skippedIntervals: number
+  difficultyRatings?: Partial<Record<CoreExerciseId | "overall", CoreDifficulty>>
+  notes?: string
+  endedEarly: boolean
+}
+
+export interface LissCoreSessionProgress {
+  phase: "active" | "complete"
+  template: LissCoreTemplate
+  cableSetup: LissCoreCableSetup
+  previousCableSetup: LissCoreCableSetup
+  voiceCues: boolean
+  startedAt: string
+  savedAt: string
+  stepIndex: number
+  isRunning: boolean
+  stepEndAtMs: number | null
+  remainingMs: number
+  activeElapsedMs: number
+  lastTickAtMs: number | null
+  stepResults: LissCoreStepResult[]
+  endedEarly: boolean
+}
+
 // VO2 Max Types
 export interface Vo2MaxWorkoutSession {
   mode: "vo2max"
@@ -281,6 +375,7 @@ export type ActiveWorkoutSession =
   | FreeformWorkoutSession
   | IntervalWorkoutSession
   | SitWorkoutSession
+  | LissCoreWorkoutSession
   | Vo2MaxWorkoutSession
 export type WorkoutSession =
   | ActiveWorkoutSession

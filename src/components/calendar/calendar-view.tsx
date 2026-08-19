@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ChevronLeft, ChevronRight, Timer, Dumbbell, Gauge } from "lucide-react"
+import { Activity, ArrowLeft, ChevronLeft, ChevronRight, Timer, Dumbbell, Gauge } from "lucide-react"
 import { WorkoutHistoryEntry } from "@/types/workout"
 import { getWorkoutHistory } from "@/lib/storage"
 import { formatMonthYear, groupWorkoutsByDate } from "./calendar-utils"
@@ -56,6 +56,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
   const circuitCount = workouts.filter((w) => w.session.mode === "circuit").length
   const freeformCount = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string).length
   const vo2MaxCount = workouts.filter((w) => w.session.mode === "vo2max").length
+  const lissCoreCount = workouts.filter((w) => w.session.mode === "liss-core").length
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -83,6 +84,10 @@ export function CalendarView({ onBack }: CalendarViewProps) {
               <span className="flex items-center gap-1">
                 <Gauge className="h-3 w-3 text-cyan-500" />
                 {vo2MaxCount}
+              </span>
+              <span className="flex items-center gap-1">
+                <Activity className="h-3 w-3 text-violet-500" />
+                {lissCoreCount}
               </span>
             </div>
           </div>

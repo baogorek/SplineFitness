@@ -7,6 +7,9 @@ import {
   CircuitSessionProgress,
   FreeformSessionProgress,
   Vo2MaxSessionProgress,
+  LissCoreSessionProgress,
+  LissCoreTemplate,
+  LissCoreCableSetup,
   ExercisePreference,
   ExerciseSetting,
 } from "@/types/workout"
@@ -33,6 +36,10 @@ const STORAGE_KEYS = {
   CIRCUIT_PROGRESS: "strength-tracker:circuit-progress",
   FREEFORM_PROGRESS: "strength-tracker:freeform-progress",
   VO2MAX_PROGRESS: "strength-tracker:vo2max-progress",
+  LISS_CORE_PROGRESS: "strength-tracker:liss-core-progress",
+  LISS_CORE_TEMPLATE: "strength-tracker:liss-core-template",
+  LISS_CORE_CABLE_SETUP: "strength-tracker:liss-core-cable-setup",
+  LISS_CORE_VOICE_CUES: "strength-tracker:liss-core-voice-cues",
   EXERCISE_PREFERENCES: "strength-tracker:exercise-preferences",
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
   EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
@@ -142,6 +149,9 @@ export function clearWorkoutProgress(mode: ActiveWorkoutSession["mode"]): void {
     case "vo2max":
       clearVo2MaxProgress()
       break
+    case "liss-core":
+      clearLissCoreProgress()
+      break
   }
 }
 
@@ -152,6 +162,7 @@ export async function clearProgressAlreadySavedToHistory(): Promise<void> {
     { mode: "interval" as const, progress: getIntervalProgress() },
     { mode: "sit" as const, progress: getSitProgress() },
     { mode: "vo2max" as const, progress: getVo2MaxProgress() },
+    { mode: "liss-core" as const, progress: getLissCoreProgress() },
   ].filter((entry) => entry.progress !== null)
 
   if (savedProgress.length === 0) return
@@ -299,6 +310,97 @@ export function clearVo2MaxProgress(): void {
     localStorage.removeItem(STORAGE_KEYS.VO2MAX_PROGRESS)
   } catch (error) {
     console.warn("Error clearing VO2 Max progress:", error)
+  }
+}
+
+export function saveLissCoreProgress(progress: LissCoreSessionProgress): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.LISS_CORE_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving LISS + Core progress:", error)
+  }
+}
+
+export function getLissCoreProgress(): LissCoreSessionProgress | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_PROGRESS)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearLissCoreProgress(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.LISS_CORE_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing LISS + Core progress:", error)
+  }
+}
+
+export function getLissCoreTemplate(): LissCoreTemplate | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_TEMPLATE)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function saveLissCoreTemplate(template: LissCoreTemplate): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.LISS_CORE_TEMPLATE, JSON.stringify(template))
+  } catch (error) {
+    console.warn("Error saving LISS + Core template:", error)
+  }
+}
+
+const EMPTY_LISS_CORE_CABLE_SETUP: LissCoreCableSetup = {
+  useSideSpecificRotation: false,
+  rotation: {},
+  crunch: {},
+  antiFlexion: {},
+}
+
+export function getLissCoreCableSetup(): LissCoreCableSetup {
+  if (typeof window === "undefined") return EMPTY_LISS_CORE_CABLE_SETUP
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_CABLE_SETUP)
+    return data ? { ...EMPTY_LISS_CORE_CABLE_SETUP, ...JSON.parse(data) } : EMPTY_LISS_CORE_CABLE_SETUP
+  } catch {
+    return EMPTY_LISS_CORE_CABLE_SETUP
+  }
+}
+
+export function saveLissCoreCableSetup(cableSetup: LissCoreCableSetup): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.LISS_CORE_CABLE_SETUP, JSON.stringify(cableSetup))
+  } catch (error) {
+    console.warn("Error saving LISS + Core cable setup:", error)
+  }
+}
+
+export function getLissCoreVoiceCues(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return localStorage.getItem(STORAGE_KEYS.LISS_CORE_VOICE_CUES) === "true"
+  } catch {
+    return false
+  }
+}
+
+export function saveLissCoreVoiceCues(enabled: boolean): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEYS.LISS_CORE_VOICE_CUES, String(enabled))
+  } catch (error) {
+    console.warn("Error saving LISS + Core voice preference:", error)
   }
 }
 

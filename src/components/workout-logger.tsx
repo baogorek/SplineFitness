@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge, WalletCards } from "lucide-react"
+import { Activity, Dumbbell, Timer, LogOut, LogIn, Calendar, UserPlus, BookOpen, Volume2, ChevronRight, HeartPulse, Zap, Gauge, WalletCards } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { CircuitWorkout } from "./circuit/circuit-workout"
 import { FreeformWorkout } from "./freeform/freeform-workout"
 import { IntervalWorkout } from "./interval/interval-workout"
 import { SitWorkout } from "./sit/sit-workout"
+import { LissCoreWorkout } from "./liss-core/liss-core-workout"
 import { Vo2MaxWorkout } from "./vo2max/vo2max-workout"
 import { CalendarView } from "./calendar/calendar-view"
 import { BookingView } from "./booking/booking-view"
@@ -20,6 +21,7 @@ import {
   getFreeformProgress,
   getIntervalProgress,
   getSitProgress,
+  getLissCoreProgress,
   getVo2MaxProgress,
 } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
@@ -64,6 +66,18 @@ const workoutModes = [
     border: "border-green-200",
     hoverBorder: "hover:border-green-300",
     iconColor: "text-green-600",
+  },
+  {
+    id: "liss-core" as const,
+    icon: Activity,
+    title: "LISS + Core Endurance",
+    subtitle: "Aerobic + trunk stamina",
+    description: "30-minute LISS with guided abdominal and spinal-extensor endurance",
+    color: "bg-violet-500",
+    lightBg: "bg-violet-50",
+    border: "border-violet-200",
+    hoverBorder: "hover:border-violet-300",
+    iconColor: "text-violet-600",
   },
   {
     id: "vo2max" as const,
@@ -298,6 +312,9 @@ export function WorkoutLogger() {
       if (getSitProgress()) {
         return "sit"
       }
+      if (getLissCoreProgress()) {
+        return "liss-core"
+      }
       if (getVo2MaxProgress()) {
         return "vo2max"
       }
@@ -339,6 +356,10 @@ export function WorkoutLogger() {
 
   if (mode === "sit") {
     return <SitWorkout onModeChange={handleModeChange} />
+  }
+
+  if (mode === "liss-core") {
+    return <LissCoreWorkout onModeChange={handleModeChange} />
   }
 
   if (mode === "vo2max") {

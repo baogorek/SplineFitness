@@ -285,6 +285,20 @@ export function useAudio() {
     setTimeout(() => playBeep(1319, 0.3, 0.5, "exercise-start-3"), 240)
   }, [playBeep])
 
+  const playExerciseEndSound = useCallback(() => {
+    playBeep(988, 0.18, 0.45, "exercise-end-1")
+    setTimeout(() => playBeep(659, 0.3, 0.45, "exercise-end-2"), 150)
+  }, [playBeep])
+
+  const playSideSwitchSound = useCallback(() => {
+    playBeep(740, 0.14, 0.5, "side-switch-1")
+    setTimeout(() => playBeep(740, 0.14, 0.5, "side-switch-2"), 180)
+  }, [playBeep])
+
+  const playWarningSound = useCallback(() => {
+    playBeep(880, 0.12, 0.35, "warning")
+  }, [playBeep])
+
   const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const touchHandlerRef = useRef<(() => void) | null>(null)
   const visibilityHandlerRef = useRef<(() => void) | null>(null)
@@ -408,10 +422,13 @@ export function useAudio() {
     playCountdownTick,
     playCountdownGo,
     playExerciseStartChime,
+    playExerciseEndSound,
+    playSideSwitchSound,
+    playWarningSound,
     speak,
     startKeepalive,
     stopKeepalive,
     getDebugLog,
     clearDebugLog,
-  }), [playMinuteBeep, playCompleteSound, playCountdownTick, playCountdownGo, playExerciseStartChime, speak, startKeepalive, stopKeepalive, getDebugLog, clearDebugLog])
+  }), [playMinuteBeep, playCompleteSound, playCountdownTick, playCountdownGo, playExerciseStartChime, playExerciseEndSound, playSideSwitchSound, playWarningSound, speak, startKeepalive, stopKeepalive, getDebugLog, clearDebugLog])
 }

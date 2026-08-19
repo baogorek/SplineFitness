@@ -17,6 +17,7 @@ service cloud.firestore {
           'freeform',
           'interval',
           'sit',
+          'liss-core',
           'vo2max'
         ]
         && request.resource.data.startedAt is string
