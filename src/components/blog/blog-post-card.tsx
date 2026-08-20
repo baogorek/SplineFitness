@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { BlogPostMeta } from "@/types/blog";
+import { formatBlogDate } from "@/lib/blog-date";
 
 interface BlogPostCardProps {
   post: BlogPostMeta;
@@ -16,11 +17,7 @@ export function BlogPostCard({ post }: BlogPostCardProps) {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{new Date(post.date).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric"
-            })}</span>
+            <span>{formatBlogDate(post.date)}</span>
             <span>·</span>
             <span>{post.readingTime}</span>
           </div>

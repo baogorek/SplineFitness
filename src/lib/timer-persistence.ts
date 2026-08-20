@@ -17,14 +17,18 @@ export function restoreElapsedSeconds({
   restoredAtMs,
   targetSeconds,
 }: RestoreElapsedOptions): number {
-  const savedElapsed = Math.max(0, Math.floor(elapsedSeconds))
+  const savedElapsed = Number.isFinite(elapsedSeconds)
+    ? Math.max(0, Math.floor(elapsedSeconds))
+    : 0
   const savedAtMs = Date.parse(savedAt)
-  const backgroundSeconds = wasRunning && Number.isFinite(savedAtMs)
+  const backgroundSeconds = wasRunning
+    && Number.isFinite(savedAtMs)
+    && Number.isFinite(restoredAtMs)
     ? Math.max(0, Math.floor((restoredAtMs - savedAtMs) / 1000))
     : 0
   const restoredElapsed = savedElapsed + backgroundSeconds
 
-  return targetSeconds === undefined
+  return targetSeconds === undefined || !Number.isFinite(targetSeconds)
     ? restoredElapsed
-    : Math.min(targetSeconds, restoredElapsed)
+    : Math.min(Math.max(0, targetSeconds), restoredElapsed)
 }

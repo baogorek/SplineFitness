@@ -15,9 +15,7 @@ import {
 } from "@/types/workout"
 import { FrontierCard } from "@/types/frontier"
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   orderBy,
@@ -44,7 +42,172 @@ const STORAGE_KEYS = {
   EXERCISE_CHOICES: "strength-tracker:exercise-choices",
   EXERCISE_EQUIPMENT: "strength-tracker:exercise-equipment",
   FRONTIER_CARDS: "strength-tracker:frontier-cards",
+  FRONTIER_PENDING: "strength-tracker:frontier-pending",
+  PENDING_WORKOUTS: "strength-tracker:pending-workouts",
 } as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+interface PendingWorkoutEntry {
+  id: string
+  ownerUid: string | null
+  revision: string
+  session: ActiveWorkoutSession
+}
+
+function normalizeCompletedSession(session: ActiveWorkoutSession): ActiveWorkoutSession {
+  return JSON.parse(JSON.stringify({
+    ...session,
+    completedAt: session.completedAt || new Date().toISOString(),
+  })) as ActiveWorkoutSession
+}
+
+function getPendingWorkoutIdentity(session: ActiveWorkoutSession): string {
+  return `${session.mode}:${session.startedAt}`
+}
+
+function getWorkoutDocumentId(session: ActiveWorkoutSession): string {
+  const safeStartedAt = session.startedAt.replace(/[^a-zA-Z0-9_-]/g, "-")
+  return `${session.mode}-${safeStartedAt}`
+}
+
+function createLocalId(): string {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `workout-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function getPendingWorkoutEntries(): PendingWorkoutEntry[] {
+  if (typeof window === "undefined") return []
+
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.PENDING_WORKOUTS)
+    if (!data) return []
+    const parsed: unknown = JSON.parse(data)
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.filter((entry): entry is PendingWorkoutEntry => {
+      if (!entry || typeof entry !== "object") return false
+      const candidate = entry as Partial<PendingWorkoutEntry>
+      return typeof candidate.id === "string"
+        && (candidate.ownerUid === null || typeof candidate.ownerUid === "string")
+        && typeof candidate.revision === "string"
+        && Boolean(candidate.session)
+        && typeof candidate.session?.mode === "string"
+        && typeof candidate.session?.startedAt === "string"
+    })
+  } catch (error) {
+    console.warn("Error reading pending workouts:", error)
+    return []
+  }
+}
+
+function writePendingWorkoutEntries(entries: PendingWorkoutEntry[]): boolean {
+  if (typeof window === "undefined") return false
+
+  try {
+    if (entries.length === 0) {
+      localStorage.removeItem(STORAGE_KEYS.PENDING_WORKOUTS)
+    } else {
+      localStorage.setItem(STORAGE_KEYS.PENDING_WORKOUTS, JSON.stringify(entries))
+    }
+    return true
+  } catch (error) {
+    console.warn("Error saving pending workouts:", error)
+    return false
+  }
+}
+
+function queuePendingWorkoutSession(session: ActiveWorkoutSession): {
+  entry: PendingWorkoutEntry
+  persisted: boolean
+} {
+  const storedSession = normalizeCompletedSession(session)
+  const entries = getPendingWorkoutEntries()
+  const ownerUid = firebaseAuth?.currentUser?.uid ?? null
+  const identity = getPendingWorkoutIdentity(storedSession)
+  const existingIndex = entries.findIndex((entry) => (
+    getPendingWorkoutIdentity(entry.session) === identity
+      && (entry.ownerUid === ownerUid || (ownerUid !== null && entry.ownerUid === null))
+  ))
+  const existing = existingIndex >= 0 ? entries[existingIndex] : null
+  const sessionChanged = !existing
+    || JSON.stringify(existing.session) !== JSON.stringify(storedSession)
+    || existing.ownerUid !== ownerUid
+  const entry: PendingWorkoutEntry = existing && !sessionChanged
+    ? existing
+    : {
+        id: existing?.id ?? getWorkoutDocumentId(storedSession),
+        ownerUid,
+        revision: createLocalId(),
+        session: storedSession,
+      }
+
+  if (existingIndex >= 0) {
+    entries[existingIndex] = entry
+  } else {
+    entries.push(entry)
+  }
+
+  return { entry, persisted: writePendingWorkoutEntries(entries) }
+}
+
+function clearPendingWorkoutEntry(id: string, revision: string): void {
+  const entries = getPendingWorkoutEntries()
+  const current = entries.find((entry) => entry.id === id && entry.revision === revision)
+  if (!current) return
+  writePendingWorkoutEntries(entries.filter((entry) => (
+    entry.id !== id || entry.revision !== revision
+  )))
+}
+
+async function savePendingWorkoutEntry(entry: PendingWorkoutEntry): Promise<WorkoutHistoryEntry | null> {
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return null
+  if (entry.ownerUid !== null && entry.ownerUid !== user.uid) return null
+
+  try {
+    const workoutRef = doc(firestore, "users", user.uid, "workouts", entry.id)
+    await setDoc(workoutRef, {
+      ...entry.session,
+      createdAt: serverTimestamp(),
+    })
+
+    clearPendingWorkoutEntry(entry.id, entry.revision)
+    clearMatchingWorkoutProgress(entry.session)
+
+    return {
+      id: entry.id,
+      session: entry.session,
+      completedAt: entry.session.completedAt || entry.session.startedAt,
+    }
+  } catch (error) {
+    console.error("Error saving workout session:", error)
+    return null
+  }
+}
+
+export function stageCompletedWorkout(session: ActiveWorkoutSession): ActiveWorkoutSession {
+  const { entry, persisted } = queuePendingWorkoutSession(session)
+  if (persisted) {
+    clearMatchingWorkoutProgress(entry.session)
+  }
+  return entry.session
+}
+
+export async function syncPendingWorkoutSessions(): Promise<void> {
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return
+
+  const pending = getPendingWorkoutEntries().filter(
+    (entry) => entry.ownerUid === null || entry.ownerUid === user.uid
+  )
+  for (const originalEntry of pending) {
+    const { entry } = queuePendingWorkoutSession(originalEntry.session)
+    await savePendingWorkoutEntry(entry)
+  }
+}
 
 export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
   const user = firebaseAuth?.currentUser
@@ -67,41 +230,13 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
     })
   } catch (error) {
     console.error("Error fetching workout history:", error)
-    return []
+    throw error
   }
 }
 
 export async function saveWorkoutSession(session: ActiveWorkoutSession): Promise<WorkoutHistoryEntry | null> {
-  const user = firebaseAuth?.currentUser
-  if (!firestore || !user) return null
-
-  const completedAt = session.completedAt || new Date().toISOString()
-  const storedSession = JSON.parse(JSON.stringify({
-    ...session,
-    completedAt,
-  })) as ActiveWorkoutSession
-
-  try {
-    const workoutDoc = await addDoc(
-      collection(firestore, "users", user.uid, "workouts"),
-      {
-        ...storedSession,
-        createdAt: serverTimestamp(),
-      }
-    )
-
-    clearCurrentSession()
-    clearWorkoutProgress(session.mode)
-
-    return {
-      id: workoutDoc.id,
-      session: storedSession,
-      completedAt,
-    }
-  } catch (error) {
-    console.error("Error saving workout session:", error)
-    return null
-  }
+  const { entry } = queuePendingWorkoutSession(session)
+  return savePendingWorkoutEntry(entry)
 }
 
 export function saveCurrentSession(session: Partial<WorkoutSession>): void {
@@ -152,6 +287,27 @@ export function clearWorkoutProgress(mode: ActiveWorkoutSession["mode"]): void {
     case "liss-core":
       clearLissCoreProgress()
       break
+  }
+}
+
+function clearMatchingWorkoutProgress(session: ActiveWorkoutSession): void {
+  const currentSession = getCurrentSession()
+  if (currentSession?.mode === session.mode && currentSession.startedAt === session.startedAt) {
+    clearCurrentSession()
+  }
+
+  const progress = (() => {
+    switch (session.mode) {
+      case "interval": return getIntervalProgress()
+      case "sit": return getSitProgress()
+      case "circuit": return getCircuitProgress()
+      case "freeform": return getFreeformProgress()
+      case "vo2max": return getVo2MaxProgress()
+      case "liss-core": return getLissCoreProgress()
+    }
+  })()
+  if (progress?.startedAt === session.startedAt) {
+    clearWorkoutProgress(session.mode)
   }
 }
 
@@ -250,39 +406,89 @@ export function clearSitProgress(): void {
 
 export function saveCircuitProgress(progress: CircuitSessionProgress): void {
   if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.CIRCUIT_PROGRESS, JSON.stringify(progress))
+  try {
+    localStorage.setItem(STORAGE_KEYS.CIRCUIT_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving circuit progress:", error)
+  }
 }
 
 export function getCircuitProgress(): CircuitSessionProgress | null {
   if (typeof window === "undefined") return null
-  const data = localStorage.getItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
-  if (!data) return null
-  const parsed = JSON.parse(data)
-  if (!parsed.exerciseChoices) {
-    parsed.exerciseChoices = {}
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+    if (!data) return null
+    const parsed: unknown = JSON.parse(data)
+    if (
+      !isRecord(parsed)
+      || (parsed.variant !== "A" && parsed.variant !== "B")
+      || !isRecord(parsed.exerciseSettings)
+      || typeof parsed.currentRound !== "number"
+      || typeof parsed.currentComboIndex !== "number"
+      || !Array.isArray(parsed.rounds)
+      || !Array.isArray(parsed.currentRoundResults)
+      || !Array.isArray(parsed.weakLinks)
+      || typeof parsed.roundTimerSeconds !== "number"
+      || typeof parsed.startedAt !== "string"
+      || typeof parsed.savedAt !== "string"
+    ) {
+      return null
+    }
+    if (!isRecord(parsed.exerciseChoices)) {
+      parsed.exerciseChoices = {}
+    }
+    return parsed as unknown as CircuitSessionProgress
+  } catch {
+    return null
   }
-  return parsed
 }
 
 export function clearCircuitProgress(): void {
   if (typeof window === "undefined") return
-  localStorage.removeItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+  try {
+    localStorage.removeItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing circuit progress:", error)
+  }
 }
 
 export function saveFreeformProgress(progress: FreeformSessionProgress): void {
   if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEYS.FREEFORM_PROGRESS, JSON.stringify(progress))
+  try {
+    localStorage.setItem(STORAGE_KEYS.FREEFORM_PROGRESS, JSON.stringify(progress))
+  } catch (error) {
+    console.warn("Error saving freeform progress:", error)
+  }
 }
 
 export function getFreeformProgress(): FreeformSessionProgress | null {
   if (typeof window === "undefined") return null
-  const data = localStorage.getItem(STORAGE_KEYS.FREEFORM_PROGRESS)
-  return data ? JSON.parse(data) : null
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+    if (!data) return null
+    const parsed: unknown = JSON.parse(data)
+    if (
+      !isRecord(parsed)
+      || !Array.isArray(parsed.exercises)
+      || typeof parsed.elapsedSeconds !== "number"
+      || typeof parsed.startedAt !== "string"
+      || typeof parsed.savedAt !== "string"
+    ) {
+      return null
+    }
+    return parsed as unknown as FreeformSessionProgress
+  } catch {
+    return null
+  }
 }
 
 export function clearFreeformProgress(): void {
   if (typeof window === "undefined") return
-  localStorage.removeItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+  try {
+    localStorage.removeItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+  } catch (error) {
+    console.warn("Error clearing freeform progress:", error)
+  }
 }
 
 export function saveVo2MaxProgress(progress: Vo2MaxSessionProgress): void {
@@ -473,6 +679,7 @@ export async function getExercisePreferences(): Promise<Record<string, ExerciseP
 
   if (firestore && user) {
     try {
+      const localPreferences = getLocalExercisePreferences()
       const snapshot = await getDocs(
         collection(firestore, "users", user.uid, "exercisePreferences")
       )
@@ -484,6 +691,24 @@ export async function getExercisePreferences(): Promise<Record<string, ExerciseP
           durationSeconds: data.durationSeconds,
         }
       })
+
+      if (Object.keys(localPreferences).length > 0) {
+        const batch = writeBatch(firestore)
+        Object.values(localPreferences).forEach((preference) => {
+          batch.set(
+            doc(firestore!, "users", user.uid, "exercisePreferences", preference.exerciseId),
+            {
+              ...preference,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          )
+        })
+        await batch.commit()
+        clearLocalExercisePreferences()
+        return { ...prefs, ...localPreferences }
+      }
+
       return prefs
     } catch (error) {
       console.error("Error fetching exercise preferences:", error)
@@ -499,6 +724,12 @@ export async function saveExercisePreference(
   pref: Partial<ExercisePreference>
 ): Promise<void> {
   const user = firebaseAuth?.currentUser
+  const prefs = getLocalExercisePreferences()
+  prefs[exerciseId] = {
+    exerciseId,
+    durationSeconds: pref.durationSeconds ?? prefs[exerciseId]?.durationSeconds ?? 60,
+  }
+  saveLocalExercisePreferences(prefs)
 
   if (firestore && user) {
     try {
@@ -506,21 +737,17 @@ export async function saveExercisePreference(
         doc(firestore, "users", user.uid, "exercisePreferences", exerciseId),
         {
           exerciseId,
-          durationSeconds: pref.durationSeconds ?? 60,
+          durationSeconds: prefs[exerciseId].durationSeconds,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
       )
+      const remaining = getLocalExercisePreferences()
+      delete remaining[exerciseId]
+      saveLocalExercisePreferences(remaining)
     } catch (error) {
       console.error("Error saving exercise preference:", error)
     }
-  } else {
-    const prefs = getLocalExercisePreferences()
-    prefs[exerciseId] = {
-      exerciseId,
-      durationSeconds: pref.durationSeconds ?? prefs[exerciseId]?.durationSeconds ?? 60,
-    }
-    saveLocalExercisePreferences(prefs)
   }
 }
 
@@ -529,6 +756,14 @@ export async function saveBulkExercisePreferences(
 ): Promise<void> {
   const user = firebaseAuth?.currentUser
   const db = firestore
+  const prefs: Record<string, ExercisePreference> = {}
+  Object.entries(settings).forEach(([exerciseId, setting]) => {
+    prefs[exerciseId] = {
+      exerciseId,
+      durationSeconds: setting.durationSeconds,
+    }
+  })
+  saveLocalExercisePreferences(prefs)
 
   if (db && user) {
     try {
@@ -545,18 +780,10 @@ export async function saveBulkExercisePreferences(
         )
       })
       await batch.commit()
+      clearLocalExercisePreferences()
     } catch (error) {
       console.error("Error saving bulk exercise preferences:", error)
     }
-  } else {
-    const prefs: Record<string, ExercisePreference> = {}
-    Object.entries(settings).forEach(([exerciseId, setting]) => {
-      prefs[exerciseId] = {
-        exerciseId,
-        durationSeconds: setting.durationSeconds,
-      }
-    })
-    saveLocalExercisePreferences(prefs)
   }
 }
 
@@ -573,9 +800,22 @@ function getLocalExercisePreferences(): Record<string, ExercisePreference> {
 function saveLocalExercisePreferences(prefs: Record<string, ExercisePreference>): void {
   if (typeof window === "undefined") return
   try {
-    localStorage.setItem(STORAGE_KEYS.EXERCISE_PREFERENCES, JSON.stringify(prefs))
+    if (Object.keys(prefs).length === 0) {
+      localStorage.removeItem(STORAGE_KEYS.EXERCISE_PREFERENCES)
+    } else {
+      localStorage.setItem(STORAGE_KEYS.EXERCISE_PREFERENCES, JSON.stringify(prefs))
+    }
   } catch (error) {
     console.warn("Error saving exercise preferences:", error)
+  }
+}
+
+function clearLocalExercisePreferences(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.EXERCISE_PREFERENCES)
+  } catch (error) {
+    console.warn("Error clearing exercise preferences:", error)
   }
 }
 
@@ -598,11 +838,126 @@ function saveLocalFrontierCards(cards: FrontierCard[]): void {
   }
 }
 
+interface PendingFrontierWallet {
+  ownerUid: string
+  revision: string
+  cards: FrontierCard[]
+}
+
+const frontierSaveQueues = new Map<string, Promise<void>>()
+
+function getPendingFrontierKey(ownerUid: string): string {
+  return `${STORAGE_KEYS.FRONTIER_PENDING}:${ownerUid}`
+}
+
+function getPendingFrontierWallet(ownerUid: string): PendingFrontierWallet | null {
+  if (typeof window === "undefined") return null
+  try {
+    const data = localStorage.getItem(getPendingFrontierKey(ownerUid))
+    if (!data) return null
+    const parsed: unknown = JSON.parse(data)
+    if (
+      !isRecord(parsed)
+      || parsed.ownerUid !== ownerUid
+      || typeof parsed.revision !== "string"
+      || !Array.isArray(parsed.cards)
+    ) {
+      return null
+    }
+    return parsed as unknown as PendingFrontierWallet
+  } catch {
+    return null
+  }
+}
+
+function savePendingFrontierWallet(ownerUid: string, cards: FrontierCard[]): PendingFrontierWallet {
+  const pending = { ownerUid, revision: createLocalId(), cards } satisfies PendingFrontierWallet
+  if (typeof window === "undefined") return pending
+  try {
+    localStorage.setItem(
+      getPendingFrontierKey(ownerUid),
+      JSON.stringify(pending)
+    )
+  } catch (error) {
+    console.warn("Error saving pending Frontier wallet:", error)
+  }
+  return pending
+}
+
+function clearPendingFrontierWallet(ownerUid: string, revision: string): void {
+  if (typeof window === "undefined") return
+  try {
+    const pending = getPendingFrontierWallet(ownerUid)
+    if (pending?.revision === revision) {
+      localStorage.removeItem(getPendingFrontierKey(ownerUid))
+    }
+  } catch (error) {
+    console.warn("Error clearing pending Frontier wallet:", error)
+  }
+}
+
+function clearLocalFrontierCards(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(STORAGE_KEYS.FRONTIER_CARDS)
+  } catch (error) {
+    console.warn("Error clearing local Frontier Cards:", error)
+  }
+}
+
+function clearLocalFrontierCardsIfRepresented(cards: FrontierCard[]): void {
+  const walletIds = new Set(cards.map((card) => card.id))
+  const localCards = getLocalFrontierCards()
+  if (localCards.every((card) => walletIds.has(card.id))) {
+    clearLocalFrontierCards()
+  }
+}
+
+async function reconcileFrontierWallet(
+  ownerUid: string,
+  cards: FrontierCard[],
+  existingIds?: string[]
+): Promise<void> {
+  if (!firestore) throw new Error("Firestore is not configured")
+  const cloudIds = existingIds ?? (
+    await getDocs(collection(firestore, "users", ownerUid, "frontierCards"))
+  ).docs.map((cardDoc) => cardDoc.id)
+  const walletIds = new Set(cards.map((card) => card.id))
+  const batch = writeBatch(firestore)
+  cards.forEach((card) => {
+    batch.set(doc(firestore!, "users", ownerUid, "frontierCards", card.id), card)
+  })
+  cloudIds.forEach((cardId) => {
+    if (!walletIds.has(cardId)) {
+      batch.delete(doc(firestore!, "users", ownerUid, "frontierCards", cardId))
+    }
+  })
+  await batch.commit()
+}
+
 export async function getFrontierCards(): Promise<FrontierCard[]> {
   const user = firebaseAuth?.currentUser
 
   if (!firestore || !user) {
     return getLocalFrontierCards().sort((a, b) => a.order - b.order)
+  }
+
+  const pendingWallet = getPendingFrontierWallet(user.uid)
+  if (pendingWallet) {
+    const pendingIds = new Set(pendingWallet.cards.map((card) => card.id))
+    const localAdditions = getLocalFrontierCards().filter((card) => (
+      !pendingIds.has(card.id) && (card.exercises.length > 0 || card.name !== "Anywhere")
+    ))
+    const reconciledCards = [...pendingWallet.cards, ...localAdditions]
+      .map((card, order) => ({ ...card, order }))
+    try {
+      await reconcileFrontierWallet(user.uid, reconciledCards)
+      clearPendingFrontierWallet(user.uid, pendingWallet.revision)
+      clearLocalFrontierCards()
+    } catch (error) {
+      console.error("Error reconciling pending Frontier wallet:", error)
+    }
+    return reconciledCards.sort((a, b) => a.order - b.order)
   }
 
   try {
@@ -611,29 +966,36 @@ export async function getFrontierCards(): Promise<FrontierCard[]> {
       .map((cardDoc) => cardDoc.data() as FrontierCard)
       .sort((a, b) => a.order - b.order)
 
-    if (cloudCards.length > 0) {
-      return cloudCards
-    }
-
     const localCards = getLocalFrontierCards()
     if (localCards.length > 0) {
-      const batch = writeBatch(firestore)
-      localCards.forEach((card) => {
-        batch.set(doc(firestore!, "users", user.uid, "frontierCards", card.id), card)
-      })
-      await batch.commit()
-      localStorage.removeItem(STORAGE_KEYS.FRONTIER_CARDS)
-      return localCards.sort((a, b) => a.order - b.order)
+      const cloudIds = new Set(cloudCards.map((card) => card.id))
+      const hasSharedCard = localCards.some((card) => cloudIds.has(card.id))
+      const meaningfulLocalCards = localCards.filter((card) => (
+        card.exercises.length > 0 || card.name !== "Anywhere"
+      ))
+      const reconciledCards = cloudCards.length === 0 || hasSharedCard
+        ? localCards
+        : [...cloudCards, ...meaningfulLocalCards].map((card, order) => ({ ...card, order }))
+
+      if (reconciledCards.length > 0) {
+        await reconcileFrontierWallet(
+          user.uid,
+          reconciledCards,
+          snapshot.docs.map((cardDoc) => cardDoc.id)
+        )
+      }
+      clearLocalFrontierCards()
+      return reconciledCards.sort((a, b) => a.order - b.order)
     }
 
-    return []
+    return cloudCards
   } catch (error) {
     console.error("Error fetching Frontier Cards:", error)
-    return getLocalFrontierCards().sort((a, b) => a.order - b.order)
+    throw error
   }
 }
 
-export async function saveFrontierCard(card: FrontierCard, wallet: FrontierCard[]): Promise<void> {
+export async function saveFrontierCards(wallet: FrontierCard[]): Promise<void> {
   const user = firebaseAuth?.currentUser
 
   if (!firestore || !user) {
@@ -641,27 +1003,26 @@ export async function saveFrontierCard(card: FrontierCard, wallet: FrontierCard[
     return
   }
 
+  const pending = savePendingFrontierWallet(user.uid, wallet)
+  const previousSave = frontierSaveQueues.get(user.uid) ?? Promise.resolve()
+  const currentSave = previousSave
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await reconcileFrontierWallet(user.uid, wallet)
+        clearPendingFrontierWallet(user.uid, pending.revision)
+        clearLocalFrontierCardsIfRepresented(wallet)
+      } catch (error) {
+        console.error("Error saving Frontier Cards:", error)
+        throw error
+      }
+    })
+  frontierSaveQueues.set(user.uid, currentSave)
   try {
-    await setDoc(doc(firestore, "users", user.uid, "frontierCards", card.id), card)
-  } catch (error) {
-    console.error("Error saving Frontier Card:", error)
-    saveLocalFrontierCards(wallet)
-    throw error
-  }
-}
-
-export async function deleteFrontierCard(cardId: string, wallet: FrontierCard[]): Promise<void> {
-  const user = firebaseAuth?.currentUser
-
-  if (!firestore || !user) {
-    saveLocalFrontierCards(wallet)
-    return
-  }
-
-  try {
-    await deleteDoc(doc(firestore, "users", user.uid, "frontierCards", cardId))
-  } catch (error) {
-    console.error("Error deleting Frontier Card:", error)
-    throw error
+    await currentSave
+  } finally {
+    if (frontierSaveQueues.get(user.uid) === currentSave) {
+      frontierSaveQueues.delete(user.uid)
+    }
   }
 }

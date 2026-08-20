@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { AlertTriangle } from "lucide-react"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 interface PerformanceDropModalProps {
   shortMA: number
@@ -18,14 +19,22 @@ export function PerformanceDropModal({
   onEndWorkout,
 }: PerformanceDropModalProps) {
   const dropPercent = (((shortMA - longMA) / longMA) * 100).toFixed(1)
+  const dialogRef = useDialogFocus<HTMLDivElement>(true)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <Card className="relative z-10 w-full max-w-sm mx-4 border-yellow-300 bg-card">
+      <Card
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="performance-drop-title"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-sm mx-4 border-yellow-300 bg-card"
+      >
         <CardHeader className="pb-2 text-center">
           <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
-          <h2 className="text-lg font-bold text-foreground">Fatigue Detected (&gt;5% Slower)</h2>
+          <h2 id="performance-drop-title" className="text-lg font-bold text-foreground">Fatigue Detected (&gt;5% Slower)</h2>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-center">

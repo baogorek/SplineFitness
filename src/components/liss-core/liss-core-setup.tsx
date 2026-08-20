@@ -387,7 +387,7 @@ export function LissCoreSetup({
               <p className="font-semibold text-slate-900">Voice Cues</p>
               <p className="text-xs text-slate-500">Optional spoken announcements. Tones and vibration remain on.</p>
             </div>
-            <button type="button" role="switch" aria-checked={voiceCues} onClick={() => handleVoiceChange(!voiceCues)} className={`relative h-7 w-12 rounded-full transition-colors ${voiceCues ? "bg-violet-600" : "bg-slate-300"}`}>
+            <button type="button" role="switch" aria-label="Voice cues" aria-checked={voiceCues} onClick={() => handleVoiceChange(!voiceCues)} className={`relative h-7 w-12 rounded-full transition-colors ${voiceCues ? "bg-violet-600" : "bg-slate-300"}`}>
               <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${voiceCues ? "translate-x-5" : "translate-x-0"}`} />
             </button>
           </CardContent>

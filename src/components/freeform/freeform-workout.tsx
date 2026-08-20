@@ -5,9 +5,9 @@ import { ArrowLeft, Calendar, Clock, Plus, CheckCircle2, Dumbbell } from "lucide
 import { Button } from "@/components/ui/button"
 import { FreeformExercise, FreeformWorkoutSession, FreeformSessionProgress } from "@/types/workout"
 import { FreeformExerciseCard } from "./freeform-exercise-card"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { useTimer } from "@/hooks/use-timer"
-import { saveWorkoutSession, saveFreeformProgress, getFreeformProgress, clearFreeformProgress } from "@/lib/storage"
-import { useAuth } from "@/components/auth-provider"
+import { stageCompletedWorkout, saveFreeformProgress, getFreeformProgress, clearFreeformProgress } from "@/lib/storage"
 import { FEATURES } from "@/lib/feature-flags"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
@@ -96,7 +96,6 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   const [phase, setPhase] = useState<FreeformPhase>(() => initialResume ? "resume-prompt" : "workout")
   const [pendingResume, setPendingResume] = useState<FreeformSessionProgress | null>(() => initialResume)
   const [completedSessionData, setCompletedSessionData] = useState<FreeformWorkoutSession | null>(null)
-  const [savedToHistory, setSavedToHistory] = useState(false)
   const startedAtRef = useRef(new Date().toISOString())
   const savingRef = useRef(false)
   const [resumeDetectedAt] = useState(() => Date.now())
@@ -104,7 +103,6 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
   const startTimer = timer.start
   const getTimerElapsedSeconds = timer.getElapsedSeconds
   const timerRunning = timer.isRunning
-  const { signInWithGoogle } = useAuth()
 
   useEffect(() => {
     if (phase === "workout" && !pendingResume) {
@@ -175,7 +173,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
     setExercises((prev) => [...prev, createEmptyExercise()])
   }
 
-  const handleComplete = async () => {
+  const handleComplete = () => {
     if (savingRef.current) return
 
     const namedExercises = exercises.filter((e) => e.name.trim())
@@ -192,15 +190,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
       completedAt,
       exercises: namedExercises,
     }
-    clearFreeformProgress()
-    setCompletedSessionData(session)
-
-    if (FEATURES.AUTH_ENABLED) {
-      const result = await saveWorkoutSession(session)
-      setSavedToHistory(result !== null)
-    }
-
-    clearFreeformProgress()
+    setCompletedSessionData(stageCompletedWorkout(session) as FreeformWorkoutSession)
     setSaving(false)
     setPhase("complete")
   }
@@ -314,20 +304,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
           </p>
 
           {FEATURES.AUTH_ENABLED ? (
-            savedToHistory ? (
-              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
-                <p className="text-sm text-amber-600 font-medium">
-                  Sign in to save your workouts and track progress over time
-                </p>
-                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                  Sign in with Google
-                </Button>
-              </div>
-            )
+            <CompletedWorkoutSave session={completedSessionData} />
           ) : (
             <div className="rounded-lg bg-slate-100 border border-slate-200 p-4 mt-4 text-left">
               <p className="text-sm font-medium text-slate-700 mb-2">Workout Data</p>

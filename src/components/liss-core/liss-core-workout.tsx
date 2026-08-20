@@ -19,8 +19,10 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { useAudio } from "@/hooks/use-audio"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 import { useSequenceTimer, SequenceTimerCue } from "@/hooks/use-sequence-timer"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useAuth } from "@/components/auth-provider"
@@ -45,7 +47,7 @@ import {
   saveLissCoreProgress,
   saveLissCoreTemplate,
   saveLissCoreVoiceCues,
-  saveWorkoutSession,
+  stageCompletedWorkout,
 } from "@/lib/storage"
 import {
   CableExerciseSetup,
@@ -158,15 +160,16 @@ function CardioSetupModal({
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<CardioIntervalSelection>(selection ?? {})
+  const dialogRef = useDialogFocus<HTMLDivElement>(true, onClose)
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <button className="absolute inset-0 bg-black/60" aria-label="Close cardio setup" onClick={onClose} />
-      <Card className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
+      <Card ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cardio-setup-title" tabIndex={-1} className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
         <CardHeader className="px-5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-violet-600">Today&apos;s cardio</p>
-              <h2 className="mt-1 text-xl font-bold">{label}</h2>
+              <h2 id="cardio-setup-title" className="mt-1 text-xl font-bold">{label}</h2>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close cardio setup"><X /></Button>
           </div>
@@ -184,15 +187,16 @@ function CardioSetupModal({
 }
 
 function ExerciseInfoModal({ step, onClose }: { step: LissCoreStep; onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(true, onClose)
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <button className="absolute inset-0 bg-black/60" aria-label="Close instructions" onClick={onClose} />
-      <Card className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
+      <Card ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="exercise-info-title" tabIndex={-1} className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
         <CardHeader className="px-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-violet-600">Exercise instructions</p>
-              <h2 className="mt-1 text-xl font-bold">{step.label}</h2>
+              <h2 id="exercise-info-title" className="mt-1 text-xl font-bold">{step.label}</h2>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close instructions"><X /></Button>
           </div>
@@ -220,15 +224,16 @@ function CableSetupModal({
   onClose: () => void
 }) {
   const [draft, setDraft] = useState(setup)
+  const dialogRef = useDialogFocus<HTMLDivElement>(true, onClose)
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <button className="absolute inset-0 bg-black/60" aria-label="Close cable setup" onClick={onClose} />
-      <Card className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-lg gap-4 py-5">
+      <Card ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cable-setup-title" tabIndex={-1} className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-lg gap-4 py-5">
         <CardHeader className="px-5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-violet-600">Today&apos;s cable setup</p>
-              <h2 className="mt-1 text-xl font-bold">{label}</h2>
+              <h2 id="cable-setup-title" className="mt-1 text-xl font-bold">{label}</h2>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close cable setup"><X /></Button>
           </div>
@@ -262,6 +267,7 @@ function DifficultyRow({
           <button
             key={option.value}
             type="button"
+            aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
             className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
               value === option.value
@@ -286,6 +292,7 @@ function CompletedWorkout({
   cableSetup,
   cardioSelections,
   onCableSetupChange,
+  onWorkoutStaged,
   onExit,
 }: {
   config: ActiveConfig
@@ -296,14 +303,14 @@ function CompletedWorkout({
   cableSetup: LissCoreCableSetup
   cardioSelections: Record<string, CardioIntervalSelection>
   onCableSetupChange: (setup: LissCoreCableSetup) => void
+  onWorkoutStaged: () => void
   onExit: () => void
 }) {
   const { user, signInWithGoogle } = useAuth()
   const [ratings, setRatings] = useState<Partial<Record<CoreExerciseId | "overall", CoreDifficulty>>>({})
   const [notes, setNotes] = useState("")
-  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [savedToHistory, setSavedToHistory] = useState(false)
+  const [completedSessionData, setCompletedSessionData] = useState<LissCoreWorkoutSession | null>(null)
   const summary = useMemo(() => summarizeWorkout(steps, stepResults), [steps, stepResults])
 
   const setupRows = useMemo(() => {
@@ -322,9 +329,8 @@ function CompletedWorkout({
     ] as const
   }, [cableSetup])
 
-  const handleSave = async () => {
-    if (saving || saved) return
-    setSaving(true)
+  const handleSave = () => {
+    if (saved) return
     saveLissCoreCableSetup(cableSetup)
 
     const session: LissCoreWorkoutSession = {
@@ -342,14 +348,9 @@ function CompletedWorkout({
       endedEarly,
     }
 
-    let historySaved = false
-    if (FEATURES.AUTH_ENABLED && user) {
-      historySaved = (await saveWorkoutSession(session)) !== null
-    }
-    if (!historySaved) clearLissCoreProgress()
-    setSavedToHistory(historySaved)
+    onWorkoutStaged()
+    setCompletedSessionData(stageCompletedWorkout(session) as LissCoreWorkoutSession)
     setSaved(true)
-    setSaving(false)
     onCableSetupChange(cableSetup)
   }
 
@@ -448,20 +449,19 @@ function CompletedWorkout({
 
         {!saved ? (
           <div className="space-y-3">
-            <Button className="h-12 w-full bg-violet-600 text-base hover:bg-violet-700" disabled={saving} onClick={handleSave}>
-              <Save /> {saving ? "Saving…" : user ? "Save Workout" : "Finish Workout"}
+            <Button className="h-12 w-full bg-violet-600 text-base hover:bg-violet-700" onClick={handleSave}>
+              <Save /> {user ? "Save Workout" : "Finish Workout"}
             </Button>
             {!user && FEATURES.AUTH_ENABLED && (
-              <button className="w-full text-center text-sm text-violet-700 underline-offset-4 hover:underline" onClick={signInWithGoogle}>
+              <button type="button" className="w-full text-center text-sm text-violet-700 underline-offset-4 hover:underline" onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))}>
                 Sign in to save this session to calendar history
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-3 text-center">
-            <p className="text-sm font-medium text-emerald-600">
-              {savedToHistory ? "Saved to workout history." : "Workout finished. Your cable setup is saved on this device."}
-            </p>
+            <p className="text-sm font-medium text-emerald-600">Workout finished. Your cable setup is saved on this device.</p>
+            {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
             <Button className="h-12 w-full" onClick={onExit}>Back to Home</Button>
           </div>
         )}
@@ -487,6 +487,7 @@ function ActiveWorkout({
   const [editingCableStep, setEditingCableStep] = useState<LissCoreStep | null>(null)
   const [editingCardioStep, setEditingCardioStep] = useState<LissCoreStep | null>(null)
   const initializedRef = useRef(false)
+  const completionStagedRef = useRef(false)
 
   const handleBoundary = useCallback((previousStep: LissCoreStep, nextStep: LissCoreStep) => {
     const sideSwitch = previousStep.exerciseId === "rotation" &&
@@ -576,6 +577,7 @@ function ActiveWorkout({
   }, [audio, timer.isComplete])
 
   const saveProgressSnapshot = useCallback(() => {
+    if (completionStagedRef.current) return
     const captured = captureTimer()
     saveLissCoreProgress({
       phase: captured.isComplete ? "complete" : "active",
@@ -666,6 +668,7 @@ function ActiveWorkout({
         cableSetup={cableSetup}
         cardioSelections={cardioSelections}
         onCableSetupChange={setCableSetup}
+        onWorkoutStaged={() => { completionStagedRef.current = true }}
         onExit={onExit}
       />
     )
@@ -843,6 +846,7 @@ export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
   const [previousCableSetup] = useState<LissCoreCableSetup>(() => getLissCoreCableSetup())
   const [voiceCues, setVoiceCues] = useState(() => getLissCoreVoiceCues())
   const [pendingProgress, setPendingProgress] = useState<LissCoreSessionProgress | null>(() => getLissCoreProgress())
+  const resumeDialogRef = useDialogFocus<HTMLDivElement>(Boolean(pendingProgress))
   const [resumeDetectedAtMs] = useState(() => Date.now())
   const [activeConfig, setActiveConfig] = useState<ActiveConfig | null>(null)
 
@@ -908,15 +912,15 @@ export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
       />
 
       {pendingProgress && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
           <div className="absolute inset-0 bg-black/60" />
-          <Card className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
+          <Card ref={resumeDialogRef} role="dialog" aria-modal="true" aria-labelledby="liss-resume-title" tabIndex={-1} className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
             <CardHeader className="px-5">
               <div className="flex items-center gap-2 text-violet-700">
                 <Gauge className="h-5 w-5" />
                 <p className="text-xs font-bold uppercase tracking-wider">Saved workout found</p>
               </div>
-              <h2 className="text-xl font-bold">Resume LISS + Core Endurance?</h2>
+              <h2 id="liss-resume-title" className="text-xl font-bold">Resume LISS + Core Endurance?</h2>
             </CardHeader>
             <CardContent className="space-y-4 px-5">
               <div className="rounded-xl bg-slate-50 p-3">

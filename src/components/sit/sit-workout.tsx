@@ -8,6 +8,7 @@ import { useAudio } from "@/hooks/use-audio"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { SitPhaseDisplay } from "./sit-phase-display"
 import { SprintReady, SprintActive, SprintRecovery } from "./sit-sprint-cycle"
 import { PerformanceDropModal } from "./performance-drop-modal"
@@ -15,11 +16,9 @@ import {
   clearSitProgress,
   getSitProgress,
   saveSitProgress,
-  saveWorkoutSession,
+  stageCompletedWorkout,
 } from "@/lib/storage"
 import { SprintRecord, SitSessionProgress, SitWorkoutSession } from "@/types/workout"
-import { useAuth } from "@/components/auth-provider"
-import { FEATURES } from "@/lib/feature-flags"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 import {
   SitPhase,
@@ -119,13 +118,11 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
   const [pendingLongMA, setPendingLongMA] = useState<number | null>(null)
   const [testMode, setTestMode] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<SitWorkoutSession | null>(null)
-  const [savedToHistory, setSavedToHistory] = useState(false)
   const [warmupCountdown, setWarmupCountdown] = useState(5)
   const [sprintCountdownValue, setSprintCountdownValue] = useState<number | null>(null)
   const [pendingResume, setPendingResume] = useState<SitSessionProgress | null>(null)
 
   const audio = useAudio()
-  const { signInWithGoogle } = useAuth()
   const workoutStartedRef = useRef(false)
   const startedAtRef = useRef<string>("")
   const sprintStartRef = useRef<number>(0)
@@ -562,14 +559,13 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     transitionTo("sprint-recovery")
   }, [sprintNumber, bestTime, sprintHistory, phaseTimer, transitionTo])
 
-  const saveAndComplete = useCallback(async (endedEarly: boolean) => {
+  const saveAndComplete = useCallback((endedEarly: boolean) => {
     if (completionInProgressRef.current) return
     completionInProgressRef.current = true
 
     workoutTimer.pause()
     phaseTimer.pause()
     clearCountdownTimeouts()
-    clearSitProgress()
     phasesCompletedRef.current = endedEarly ? phasesCompletedRef.current : 4
 
     const session: SitWorkoutSession = {
@@ -583,12 +579,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
       endedEarly,
     }
 
-    setCompletedSessionData(session)
-    if (FEATURES.AUTH_ENABLED) {
-      const result = await saveWorkoutSession(session)
-      setSavedToHistory(result !== null)
-    }
-    clearSitProgress()
+    setCompletedSessionData(stageCompletedWorkout(session) as SitWorkoutSession)
     setPhase("complete")
   }, [workoutTimer, phaseTimer, sprintHistory, bestTime, clearCountdownTimeouts, getWorkoutElapsedSeconds])
 
@@ -781,22 +772,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
             </>
           )}
 
-          {FEATURES.AUTH_ENABLED && (
-            savedToHistory ? (
-              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
-                <p className="text-sm text-amber-600 font-medium">
-                  Sign in to save your workouts and track progress over time
-                </p>
-                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                  Sign in with Google
-                </Button>
-              </div>
-            )
-          )}
+          {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
 
           <button
             onClick={onModeChange}
@@ -844,6 +820,8 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">SIT SPRINT</span>
               <button
+                type="button"
+                aria-pressed={testMode}
                 onClick={() => setTestMode(!testMode)}
                 className={`flex h-6 px-2 items-center gap-1 rounded text-xs font-medium transition-colors ${
                   testMode
@@ -855,6 +833,7 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
                 {testMode ? "12x" : "Test"}
               </button>
               <button
+                type="button"
                 onClick={handleTestAudio}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >

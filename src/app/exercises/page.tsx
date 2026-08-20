@@ -55,11 +55,11 @@ export default function ExercisesPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon-sm">
+          <Button variant="ghost" size="icon-sm" asChild>
+            <Link href="/" aria-label="Back to home">
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <div className="flex items-center gap-2">
             <Image src="/spline_logo.svg" alt="Spline Fitness" width={28} height={28} />
             <span className="font-semibold text-foreground">Exercise Library</span>
@@ -87,17 +87,21 @@ export default function ExercisesPage() {
                           <span className="text-foreground">{entry.name}</span>
                           <div className="flex items-center gap-1">
                             {entry.videos.map((video, i) => (
-                              <a
+                              <Button
                                 key={i}
-                                href={video.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`Watch ${entry.name} ${video.label || "demo"}`}
+                                variant="ghost"
+                                size="icon-sm"
+                                asChild
                               >
-                                <Button variant="ghost" size="icon-sm">
+                                <a
+                                  href={video.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`Watch ${entry.name} ${video.label || "demo"}`}
+                                >
                                   <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                              </a>
+                                </a>
+                              </Button>
                             ))}
                             <Button
                               variant="ghost"
@@ -116,17 +120,21 @@ export default function ExercisesPage() {
                             </span>
                             <div className="flex items-center gap-1">
                               {entry.alternativeVideos?.map((video, i) => (
-                                <a
+                                <Button
                                   key={i}
-                                  href={video.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  aria-label={`Watch ${entry.alternativeName} ${video.label || "demo"}`}
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  asChild
                                 >
-                                  <Button variant="ghost" size="icon-sm">
+                                  <a
+                                    href={video.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label={`Watch ${entry.alternativeName} ${video.label || "demo"}`}
+                                  >
                                     <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                                  </Button>
-                                </a>
+                                  </a>
+                                </Button>
                               ))}
                               <Button
                                 variant="ghost"

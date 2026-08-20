@@ -34,7 +34,7 @@ export default function PrivacyPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Privacy Policy</h1>
-          <p className="text-muted-foreground">Last updated: August 16, 2026</p>
+          <p className="text-muted-foreground">Last updated: August 19, 2026</p>
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -108,8 +108,9 @@ export default function PrivacyPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">Guest Mode</h2>
             <p className="text-muted-foreground mb-4">
-              You can use Spline Fitness without signing in. In guest mode, workout progress may be stored
-              locally in your browser, but it is not uploaded or synchronized between devices.
+              You can use Spline Fitness without signing in. In guest mode, active-workout checkpoints and
+              completed workouts awaiting sign-in may be stored locally in your browser, but they are not
+              uploaded or synchronized between devices.
             </p>
           </section>
 

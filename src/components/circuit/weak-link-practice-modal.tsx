@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Target, Play, SkipForward } from "lucide-react"
 import { WeakLinkEntry } from "@/types/workout"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 const PRACTICE_DURATIONS = [
   { value: 30, label: "30s" },
@@ -40,6 +41,7 @@ export function WeakLinkPracticeModal({
     () => new Set(uniqueExercises.map((e) => e.exerciseId))
   )
   const [duration, setDuration] = useState(60)
+  const dialogRef = useDialogFocus<HTMLDivElement>(uniqueExercises.length > 0, onSkip)
 
   const toggleExercise = (exerciseId: string) => {
     setSelectedExercises((prev) => {
@@ -67,14 +69,21 @@ export function WeakLinkPracticeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <Card className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card">
+      <Card
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="weak-link-practice-title"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card"
+      >
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
               <Target className="h-6 w-6 text-amber-500" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
+              <h2 id="weak-link-practice-title" className="text-lg font-semibold text-foreground">
                 Weak Link Practice
               </h2>
               <p className="text-sm text-muted-foreground">
@@ -93,6 +102,8 @@ export function WeakLinkPracticeModal({
               {uniqueExercises.map((exercise) => (
                 <button
                   key={exercise.exerciseId}
+                  type="button"
+                  aria-pressed={selectedExercises.has(exercise.exerciseId)}
                   onClick={() => toggleExercise(exercise.exerciseId)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
                     selectedExercises.has(exercise.exerciseId)
@@ -152,6 +163,8 @@ export function WeakLinkPracticeModal({
               {PRACTICE_DURATIONS.map((d) => (
                 <button
                   key={d.value}
+                  type="button"
+                  aria-pressed={duration === d.value}
                   onClick={() => setDuration(d.value)}
                   className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
                     duration === d.value

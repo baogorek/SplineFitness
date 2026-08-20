@@ -12,50 +12,8 @@ import { circuitWorkouts } from "@/data/circuit-workouts"
 import { getExerciseEquipment, saveExerciseEquipment } from "@/lib/storage"
 import { AttributionBanner } from "./attribution-banner"
 import { DurationSelector, GlobalDurationControl } from "./duration-selector"
-
-const VALID_DURATIONS = [30, 45, 60, 75, 90, 105, 120]
-const WEIGHT_OPTIONS = [2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25]
-const LIGHT_WEIGHT_OPTIONS = [2.5, 5, 7.5, 10]
-const PLATFORM_OPTIONS = [6, 9, 12, 15, 18, 21, 24]
-
-type EquipmentConfig = {
-  label: string
-  defaultValue: string
-  options: { value: string; label: string }[]
-}
-
-const EQUIPMENT_EXERCISES: Record<string, EquipmentConfig> = {
-  "alt-single-leg-box-squats": {
-    label: "Platform height",
-    defaultValue: "12 in",
-    options: PLATFORM_OPTIONS.map(h => ({ value: `${h} in`, label: `${h} in` })),
-  },
-  "one-half-bottomed-out-squats": {
-    label: "Add weight",
-    defaultValue: "10 lbs",
-    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
-  },
-  "bw-triceps-extensions": {
-    label: "Add weight",
-    defaultValue: "10 lbs",
-    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
-  },
-  "alt-crossover-step-ups": {
-    label: "Platform height",
-    defaultValue: "12 in",
-    options: PLATFORM_OPTIONS.map(h => ({ value: `${h} in`, label: `${h} in` })),
-  },
-  "alt-reverse-lunges": {
-    label: "Add weight",
-    defaultValue: "10 lbs",
-    options: WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
-  },
-  "alt-bw-side-lateral-raises": {
-    label: "Add weight",
-    defaultValue: "5 lbs",
-    options: LIGHT_WEIGHT_OPTIONS.map(w => ({ value: `${w} lbs`, label: `${w} lbs` })),
-  },
-}
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
+import { EQUIPMENT_EXERCISES, parseCircuitConfig } from "@/lib/circuit-config"
 
 function buildInitialExerciseSettings(
   savedSettings?: Record<string, ExerciseSetting>
@@ -96,8 +54,12 @@ function normalizeExerciseEquipment(stored: Record<string, string>): {
   const equipment = { ...stored }
   let migrated = false
   Object.keys(equipment).forEach(key => {
-    if (equipment[key] && !equipment[key].endsWith(" lbs") && !equipment[key].endsWith(" in")) {
-      equipment[key] = "10 lbs"
+    const config = EQUIPMENT_EXERCISES[key]
+    if (config && !config.options.some((option) => option.value === equipment[key])) {
+      equipment[key] = config.defaultValue
+      migrated = true
+    } else if (!config) {
+      delete equipment[key]
       migrated = true
     }
   })
@@ -106,63 +68,6 @@ function normalizeExerciseEquipment(stored: Record<string, string>): {
     migrated = true
   }
   return { equipment, migrated }
-}
-
-function snapToValidDuration(d: number): number {
-  return VALID_DURATIONS.reduce((closest, val) =>
-    Math.abs(val - d) < Math.abs(closest - d) ? val : closest
-  )
-}
-
-interface CompactConfig {
-  v: WorkoutVariant
-  d: number
-  c: Record<string, "alternative">
-  e?: Record<string, string>
-}
-
-function parseConfig(input: string): CompactConfig | null {
-  const trimmed = input.trim()
-
-  const configMatch = trimmed.match(/Config:\s*(\{.*\})/)
-  if (configMatch) {
-    try {
-      const parsed = JSON.parse(configMatch[1])
-      if (parsed.v && parsed.d !== undefined) {
-        return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {}, e: parsed.e }
-      }
-    } catch { /* not valid JSON */ }
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed)
-
-    if (parsed.v && parsed.d !== undefined) {
-      return { v: parsed.v, d: snapToValidDuration(parsed.d), c: parsed.c || {}, e: parsed.e }
-    }
-
-    if (parsed.mode === "circuit") {
-      const durations = Object.values(parsed.exerciseSettings || {}).map(
-        (s: unknown) => (s as { durationSeconds: number }).durationSeconds
-      )
-      const durationCounts = new Map<number, number>()
-      durations.forEach((d: number) => durationCounts.set(d, (durationCounts.get(d) || 0) + 1))
-      let mostCommon = 60
-      let maxCount = 0
-      durationCounts.forEach((count, duration) => {
-        if (count > maxCount) { maxCount = count; mostCommon = duration }
-      })
-      const choices: Record<string, "alternative"> = {}
-      if (parsed.exerciseChoices) {
-        Object.entries(parsed.exerciseChoices).forEach(([id, choice]) => {
-          if (choice === "alternative") choices[id] = "alternative"
-        })
-      }
-      return { v: parsed.variant, d: snapToValidDuration(mostCommon), c: choices, e: parsed.exerciseEquipment }
-    }
-  } catch { /* not valid JSON */ }
-
-  return null
 }
 
 interface CircuitSetupProps {
@@ -201,6 +106,7 @@ export function CircuitSetup({
   const [configStatus, setConfigStatus] = useState<string | null>(null)
   const [configError, setConfigError] = useState(false)
   const [showChecklist, setShowChecklist] = useState(false)
+  const checklistDialogRef = useDialogFocus<HTMLDivElement>(showChecklist, () => setShowChecklist(false))
 
   const workout = circuitWorkouts[variant]
 
@@ -242,18 +148,33 @@ export function CircuitSetup({
   }
 
   const handleApplyConfig = () => {
-    const config = parseConfig(configText)
+    const config = parseCircuitConfig(configText)
     if (!config) {
       setConfigStatus("Could not parse config")
       setConfigError(true)
       return
     }
     setVariant(config.v)
-    handleSetAllDurations(config.d)
+    setExerciseSettings((previous) => {
+      const updated = Object.fromEntries(
+        Object.entries(previous).map(([exerciseId, setting]) => [
+          exerciseId,
+          { ...setting, durationSeconds: config.d },
+        ])
+      )
+      Object.entries(config.s ?? {}).forEach(([exerciseId, durationSeconds]) => {
+        if (updated[exerciseId]) {
+          updated[exerciseId] = { ...updated[exerciseId], durationSeconds }
+        }
+      })
+      return updated
+    })
     setExerciseChoices(prev => {
       const updated = { ...prev }
       Object.keys(updated).forEach(key => { updated[key] = "main" })
-      Object.entries(config.c).forEach(([id]) => { updated[id] = "alternative" })
+      Object.entries(config.c).forEach(([id]) => {
+        if (id in updated) updated[id] = "alternative"
+      })
       return updated
     })
     if (config.e && Object.keys(config.e).length > 0) {
@@ -328,6 +249,8 @@ export function CircuitSetup({
 
         <div className="flex rounded-lg bg-muted p-1">
           <button
+            type="button"
+            aria-pressed={variant === "A"}
             onClick={() => setVariant("A")}
             className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
               variant === "A"
@@ -338,6 +261,8 @@ export function CircuitSetup({
             Workout A
           </button>
           <button
+            type="button"
+            aria-pressed={variant === "B"}
             onClick={() => setVariant("B")}
             className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
               variant === "B"
@@ -351,6 +276,9 @@ export function CircuitSetup({
 
         <div className="rounded-lg border border-border">
           <button
+            type="button"
+            aria-expanded={configExpanded}
+            aria-controls="previous-circuit-config"
             onClick={() => setConfigExpanded(!configExpanded)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -362,7 +290,7 @@ export function CircuitSetup({
             )}
           </button>
           {configExpanded && (
-            <div className="px-4 pb-4 space-y-3">
+            <div id="previous-circuit-config" className="px-4 pb-4 space-y-3">
               <textarea
                 value={configText}
                 onChange={(e) => { setConfigText(e.target.value); setConfigStatus(null) }}
@@ -371,6 +299,7 @@ export function CircuitSetup({
               />
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleApplyConfig}
                   disabled={!configText.trim()}
                   className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -415,6 +344,9 @@ export function CircuitSetup({
             return (
               <Card key={combo.id}>
                 <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`circuit-combo-settings-${combo.id}`}
                   onClick={() => toggleCombo(combo.id)}
                   className="w-full text-left"
                 >
@@ -443,7 +375,7 @@ export function CircuitSetup({
                 </button>
 
                 {isExpanded && (
-                  <CardContent className="pt-0 pb-3">
+                  <CardContent id={`circuit-combo-settings-${combo.id}`} className="pt-0 pb-3">
                     <div className="space-y-2 pt-2 border-t border-border">
                       {combo.subExercises.map((sub, subIndex) => {
                         const hasAlt = !!sub.alternative
@@ -467,6 +399,8 @@ export function CircuitSetup({
                             {hasAlt && (
                               <div className="flex rounded-lg bg-muted p-0.5 ml-4">
                                 <button
+                                  type="button"
+                                  aria-pressed={choice === "main"}
                                   onClick={() => setExerciseChoices((prev) => ({ ...prev, [sub.id]: "main" }))}
                                   className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
                                     choice === "main"
@@ -477,6 +411,8 @@ export function CircuitSetup({
                                   {sub.name}
                                 </button>
                                 <button
+                                  type="button"
+                                  aria-pressed={choice === "alternative"}
                                   onClick={() => setExerciseChoices((prev) => ({ ...prev, [sub.id]: "alternative" }))}
                                   className={`flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
                                     choice === "alternative"
@@ -556,8 +492,15 @@ export function CircuitSetup({
 
       {showChecklist && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Equipment Summary</h3>
+          <div
+            ref={checklistDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="equipment-summary-title"
+            tabIndex={-1}
+            className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4"
+          >
+            <h3 id="equipment-summary-title" className="text-lg font-semibold text-foreground">Equipment Summary</h3>
             <p className="text-sm text-muted-foreground">Here&apos;s what you&apos;ve set up for this workout.</p>
             <div className="space-y-3">
               {weightedExercises.map(item => (

@@ -5,9 +5,20 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Activity, X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
-import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession, LissCoreWorkoutSession, Vo2MaxWorkoutSession } from "@/types/workout"
+import {
+  CircuitWorkoutSession,
+  FreeformWorkoutSession,
+  IntervalWorkoutSession,
+  LissCoreWorkoutSession,
+  SitWorkoutSession,
+  Vo2MaxWorkoutSession,
+  WorkoutHistoryEntry,
+  WorkoutSession,
+} from "@/types/workout"
 import { formatCableSetup, formatCardioSelection } from "@/data/liss-core"
+import { circuitWorkouts } from "@/data/circuit-workouts"
 import { formatDisplayDate } from "./calendar-utils"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 interface WorkoutDetailModalProps {
   date: Date
@@ -56,6 +67,131 @@ function formatPace(secondsPerMile: number): string {
   const minutes = Math.floor(roundedSeconds / 60)
   const seconds = roundedSeconds % 60
   return `${minutes}:${seconds.toString().padStart(2, "0")}/mi`
+}
+
+function CircuitDataView({ session }: { session: CircuitWorkoutSession }) {
+  const comboResults = session.rounds.flatMap((round) => round.comboResults)
+  const completedCombos = comboResults.filter((result) => result.completedWithoutStopping).length
+  const totalTimeSeconds = session.rounds.reduce((total, round) => total + round.totalTimeSeconds, 0)
+  const equipment = Object.entries(session.exerciseEquipment ?? {})
+  const exerciseNames = new Map(
+    (circuitWorkouts[session.variant]?.combos ?? []).flatMap((combo) => combo.subExercises).map((exercise) => {
+      const choice = session.exerciseChoices?.[exercise.id]
+      return [exercise.id, choice === "alternative" && exercise.alternative ? exercise.alternative.name : exercise.name] as const
+    })
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Rounds</p>
+          <p className="mt-1 text-xl font-bold text-foreground">{session.rounds.length}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Total time</p>
+          <p className="mt-1 font-mono text-xl font-bold text-foreground">{formatDuration(totalTimeSeconds)}</p>
+        </div>
+        <div className="col-span-2 rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Completed without stopping</p>
+          <p className="mt-1 text-sm font-bold text-foreground">{completedCombos} of {comboResults.length} combos</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {session.rounds.map((round) => {
+          const completed = round.comboResults.filter((result) => result.completedWithoutStopping).length
+          return (
+            <div key={round.round} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+              <span className="font-semibold text-foreground">Round {round.round}</span>
+              <span className="text-muted-foreground">{completed}/{round.comboResults.length} combos · {formatDuration(round.totalTimeSeconds)}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {equipment.length > 0 && (
+        <div className="rounded-lg border p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Equipment</p>
+          <div className="mt-2 space-y-1 text-xs text-foreground">
+            {equipment.map(([exerciseId, value]) => <p key={exerciseId}>{exerciseNames.get(exerciseId) ?? exerciseId}: {value}</p>)}
+          </div>
+        </div>
+      )}
+
+      {session.weakLinkPractice && session.weakLinkPractice.length > 0 && (
+        <div className="rounded-lg border p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Weak-link practice</p>
+          <div className="mt-2 space-y-1 text-xs text-foreground">
+            {session.weakLinkPractice.map((practice) => (
+              <p key={`${practice.exerciseId}-${practice.practicedAt}`}>{practice.exerciseName}: {formatDuration(practice.practiceTimeSeconds)}</p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IntervalDataView({ session }: { session: IntervalWorkoutSession }) {
+  const notes = Object.entries(session.setNotes ?? {}).sort(([a], [b]) => Number(a) - Number(b))
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sets</p>
+          <p className="mt-1 text-xl font-bold text-red-600">{session.completedSets}/{session.totalSets}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Total time</p>
+          <p className="mt-1 font-mono text-xl font-bold text-foreground">{formatDuration(session.totalTimeSeconds)}</p>
+        </div>
+      </div>
+      {notes.length > 0 && (
+        <div className="rounded-lg border p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Set performance</p>
+          <div className="mt-2 space-y-1 text-sm text-foreground">
+            {notes.map(([setNumber, note]) => <p key={setNumber}><span className="font-semibold">Set {setNumber}:</span> {note}</p>)}
+          </div>
+        </div>
+      )}
+      {session.endedEarly && <p className="text-xs font-medium text-amber-600">Workout ended early</p>}
+    </div>
+  )
+}
+
+function SitDataView({ session }: { session: SitWorkoutSession }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Sprints</p>
+          <p className="mt-1 text-xl font-bold text-green-600">{session.sprintTimes.length}</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Best sprint</p>
+          <p className="mt-1 font-mono text-xl font-bold text-foreground">
+            {session.bestSprintTimeSeconds === null ? "--" : `${session.bestSprintTimeSeconds.toFixed(1)}s`}
+          </p>
+        </div>
+        <div className="col-span-2 rounded-lg bg-muted/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Workout</p>
+          <p className="mt-1 text-sm font-bold text-foreground">{formatDuration(session.totalTimeSeconds)} · {session.phasesCompleted}/4 phases</p>
+        </div>
+      </div>
+      {session.sprintTimes.length > 0 && (
+        <div className="rounded-lg border p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Sprint times</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {session.sprintTimes.map((sprint) => (
+              <Badge key={sprint.sprintNumber} variant="outline">Sprint {sprint.sprintNumber}: {sprint.timeSeconds.toFixed(1)}s</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {session.endedEarly && <p className="text-xs font-medium text-amber-600">Workout ended early</p>}
+    </div>
+  )
 }
 
 function Vo2MaxDataView({ session }: { session: Vo2MaxWorkoutSession }) {
@@ -188,6 +324,15 @@ function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
 }
 
 function WorkoutDataView({ session }: { session: WorkoutSession }) {
+  if (session.mode === "circuit") {
+    return <CircuitDataView session={session} />
+  }
+  if (session.mode === "interval") {
+    return <IntervalDataView session={session} />
+  }
+  if (session.mode === "sit") {
+    return <SitDataView session={session} />
+  }
   if (session.mode === "freeform" || (session.mode as string) === "traditional") {
     const freeformSession = session as FreeformWorkoutSession
     if (freeformSession.exercises) {
@@ -210,19 +355,28 @@ function WorkoutDataView({ session }: { session: WorkoutSession }) {
 }
 
 export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailModalProps) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(true, onClose)
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <Card className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card max-h-[80vh] overflow-hidden flex flex-col">
+      <button type="button" className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-label="Close workout details" />
+      <Card
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workout-detail-title"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card max-h-[80vh] overflow-hidden flex flex-col"
+      >
         <CardHeader className="pb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">{formatDisplayDate(date)}</h2>
+              <h2 id="workout-detail-title" className="text-lg font-semibold text-foreground">{formatDisplayDate(date)}</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {workouts.length} workout{workouts.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close workout details">
               <X className="h-5 w-5" />
             </Button>
           </div>

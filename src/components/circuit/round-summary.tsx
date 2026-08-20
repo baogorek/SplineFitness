@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, Play, Flag, AlertTriangle } from "lucide-react"
 import { CircuitRoundData } from "@/types/workout"
 import { formatTime } from "@/lib/storage"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 interface RoundSummaryProps {
   roundData: CircuitRoundData
@@ -28,18 +29,26 @@ export function RoundSummary({
   const weakLinks = roundData.comboResults
     .filter((r) => !r.completedWithoutStopping && r.weakLinkExerciseId)
     .map((r) => r.weakLinkExerciseId)
+  const dialogRef = useDialogFocus<HTMLDivElement>(true)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <Card className="relative z-10 w-full max-w-md border-border bg-card">
+      <Card
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="round-summary-title"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md border-border bg-card"
+      >
         <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-3">
             <div className="h-16 w-16 rounded-full bg-green-600 flex items-center justify-center">
               <CheckCircle2 className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-foreground">Round {roundData.round} Complete!</h2>
+          <h2 id="round-summary-title" className="text-2xl font-bold text-foreground">Round {roundData.round} Complete!</h2>
           <p className="text-muted-foreground mt-1">Great work on completing the round</p>
         </CardHeader>
 

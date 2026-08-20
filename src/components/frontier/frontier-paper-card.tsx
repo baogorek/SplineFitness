@@ -147,6 +147,7 @@ export function FrontierPaperCard({
                               {bodyPartGroup.exercises.map(({ exercise, displayName }) => {
                                 const expanded = expandedExerciseId === exercise.id
                                 const historyId = `frontier-history-${exercise.id}`
+                                const currentChange = getCurrentFrontierChange(exercise.metric, exercise.changes)
 
                                 return (
                                   <li key={exercise.id} className="border-b border-sky-200/80">
@@ -162,7 +163,7 @@ export function FrontierPaperCard({
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span className="whitespace-nowrap font-mono text-sm font-bold text-indigo-950 transition-colors group-hover:text-indigo-700">
-                            {formatFrontierChange(exercise.metric, getCurrentFrontierChange(exercise.changes))}
+                            {formatFrontierChange(exercise.metric, currentChange)}
                           </span>
                           <ChevronDown
                             aria-hidden="true"
@@ -197,7 +198,7 @@ export function FrontierPaperCard({
                                 className="flex min-w-max items-center"
                               >
                                 {exercise.changes.map((change, changeIndex) => {
-                                  const current = changeIndex === exercise.changes.length - 1
+                                  const current = change.id === currentChange?.id
                                   return (
                                     <li key={change.id} className="flex items-center">
                                       {changeIndex > 0 && (

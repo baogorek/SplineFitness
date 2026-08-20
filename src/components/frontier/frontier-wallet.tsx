@@ -15,12 +15,12 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/components/auth-provider"
 import {
-  deleteFrontierCard,
   getFrontierCards,
-  saveFrontierCard,
+  saveFrontierCards,
 } from "@/lib/storage"
 import {
   FrontierCard,
@@ -68,6 +68,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [importNotice, setImportNotice] = useState<string | null>(null)
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null)
   const [locationSheetMode, setLocationSheetMode] = useState<"add" | "edit" | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const saveVersionRef = useRef(0)
 
   useEffect(() => {
@@ -79,14 +81,30 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
 
     async function loadWallet() {
       setLoading(true)
-      const storedCards = await getFrontierCards()
+      setLoadError(false)
+      let storedCards: FrontierCard[]
+      try {
+        storedCards = await getFrontierCards()
+      } catch {
+        if (!cancelled) {
+          setLoadError(true)
+          setLoading(false)
+        }
+        return
+      }
       if (cancelled) return
 
       let nextCards = storedCards.map(normalizeFrontierCard)
       if (nextCards.length === 0) {
         const anywhere = createCard("Anywhere", 0)
         nextCards = [anywhere]
-        void saveFrontierCard(anywhere, nextCards)
+        if (!cancelled) setSaveStatus("saving")
+        try {
+          await saveFrontierCards(nextCards)
+          if (!cancelled) setSaveStatus("saved")
+        } catch {
+          if (!cancelled) setSaveStatus("error")
+        }
       }
 
       setCards(nextCards)
@@ -100,13 +118,13 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     return () => {
       cancelled = true
     }
-  }, [user?.uid])
+  }, [reloadKey, user?.uid])
 
-  const persistCard = useCallback(async (card: FrontierCard, wallet: FrontierCard[]) => {
+  const persistCard = useCallback(async (wallet: FrontierCard[]) => {
     const version = ++saveVersionRef.current
     setSaveStatus("saving")
     try {
-      await saveFrontierCard(card, wallet)
+      await saveFrontierCards(wallet)
       if (saveVersionRef.current === version) setSaveStatus("saved")
     } catch {
       if (saveVersionRef.current === version) setSaveStatus("error")
@@ -145,7 +163,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const commitCard = (updatedCard: FrontierCard) => {
     const nextCards = cards.map((card) => card.id === updatedCard.id ? updatedCard : card)
     setCards(nextCards)
-    void persistCard(updatedCard, nextCards)
+    void persistCard(nextCards)
   }
 
   const handleEntrySave = (entry: FrontierEntrySave) => {
@@ -233,14 +251,15 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     let skipped = 0
 
     rows.forEach((row) => {
+      const rowIdentity = frontierExerciseIdentity(row)
+      const existing = exercisesByName.get(rowIdentity)
+      const preserveTypedValue = !existing || existing.metric === row.metric
       const changes: FrontierChange[] = row.marks.map((mark) => ({
         id: crypto.randomUUID(),
-        ...(mark.value ? { value: mark.value } : {}),
+        ...(preserveTypedValue && mark.value ? { value: mark.value } : {}),
         rawValue: mark.rawValue,
         kind: "import",
       }))
-      const rowIdentity = frontierExerciseIdentity(row)
-      const existing = exercisesByName.get(rowIdentity)
 
       if (existing) {
         if (changes.length > 0) {
@@ -341,7 +360,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       setCards(nextCards)
       setCurrentIndex(nextCards.length - 1)
       rememberCard(card)
-      void persistCard(card, nextCards)
+      void persistCard(nextCards)
     } else if (currentCard) {
       commitCard({
         ...currentCard,
@@ -357,8 +376,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     if (!currentCard || cards.length === 1) return
     if (!window.confirm(`Remove the ${currentCard.name} card and all of its exercises?`)) return
 
-    const removedId = currentCard.id
-    const nextCards = cards.filter((card) => card.id !== removedId)
+    const nextCards = cards.filter((card) => card.id !== currentCard.id)
     const nextIndex = Math.min(currentIndex, nextCards.length - 1)
     setCards(nextCards)
     setCurrentIndex(nextIndex)
@@ -366,11 +384,27 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     setLocationSheetMode(null)
     setSaveStatus("saving")
     try {
-      await deleteFrontierCard(removedId, nextCards)
+      await saveFrontierCards(nextCards)
       setSaveStatus("saved")
     } catch {
       setSaveStatus("error")
     }
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-slate-100 p-4">
+        <div className="max-w-sm text-center">
+          <WalletCards className="mx-auto h-8 w-8 text-indigo-400" />
+          <p className="mt-3 font-semibold text-slate-800">Frontier Cards could not be loaded.</p>
+          <p className="mt-1 text-sm text-slate-500">Check your connection and try again.</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Button variant="outline" onClick={onBack}>Back</Button>
+            <Button onClick={() => setReloadKey((key) => key + 1)}>Retry</Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (loading || !currentCard) {
@@ -571,6 +605,7 @@ function LocationSheet({
   onDelete,
 }: LocationSheetProps) {
   const [name, setName] = useState(initialName)
+  const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
@@ -580,13 +615,20 @@ function LocationSheet({
         className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <section className="relative z-10 w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-6">
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-sheet-title"
+        tabIndex={-1}
+        className="relative z-10 w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-6"
+      >
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-500">
               {mode === "add" ? "Add to wallet" : "Card settings"}
             </p>
-            <h2 className="mt-1 text-xl font-bold text-slate-900">
+            <h2 id="location-sheet-title" className="mt-1 text-xl font-bold text-slate-900">
               {mode === "add" ? "New location card" : "Edit location card"}
             </h2>
           </div>

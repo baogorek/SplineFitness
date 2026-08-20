@@ -57,11 +57,20 @@ export function ComboCard({
   return (
     <Card
       className={cn(
-        "border-border bg-card overflow-hidden transition-all duration-200 cursor-pointer",
+        "border-border bg-card overflow-hidden transition-all duration-200",
+        onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isActive && "ring-2 ring-primary border-primary",
         isCompleted && "opacity-75"
       )}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onClick()
+        }
+      } : undefined}
     >
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
@@ -140,7 +149,7 @@ export function ComboCard({
                 </span>
                 {exerciseEquipment?.[sub.id] && (
                   <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                    10 lbs
+                    {exerciseEquipment[sub.id]}
                   </span>
                 )}
                 {videoUrl && (

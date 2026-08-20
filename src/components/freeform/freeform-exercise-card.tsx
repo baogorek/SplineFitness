@@ -58,10 +58,17 @@ export function FreeformExerciseCard({ exercise, onUpdate, onRemove }: FreeformE
           <Input
             value={exercise.name}
             onChange={(e) => onUpdate({ ...exercise, name: e.target.value })}
+            aria-label="Exercise name"
             placeholder="Exercise name..."
             className="text-base font-semibold border-0 border-b border-border rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
           />
-          <Button variant="ghost" size="icon" onClick={onRemove} className="shrink-0 text-muted-foreground hover:text-destructive">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            aria-label={`Remove ${exercise.name || "exercise"}`}
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -71,10 +78,16 @@ export function FreeformExerciseCard({ exercise, onUpdate, onRemove }: FreeformE
             <Badge
               key={tag}
               variant={exercise.tags.includes(tag) ? "default" : "outline"}
-              className="cursor-pointer text-xs capitalize"
-              onClick={() => toggleTag(tag)}
+              asChild
             >
-              {tag}
+              <button
+                type="button"
+                aria-pressed={exercise.tags.includes(tag)}
+                onClick={() => toggleTag(tag)}
+                className="cursor-pointer text-xs capitalize"
+              >
+                {tag}
+              </button>
             </Badge>
           ))}
         </div>
@@ -99,6 +112,7 @@ export function FreeformExerciseCard({ exercise, onUpdate, onRemove }: FreeformE
                       placeholder="—"
                       value={set.weight}
                       onChange={(e) => updateSet(set.id, "weight", e.target.value)}
+                      aria-label={`${exercise.name || "Exercise"} set ${set.id} weight in pounds`}
                       className="h-8 text-sm font-mono pr-8"
                     />
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">lbs</span>
@@ -109,9 +123,16 @@ export function FreeformExerciseCard({ exercise, onUpdate, onRemove }: FreeformE
                   placeholder="—"
                   value={set.reps}
                   onChange={(e) => updateSet(set.id, "reps", e.target.value)}
+                  aria-label={`${exercise.name || "Exercise"} set ${set.id} reps`}
                   className="h-8 text-sm font-mono"
                 />
-                <Button variant="ghost" size="icon" onClick={() => removeSet(set.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeSet(set.id)}
+                  aria-label={`Remove set ${set.id} from ${exercise.name || "exercise"}`}
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                >
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>

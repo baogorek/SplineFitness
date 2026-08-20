@@ -51,11 +51,15 @@ export const FRONTIER_METRIC_OPTIONS: Array<{
 ]
 
 export function getCurrentFrontier(changes: { value?: FrontierValue }[]): FrontierValue | null {
-  return changes.at(-1)?.value ?? null
+  return changes.findLast((change) => change.value !== undefined)?.value ?? null
 }
 
-export function getCurrentFrontierChange(changes: FrontierChange[]): FrontierChange | null {
-  return changes.at(-1) ?? null
+export function getCurrentFrontierChange(
+  metric: FrontierMetric,
+  changes: FrontierChange[]
+): FrontierChange | null {
+  if (metric === "freeform") return changes.at(-1) ?? null
+  return changes.findLast((change) => change.value !== undefined) ?? null
 }
 
 export function isFrontierImprovement(

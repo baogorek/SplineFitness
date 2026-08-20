@@ -74,24 +74,24 @@ export function LandingPage({ posts }: LandingPageProps) {
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               {FEATURES.AUTH_ENABLED ? (
                 <>
-                  <Button onClick={signInWithGoogle} disabled={loading} size="lg" className="gap-2">
-                    Sign in to save workouts
+                  <Button onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))} disabled={loading} size="lg" className="gap-2">
+                    Sign in for cloud history
                     <ArrowRight className="h-4 w-4" />
                   </Button>
-                  <Link href="/">
-                    <Button variant="outline" size="lg">
+                  <Button variant="outline" size="lg" asChild>
+                    <Link href="/">
                       Continue as guest
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Link href="/">
-                    <Button size="lg" className="gap-2">
+                  <Button size="lg" className="gap-2" asChild>
+                    <Link href="/">
                       Get Started
                       <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                   <p className="text-sm text-muted-foreground mt-2">
                     Sign in coming soon
                   </p>
@@ -142,12 +142,12 @@ export function LandingPage({ posts }: LandingPageProps) {
                 <h2 className="text-2xl font-bold text-foreground">
                   From the Blog
                 </h2>
-                <Link href="/blog">
-                  <Button variant="ghost" className="gap-2">
+                <Button variant="ghost" className="gap-2" asChild>
+                  <Link href="/blog">
                     View all posts
                     <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {posts.map((post) => (

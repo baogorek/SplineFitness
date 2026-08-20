@@ -20,11 +20,15 @@ import { useTimer } from "@/hooks/use-timer"
 import { useAudio } from "@/hooks/use-audio"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { scheduleCountdownTicks } from "@/lib/countdown-utils"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
+import { buildCircuitCompactConfig } from "@/lib/circuit-config"
 import {
-  saveWorkoutSession,
+  stageCompletedWorkout,
   getExercisePreferences,
+  saveBulkExercisePreferences,
   saveCircuitProgress,
   getCircuitProgress,
   clearCircuitProgress,
@@ -37,7 +41,6 @@ import { ComboCard } from "./combo-card"
 import { ComboTimer } from "./combo-timer"
 import { RoundTimer } from "./round-timer"
 import { RoundSummary } from "./round-summary"
-import { useAuth } from "@/components/auth-provider"
 import { FEATURES } from "@/lib/feature-flags"
 import { CircuitSetup } from "./circuit-setup"
 import { ComboCompletionModal } from "./combo-completion-modal"
@@ -100,30 +103,6 @@ function getPersistedPhase(phase: Phase): PersistedCircuitPhase {
   }
 }
 
-function buildCompactConfig(session: CircuitWorkoutSession): string {
-  const durations = Object.values(session.exerciseSettings || {}).map(s => s.durationSeconds)
-  const durationCounts = new Map<number, number>()
-  durations.forEach(d => durationCounts.set(d, (durationCounts.get(d) || 0) + 1))
-  let mostCommon = 60
-  let maxCount = 0
-  durationCounts.forEach((count, duration) => {
-    if (count > maxCount) { maxCount = count; mostCommon = duration }
-  })
-
-  const choices: Record<string, string> = {}
-  if (session.exerciseChoices) {
-    Object.entries(session.exerciseChoices).forEach(([id, choice]) => {
-      if (choice === "alternative") choices[id] = "alternative"
-    })
-  }
-
-  const config: Record<string, unknown> = { v: session.variant, d: mostCommon, c: choices }
-  if (session.exerciseEquipment && Object.keys(session.exerciseEquipment).length > 0) {
-    config.e = session.exerciseEquipment
-  }
-  return JSON.stringify(config)
-}
-
 function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: string): string {
   const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
   const totalTime = session.rounds.reduce((acc, r) => acc + r.totalTimeSeconds, 0)
@@ -145,7 +124,7 @@ function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: str
       lines.push(`  ${r.exerciseName} (${r.practiceTimeSeconds}s)`)
     })
   }
-  lines.push("", `Config: ${buildCompactConfig(session)}`)
+  lines.push("", `Config: ${buildCircuitCompactConfig(session)}`)
   lines.push("", "Per-Round Breakdown:")
   session.rounds.forEach((round) => {
     const rMins = Math.floor(round.totalTimeSeconds / 60)
@@ -216,17 +195,21 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [exerciseChoices, setExerciseChoices] = useState<Record<string, "main" | "alternative">>(() => getExerciseChoices())
   const [exerciseEquipment, setExerciseEquipment] = useState<Record<string, string>>(() => getExerciseEquipment())
   const [savedPreferences, setSavedPreferences] = useState<Record<string, ExercisePreference>>({})
+  const [preferencesLoading, setPreferencesLoading] = useState(true)
   const [weakLinks, setWeakLinks] = useState<WeakLinkEntry[]>([])
   const [weakLinkPracticeExercises, setWeakLinkPracticeExercises] = useState<WeakLinkEntry[]>([])
   const [weakLinkPracticeDuration, setWeakLinkPracticeDuration] = useState(60)
   const [weakLinkPracticeRecords, setWeakLinkPracticeRecords] = useState<WeakLinkPractice[]>([])
   const [transitionDuration, setTransitionDuration] = useState(5)
   const [testMode, setTestMode] = useState(false)
-  const [savedToHistory, setSavedToHistory] = useState(false)
   const [transitionExerciseName, setTransitionExerciseName] = useState("")
   const [transitionEquipmentNote, setTransitionEquipmentNote] = useState("")
   const [completedSessionData, setCompletedSessionData] = useState<CircuitWorkoutSession | null>(null)
   const [showComboChecklist, setShowComboChecklist] = useState(false)
+  const comboChecklistDialogRef = useDialogFocus<HTMLDivElement>(
+    showComboChecklist && phase === "ready",
+    () => setShowComboChecklist(false)
+  )
   const [comboCheckedItems, setComboCheckedItems] = useState<Set<string>>(new Set())
   const [isResumeTransition, setIsResumeTransition] = useState(false)
   const [audioLogCopyStatus, setAudioLogCopyStatus] = useState<"idle" | "copied" | "failed">("idle")
@@ -237,8 +220,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const transitionExerciseDurationRef = useRef(60)
   const audioLogCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [resumeDetectedAt] = useState(() => Date.now())
-
-  const { signInWithGoogle } = useAuth()
 
   const workout = circuitWorkouts[activeWorkout]
   const currentCombo = workout.combos[currentComboIndex]
@@ -276,7 +257,17 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const [pendingResume, setPendingResume] = useState<CircuitSessionProgress | null>(() => initialCircuitProgress)
 
   useEffect(() => {
-    getExercisePreferences().then(setSavedPreferences)
+    let cancelled = false
+    getExercisePreferences()
+      .then((preferences) => {
+        if (!cancelled) setSavedPreferences(preferences)
+      })
+      .finally(() => {
+        if (!cancelled) setPreferencesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const currentComboDuration = useMemo(() => {
@@ -605,6 +596,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
       setExerciseEquipment(equipment)
       saveExerciseChoices(choices)
       saveExerciseEquipment(equipment)
+      void saveBulkExercisePreferences(settings)
       workoutStartRef.current = new Date().toISOString()
       setPhase("ready")
     },
@@ -757,7 +749,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   }, [roundTimer])
 
   const handleFinishWorkout = useCallback(
-    async (practiceRecords?: WeakLinkPractice[]) => {
+    (practiceRecords?: WeakLinkPractice[]) => {
       if (savingRef.current) return
       savingRef.current = true
 
@@ -773,14 +765,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
         exerciseEquipment: Object.keys(exerciseEquipment).length > 0 ? exerciseEquipment : undefined,
         weakLinkPractice: practiceRecords || weakLinkPracticeRecords,
       }
-      clearCircuitProgress()
-      setCompletedSessionData(session)
-
-      if (FEATURES.AUTH_ENABLED) {
-        const result = await saveWorkoutSession(session)
-        setSavedToHistory(result !== null)
-      }
-      clearCircuitProgress()
+      setCompletedSessionData(stageCompletedWorkout(session) as CircuitWorkoutSession)
       setPhase("workout-complete")
     },
     [workout.id, activeWorkout, rounds, exerciseSettings, exerciseChoices, exerciseEquipment, weakLinkPracticeRecords]
@@ -820,6 +805,14 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
   const progressPercent = totalCombos > 0 ? (completedCombos / totalCombos) * 100 : 0
 
   if (phase === "setup") {
+    if (preferencesLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+          Loading circuit preferences…
+        </div>
+      )
+    }
+
     const initialSettings: Record<string, ExerciseSetting> = {}
     Object.entries(savedPreferences).forEach(([id, pref]) => {
       initialSettings[id] = {
@@ -829,7 +822,6 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
 
     return (
       <CircuitSetup
-        key={JSON.stringify({ initialSettings, exerciseChoices })}
         onBack={onModeChange}
         onStart={handleSetupComplete}
         savedSettings={initialSettings}
@@ -971,20 +963,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           )}
 
           {FEATURES.AUTH_ENABLED ? (
-            savedToHistory ? (
-              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
-                <p className="text-sm text-amber-600 font-medium">
-                  Sign in to save your workouts and track progress over time
-                </p>
-                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                  Sign in with Google
-                </Button>
-              </div>
-            )
+            completedSessionData && <CompletedWorkoutSave session={completedSessionData} />
           ) : (
             <>
               {completedSessionData && (
@@ -1036,6 +1015,8 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">CIRCUIT</span>
               <button
+                type="button"
+                aria-pressed={testMode}
                 onClick={() => setTestMode(!testMode)}
                 className={`flex h-6 px-2 items-center gap-1 rounded text-xs font-medium transition-colors ${
                   testMode
@@ -1047,6 +1028,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                 {testMode ? "12x" : "Test"}
               </button>
               <button
+                type="button"
                 onClick={handleTestAudio}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -1054,6 +1036,7 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                 Audio
               </button>
               <button
+                type="button"
                 onClick={handleCopyAudioLog}
                 title="Copy audio diagnostic log"
                 aria-label="Copy audio diagnostic log"
@@ -1255,8 +1238,15 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           }))
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4">
-              <h3 className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
+            <div
+              ref={comboChecklistDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="equipment-checklist-title"
+              tabIndex={-1}
+              className="mx-4 w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl space-y-4"
+            >
+              <h3 id="equipment-checklist-title" className="text-lg font-semibold text-foreground">Equipment Checklist</h3>
               <p className="text-sm text-muted-foreground">Confirm your equipment is ready for this combo.</p>
               <div className="space-y-3">
                 {equippedItems.map(item => {
@@ -1264,6 +1254,8 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
                   return (
                     <button
                       key={item.id}
+                      type="button"
+                      aria-pressed={isChecked}
                       onClick={() => setComboCheckedItems(prev => {
                         const next = new Set(prev)
                         if (next.has(item.id)) next.delete(item.id)

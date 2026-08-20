@@ -167,6 +167,7 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
                 variant="ghost"
                 size="sm"
                 onClick={signOut}
+                aria-label="Sign out"
                 className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
               >
                 <LogOut className="h-4 w-4 sm:mr-2" />
@@ -175,10 +176,11 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
             </>
           ) : (
             <>
-              <span className="text-sm text-slate-400">Guest mode (workouts won&apos;t be saved)</span>
+              <span className="text-sm text-slate-400">Guest mode (no cloud history)</span>
               <Button
                 size="sm"
-                onClick={signInWithGoogle}
+                onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))}
+                aria-label="Sign in"
                 className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
               >
                 <LogIn className="h-4 w-4 sm:mr-2" />

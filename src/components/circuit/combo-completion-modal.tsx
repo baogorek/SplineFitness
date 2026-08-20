@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, ArrowRight } from "lucide-react"
 import { Combo, ComboCompletionResult, SubExercise } from "@/types/workout"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 interface ComboCompletionModalProps {
   combo: Combo
@@ -35,6 +36,7 @@ export function ComboCompletionModal({
     boolean | null
   >(null)
   const [weakLinkExerciseId, setWeakLinkExerciseId] = useState<string | null>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>(true)
 
   const handleSubmit = () => {
     if (completedWithoutStopping === null) return
@@ -58,11 +60,18 @@ export function ComboCompletionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <Card className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card max-h-[90vh] overflow-y-auto">
+      <Card
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="combo-completion-title"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md mx-4 mb-4 sm:mb-0 border-border bg-card max-h-[90vh] overflow-y-auto"
+      >
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Combo Complete!</h2>
+              <h2 id="combo-completion-title" className="text-lg font-semibold text-foreground">Combo Complete!</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 How did it go?
               </p>
@@ -80,6 +89,8 @@ export function ComboCompletionModal({
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
+                type="button"
+                aria-pressed={completedWithoutStopping === true}
                 onClick={() => {
                   setCompletedWithoutStopping(true)
                   setWeakLinkExerciseId(null)
@@ -94,6 +105,8 @@ export function ComboCompletionModal({
                 <span className="font-medium">Yes!</span>
               </button>
               <button
+                type="button"
+                aria-pressed={completedWithoutStopping === false}
                 onClick={() => {
                   setCompletedWithoutStopping(false)
                   if (combo.subExercises.length === 1) {
@@ -121,6 +134,8 @@ export function ComboCompletionModal({
                 {combo.subExercises.map((sub) => (
                   <button
                     key={sub.id}
+                    type="button"
+                    aria-pressed={weakLinkExerciseId === sub.id}
                     onClick={() => setWeakLinkExerciseId(sub.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
                       weakLinkExerciseId === sub.id

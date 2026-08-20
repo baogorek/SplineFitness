@@ -9,6 +9,7 @@ import {
   signOut as firebaseSignOut,
 } from "firebase/auth"
 import { firebaseAuth } from "@/lib/firebase"
+import { syncPendingWorkoutSessions } from "@/lib/storage"
 
 type AuthContextType = {
   user: User | null
@@ -39,6 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+
+    const syncPending = () => {
+      void syncPendingWorkoutSessions()
+    }
+    syncPending()
+    window.addEventListener("online", syncPending)
+    return () => window.removeEventListener("online", syncPending)
+  }, [user])
 
   const signInWithGoogle = async () => {
     if (!firebaseAuth) {

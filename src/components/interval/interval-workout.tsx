@@ -8,16 +8,15 @@ import { useAudio } from "@/hooks/use-audio"
 import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { IntervalTimer } from "./interval-timer"
 import {
   clearIntervalProgress,
   getIntervalProgress,
   saveIntervalProgress,
-  saveWorkoutSession,
+  stageCompletedWorkout,
 } from "@/lib/storage"
 import { IntervalPhase, IntervalSessionProgress, IntervalWorkoutSession } from "@/types/workout"
-import { useAuth } from "@/components/auth-provider"
-import { FEATURES } from "@/lib/feature-flags"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 import {
   INTERVAL_SPEECH_CUES,
@@ -36,17 +35,16 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   const [workoutStarted, setWorkoutStarted] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const [completedSessionData, setCompletedSessionData] = useState<IntervalWorkoutSession | null>(null)
-  const [savedToHistory, setSavedToHistory] = useState(false)
   const [currentNote, setCurrentNote] = useState("")
   const [noteEditorOpen, setNoteEditorOpen] = useState(false)
   const [countdownDisplay, setCountdownDisplay] = useState<string>("")
   const [pendingResume, setPendingResume] = useState<IntervalSessionProgress | null>(null)
 
   const audio = useAudio()
-  useWakeLock(phase !== "complete")
-  useNavigationGuard(phase !== "complete")
+  const activeWorkout = workoutStarted && phase !== "complete"
+  useWakeLock(activeWorkout)
+  useNavigationGuard(activeWorkout)
 
-  const { signInWithGoogle } = useAuth()
   const spokenCuesRef = useRef<Set<number>>(new Set())
   const startedAtRef = useRef<string>("")
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
@@ -98,21 +96,15 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
         }
       }
     },
-    onComplete: async () => {
+    onComplete: () => {
       audio.speak(INTERVAL_COMPLETE_CUE)
       spokenCuesRef.current.clear()
       intervalTimer.reset()
       if (currentSet >= TOTAL_SETS) {
         completionInProgressRef.current = true
         workoutTimer.pause()
-        clearIntervalProgress()
         const session = buildSession(TOTAL_SETS, false)
-        setCompletedSessionData(session)
-        if (FEATURES.AUTH_ENABLED) {
-          const result = await saveWorkoutSession(session)
-          setSavedToHistory(result !== null)
-        }
-        clearIntervalProgress()
+        setCompletedSessionData(stageCompletedWorkout(session) as IntervalWorkoutSession)
         setPhase("complete")
       } else {
         setCurrentSet((prev) => prev + 1)
@@ -166,17 +158,20 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
   }, [])
 
   const syncCompletedSessionNotes = useCallback(() => {
-    if (!completedSessionData) return
-
     const filtered = Object.fromEntries(
       Object.entries(setNotesRef.current).filter(([, value]) => value.trim())
     )
 
-    setCompletedSessionData({
-      ...completedSessionData,
-      ...(Object.keys(filtered).length > 0 ? { setNotes: filtered } : {}),
+    setCompletedSessionData((currentSession) => {
+      if (!currentSession) return currentSession
+      const updatedSession = { ...currentSession }
+      delete updatedSession.setNotes
+      return {
+        ...updatedSession,
+        ...(Object.keys(filtered).length > 0 ? { setNotes: filtered } : {}),
+      }
     })
-  }, [completedSessionData])
+  }, [])
 
   const saveCurrentNote = useCallback((clearInput = false) => {
     const noteSet = getEditableNoteSetNumber(phase, currentSet)
@@ -334,12 +329,11 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     setCountdownDisplay("5")
 
     const timeouts = [
-      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("4") }, tick * 2),
-      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("3") }, tick * 3),
-      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("2") }, tick * 4),
-      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("1") }, tick * 5),
-      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("GO") }, tick * 6),
-      setTimeout(startInterval, tick * 7),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("4") }, tick),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("3") }, tick * 2),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("2") }, tick * 3),
+      setTimeout(() => { audio.playCountdownTick(); setCountdownDisplay("1") }, tick * 4),
+      setTimeout(startInterval, tick * 5),
     ]
     countdownTimeoutsRef.current = timeouts
   }, [currentSet, audio, speedMultiplier, saveCurrentNote, clearIOSUndoStack, clearCountdownTimeouts, startInterval])
@@ -435,7 +429,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     setPhase("ready")
   }, [])
 
-  const handleEndWorkout = useCallback(async () => {
+  const handleEndWorkout = useCallback(() => {
     if (completionInProgressRef.current) return
     completionInProgressRef.current = true
 
@@ -445,17 +439,10 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     workoutTimer.pause()
     restTimer.pause()
     restTimer.reset()
-    clearIntervalProgress()
-
     const completedSets = phase === "ready" ? currentSet - 1 : currentSet
     saveCurrentNote()
     const session = buildSession(completedSets, true)
-    setCompletedSessionData(session)
-    if (FEATURES.AUTH_ENABLED) {
-      const result = await saveWorkoutSession(session)
-      setSavedToHistory(result !== null)
-    }
-    clearIntervalProgress()
+    setCompletedSessionData(stageCompletedWorkout(session) as IntervalWorkoutSession)
     setPhase("complete")
   }, [phase, currentSet, clearCountdownTimeouts, intervalTimer, workoutTimer, restTimer, buildSession, saveCurrentNote])
 
@@ -623,22 +610,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
             </>
           )}
 
-          {FEATURES.AUTH_ENABLED && (
-            savedToHistory ? (
-              <div className="rounded-lg bg-green-600/10 border border-green-600/20 p-3 mt-4">
-                <p className="text-sm text-green-600 font-medium">Saved to workout history</p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-amber-600/10 border border-amber-600/20 p-4 mt-4">
-                <p className="text-sm text-amber-600 font-medium">
-                  Sign in to save your workouts and track progress over time
-                </p>
-                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                  Sign in with Google
-                </Button>
-              </div>
-            )
-          )}
+          {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
 
           <button
             onClick={onModeChange}
@@ -663,6 +635,8 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">4X4 INTERVAL</span>
               <button
+                type="button"
+                aria-pressed={testMode}
                 onClick={() => setTestMode(!testMode)}
                 className={`flex h-6 px-2 items-center gap-1 rounded text-xs font-medium transition-colors ${
                   testMode
@@ -674,6 +648,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
                 {testMode ? "12x" : "Test"}
               </button>
               <button
+                type="button"
                 onClick={handleTestAudio}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -684,6 +659,7 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
             <div className="flex items-center gap-3">
               {workoutStarted && (
                 <button
+                  type="button"
                   onClick={handleEndWorkout}
                   className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
                 >

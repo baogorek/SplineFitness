@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { History, RotateCcw, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import {
   isFrontierImprovement,
   parseDuration,
 } from "@/lib/frontier-utils"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 import {
   FRONTIER_BODY_PARTS,
   getFrontierExerciseStructure,
@@ -57,7 +58,7 @@ export function FrontierEntrySheet({
   onDelete,
 }: FrontierEntrySheetProps) {
   const initialStructure = exercise ? getFrontierExerciseStructure(exercise) : null
-  const currentChange = exercise ? getCurrentFrontierChange(exercise.changes) : null
+  const currentChange = exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes) : null
   const current = exercise ? getCurrentFrontier(exercise.changes) : null
   const [name, setName] = useState(initialStructure?.name ?? "")
   const [equipment, setEquipment] = useState(initialStructure?.equipment ?? "")
@@ -79,13 +80,7 @@ export function FrontierEntrySheet({
   const [correcting, setCorrecting] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
 
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", handleEscape)
-    return () => window.removeEventListener("keydown", handleEscape)
-  }, [onClose])
+  const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
 
   const parsedValue = useMemo<FrontierValue | null>(() => {
     if (metric === "freeform") return null
@@ -193,9 +188,11 @@ export function FrontierEntrySheet({
       />
 
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="frontier-entry-title"
+        tabIndex={-1}
         className="relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl sm:p-6"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -242,6 +239,7 @@ export function FrontierEntrySheet({
                 <button
                   key={option}
                   type="button"
+                  aria-pressed={bodyPart === option}
                   onClick={() => setBodyPart(option)}
                   className={cn(
                     "rounded-lg border px-2 py-2 text-xs font-semibold transition-colors",
@@ -277,6 +275,7 @@ export function FrontierEntrySheet({
                   <button
                     key={option.value}
                     type="button"
+                    aria-pressed={metric === option.value}
                     onClick={() => handleMetricChange(option.value)}
                     className={cn(
                       "rounded-xl border p-3 text-left transition-colors",

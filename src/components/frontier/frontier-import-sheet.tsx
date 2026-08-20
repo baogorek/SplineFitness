@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { AlertTriangle, ClipboardPaste, FileSpreadsheet, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,6 +10,7 @@ import {
 import { frontierExerciseIdentity } from "@/lib/frontier-structure"
 import { FRONTIER_METRIC_OPTIONS } from "@/lib/frontier-utils"
 import { FrontierCard } from "@/types/frontier"
+import { useDialogFocus } from "@/hooks/use-dialog-focus"
 
 interface FrontierImportSheetProps {
   card: FrontierCard
@@ -40,13 +41,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
   const skippedEmptyExistingCount = parsed.rows.length - importableRows.length
   const markCount = parsed.rows.reduce((total, row) => total + row.marks.length, 0)
 
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", handleEscape)
-    return () => window.removeEventListener("keydown", handleEscape)
-  }, [onClose])
+  const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center">
@@ -58,9 +53,11 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
       />
 
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="frontier-import-title"
+        tabIndex={-1}
         className="relative z-10 flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:max-w-2xl sm:rounded-3xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:px-6">
@@ -191,7 +188,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
                         {willAppend && existing && existing.metric !== row.metric && (
                           <p className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700">
                             <AlertTriangle className="h-3 w-3" />
-                            Existing measure retained; pasted text will still be preserved.
+                            Existing measure retained; pasted text will be preserved in history only.
                           </p>
                         )}
                         {row.warnings.map((warning) => (

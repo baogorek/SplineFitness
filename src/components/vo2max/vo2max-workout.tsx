@@ -22,14 +22,13 @@ import { useAudio } from "@/hooks/use-audio"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { useTimer } from "@/hooks/use-timer"
 import { useWakeLock } from "@/hooks/use-wake-lock"
+import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import {
   clearVo2MaxProgress,
   getVo2MaxProgress,
   saveVo2MaxProgress,
-  saveWorkoutSession,
+  stageCompletedWorkout,
 } from "@/lib/storage"
-import { FEATURES } from "@/lib/feature-flags"
-import { useAuth } from "@/components/auth-provider"
 import { Vo2MaxSessionProgress, Vo2MaxWorkoutSession } from "@/types/workout"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
@@ -135,11 +134,8 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
   const [calculatedMetrics, setCalculatedMetrics] = useState<Vo2Metrics | null>(null)
   const [calculationError, setCalculationError] = useState("")
   const [completedSessionData, setCompletedSessionData] = useState<Vo2MaxWorkoutSession | null>(null)
-  const [savedToHistory, setSavedToHistory] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
 
   const audio = useAudio()
-  const { signInWithGoogle } = useAuth()
   const startedAtRef = useRef("")
   const completedAtRef = useRef("")
   const lastTickRemainingRef = useRef(-1)
@@ -198,6 +194,10 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
 
   const saveProgressSnapshot = useCallback(() => {
     if (stage !== "timer" && stage !== "entry") return
+    if (endedEarly) {
+      clearVo2MaxProgress()
+      return
+    }
     const savedAtMs = Date.now()
     saveVo2MaxProgress({
       stage,
@@ -328,7 +328,6 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     setFinalDistanceInput("")
     resetCalculation()
     setCompletedSessionData(null)
-    setSavedToHistory(false)
     setEndedEarly(false)
     setTimerStarted(false)
     startedAtRef.current = ""
@@ -369,6 +368,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     completedAtRef.current = new Date().toISOString()
     setFinishedDurationSeconds(Math.max(1, finalElapsedSeconds))
     setEndedEarly(true)
+    clearVo2MaxProgress()
     setStage("entry")
   }, [getElapsedSeconds, pauseTimer, timerStarted])
 
@@ -400,7 +400,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     setStage("setup")
   }, [])
 
-  const handleSaveResult = useCallback(async () => {
+  const handleSaveResult = useCallback(() => {
     if (!calculatedMetrics || finalDistanceMiles === null || currentStartOffsetMiles === null) return
 
     const completedAt = completedAtRef.current || new Date().toISOString()
@@ -421,15 +421,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
       endedEarly,
     }
 
-    setIsSaving(true)
-    setCompletedSessionData(session)
-    clearVo2MaxProgress()
-    if (FEATURES.AUTH_ENABLED) {
-      const result = await saveWorkoutSession(session)
-      setSavedToHistory(result !== null)
-    }
-    clearVo2MaxProgress()
-    setIsSaving(false)
+    setCompletedSessionData(stageCompletedWorkout(session) as Vo2MaxWorkoutSession)
     setStage("complete")
   }, [
     calculatedMetrics,
@@ -446,8 +438,6 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     setFinalDistanceInput("")
     resetCalculation()
     setCompletedSessionData(null)
-    setSavedToHistory(false)
-    setIsSaving(false)
     setTimerStarted(false)
     setEndedEarly(false)
     setFinishedDurationSeconds(DEFAULT_DURATION_SECONDS)
@@ -547,22 +537,7 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
             Remember to tap Save in Google Calendar!
           </p>
 
-          {FEATURES.AUTH_ENABLED && (
-            savedToHistory ? (
-              <div className="rounded-lg border border-green-600/20 bg-green-600/10 p-3">
-                <p className="text-sm font-medium text-green-600">Saved to workout history</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-amber-600/20 bg-amber-600/10 p-4">
-                <p className="text-sm font-medium text-amber-600">
-                  Sign in to save your VO2 Max estimates and track progress over time.
-                </p>
-                <Button variant="outline" size="sm" onClick={signInWithGoogle} className="mt-3">
-                  Sign in with Google
-                </Button>
-              </div>
-            )
-          )}
+          <CompletedWorkoutSave session={completedSessionData} />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Button variant="outline" onClick={handleRepeatSameSetup} className="h-12 gap-2">
@@ -594,6 +569,8 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
               </span>
             )}
             <button
+              type="button"
+              aria-pressed={testMode}
               onClick={() => setTestMode(!testMode)}
               className={`flex h-6 items-center gap-1 rounded px-2 text-xs font-medium transition-colors ${
                 testMode
@@ -874,11 +851,10 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
               {calculatedMetrics && (
                 <Button
                   onClick={handleSaveResult}
-                  disabled={isSaving}
                   className="h-16 w-full gap-2 text-lg font-bold"
                 >
                   <CheckCircle2 className="h-5 w-5" />
-                  {isSaving ? "Saving..." : "Record VO2 Max Estimate"}
+                  Record VO2 Max Estimate
                 </Button>
               )}
               <Button variant="outline" onClick={onModeChange} className="h-12 w-full">

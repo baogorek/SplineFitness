@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft } from "lucide-react";
 import { BlogPostMeta } from "@/types/blog";
+import { formatBlogDate } from "@/lib/blog-date";
 
 interface BlogLayoutProps {
   meta: BlogPostMeta;
@@ -35,13 +36,7 @@ export function BlogLayout({ meta, children }: BlogLayoutProps) {
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span>{meta.author}</span>
               <span>·</span>
-              <span>
-                {new Date(meta.date).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
+              <span>{formatBlogDate(meta.date)}</span>
               {meta.readingTime && (
                 <>
                   <span>·</span>

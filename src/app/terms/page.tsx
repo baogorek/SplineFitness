@@ -34,7 +34,7 @@ export default function TermsPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Terms of Service</h1>
-          <p className="text-muted-foreground">Last updated: January 19, 2026</p>
+          <p className="text-muted-foreground">Last updated: August 19, 2026</p>
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -58,9 +58,10 @@ export default function TermsPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">User Accounts</h2>
             <p className="text-muted-foreground mb-4">
-              To save your workout data, you must sign in using your Google account. You are responsible
-              for maintaining the security of your account credentials. You may also use the service
-              in guest mode without an account, but your data will not be saved.
+              To add workout data to your cloud history and synchronize it between devices, you must sign
+              in using your Google account. You are responsible for maintaining the security of your account
+              credentials. In guest mode, active-workout checkpoints and completed workouts awaiting sign-in
+              may be stored only in your browser; they are not uploaded or synchronized between devices.
             </p>
           </section>
 

@@ -20,7 +20,7 @@ export function LoginScreen() {
         <CardContent className="p-6">
           {FEATURES.AUTH_ENABLED ? (
             <Button
-              onClick={signInWithGoogle}
+              onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))}
               disabled={loading}
               className="w-full"
               size="lg"
@@ -48,11 +48,11 @@ export function LoginScreen() {
           ) : (
             <div className="text-center">
               <p className="text-muted-foreground mb-4">Sign in coming soon</p>
-              <Link href="/">
-                <Button className="w-full" size="lg">
+              <Button className="w-full" size="lg" asChild>
+                <Link href="/">
                   Continue as Guest
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           )}
         </CardContent>
