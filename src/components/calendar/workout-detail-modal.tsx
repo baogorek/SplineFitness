@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Activity, X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
 import { WorkoutHistoryEntry, WorkoutSession, FreeformWorkoutSession, LissCoreWorkoutSession, Vo2MaxWorkoutSession } from "@/types/workout"
-import { formatCableSetup } from "@/data/liss-core"
+import { formatCableSetup, formatCardioSelection } from "@/data/liss-core"
 import { formatDisplayDate } from "./calendar-utils"
 
 interface WorkoutDetailModalProps {
@@ -103,23 +103,32 @@ function Vo2MaxDataView({ session }: { session: Vo2MaxWorkoutSession }) {
 }
 
 function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
+  const extensionSetup = session.cableSetup.backExtension ?? session.cableSetup.antiFlexion ?? {}
+  const extensionLabel = session.cableSetup.backExtension ? "Back extension" : "Anti-flexion"
   const setupRows = session.cableSetup.useSideSpecificRotation
     ? [
         ["Rotation — left", session.cableSetup.rotationLeft ?? session.cableSetup.rotation],
         ["Rotation — right", session.cableSetup.rotationRight ?? session.cableSetup.rotation],
         ["Crunch", session.cableSetup.crunch],
-        ["Anti-flexion", session.cableSetup.antiFlexion],
+        [extensionLabel, extensionSetup],
       ] as const
     : [
         ["Rotation", session.cableSetup.rotation],
         ["Crunch", session.cableSetup.crunch],
-        ["Anti-flexion", session.cableSetup.antiFlexion],
+        [extensionLabel, extensionSetup],
       ] as const
   const ratingLabels = {
     "too-easy": "Too Easy",
     "about-right": "About Right",
     "too-hard": "Too Hard",
   } as const
+  const exerciseLabels: Record<string, string> = {
+    rotation: "Rotation",
+    crunch: "Crunch",
+    "back-extension": "Back extension",
+    "anti-flexion": "Anti-flexion",
+    overall: "Overall",
+  }
 
   return (
     <div className="space-y-3">
@@ -134,8 +143,8 @@ function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
           <p className="text-xs text-muted-foreground">{session.skippedIntervals} skipped</p>
         </div>
         <div className="rounded-lg bg-muted/50 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Treadmill</p>
-          <p className="mt-1 font-mono text-sm font-bold">{formatDuration(session.lissSeconds)}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Cardio</p>
+          <p className="mt-1 font-mono text-sm font-bold">{formatDuration(session.cardioSeconds ?? session.lissSeconds ?? 0)}</p>
         </div>
         <div className="rounded-lg bg-muted/50 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Core endurance</p>
@@ -143,6 +152,17 @@ function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
           <p className="text-xs text-muted-foreground">{formatDuration(session.extensorSeconds)} extensor</p>
         </div>
       </div>
+
+      {session.cardioSelections && Object.keys(session.cardioSelections).length > 0 && (
+        <div className="rounded-lg border p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Cardio modalities</p>
+          <div className="mt-2 space-y-1 text-xs text-foreground">
+            {Object.entries(session.cardioSelections).map(([id, selection], index) => (
+              <p key={id}>Cardio {index + 1}: {formatCardioSelection(selection) ?? "Not recorded"}</p>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {setupRows.map(([label, setup]) => (
@@ -157,7 +177,7 @@ function LissCoreDataView({ session }: { session: LissCoreWorkoutSession }) {
       {session.difficultyRatings && Object.keys(session.difficultyRatings).length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(session.difficultyRatings).map(([exercise, rating]) => (
-            rating ? <Badge key={exercise} variant="outline" className="text-[10px] capitalize">{exercise.replace("anti-flexion", "Anti-flexion")}: {ratingLabels[rating]}</Badge> : null
+            rating ? <Badge key={exercise} variant="outline" className="text-[10px]">{exerciseLabels[exercise] ?? exercise}: {ratingLabels[rating]}</Badge> : null
           ))}
         </div>
       )}

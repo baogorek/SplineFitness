@@ -30,6 +30,7 @@ import {
   CORE_EXERCISE_NAMES,
   DEFAULT_LISS_CORE_TEMPLATE,
   formatCableSetup,
+  formatCardioSelection,
   getCableSetupForExercise,
   getNextWorkStep,
   normalizeLissCoreTemplate,
@@ -48,6 +49,7 @@ import {
 } from "@/lib/storage"
 import {
   CableExerciseSetup,
+  CardioIntervalSelection,
   CoreDifficulty,
   CoreExerciseId,
   LissCoreCableSetup,
@@ -57,7 +59,7 @@ import {
   LissCoreTemplate,
   LissCoreWorkoutSession,
 } from "@/types/workout"
-import { CableSetupFields, LissCoreSetup } from "./liss-core-setup"
+import { CableSetupFields, CardioModalityFields, LissCoreSetup } from "./liss-core-setup"
 
 interface LissCoreWorkoutProps {
   onModeChange: () => void
@@ -67,6 +69,7 @@ interface ActiveConfig {
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup
   previousCableSetup: LissCoreCableSetup
+  cardioSelections: Record<string, CardioIntervalSelection>
   voiceCues: boolean
   startedAt: string
   initialProgress?: LissCoreSessionProgress
@@ -74,7 +77,7 @@ interface ActiveConfig {
 }
 
 interface WorkoutSummary {
-  lissSeconds: number
+  cardioSeconds: number
   abdominalSeconds: number
   extensorSeconds: number
   completedIntervals: number
@@ -106,13 +109,13 @@ function getResumeLabel(progress: LissCoreSessionProgress): string {
   const steps = buildLissCoreSteps(progress.template)
   const step = steps[Math.min(progress.stepIndex, steps.length - 1)]
   if (!step) return "Workout in progress"
-  return step.round ? `${step.label} · Round ${step.round}` : step.label
+  return step.label
 }
 
 function summarizeWorkout(steps: LissCoreStep[], results: LissCoreStepResult[]): WorkoutSummary {
   const byStepId = new Map(results.map((result) => [result.stepId, result]))
   const summary: WorkoutSummary = {
-    lissSeconds: 0,
+    cardioSeconds: 0,
     abdominalSeconds: 0,
     extensorSeconds: 0,
     completedIntervals: 0,
@@ -124,7 +127,7 @@ function summarizeWorkout(steps: LissCoreStep[], results: LissCoreStepResult[]):
     const result = byStepId.get(step.id)
     if (!result) return
     const performedSeconds = Math.min(step.durationSeconds, Math.max(0, result.elapsedSeconds))
-    if (step.workCategory === "liss") summary.lissSeconds += performedSeconds
+    if (step.workCategory === "cardio") summary.cardioSeconds += performedSeconds
     if (step.workCategory === "abdominal") summary.abdominalSeconds += performedSeconds
     if (step.workCategory === "extensor") summary.extensorSeconds += performedSeconds
     if (result.status === "completed") summary.completedIntervals += 1
@@ -139,8 +142,45 @@ function vibrate(pattern: number | number[]) {
 }
 
 function speechForStep(step: LissCoreStep): string {
-  const pieces = [step.round ? `Round ${step.round}.` : null, `${step.label}.`, step.substep ? `${step.substep}.` : null]
+  const pieces = [`${step.label}.`, step.substep ? `${step.substep}.` : null]
   return pieces.filter(Boolean).join(" ")
+}
+
+function CardioSetupModal({
+  label,
+  selection,
+  onChange,
+  onClose,
+}: {
+  label: string
+  selection?: CardioIntervalSelection
+  onChange: (selection: CardioIntervalSelection) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState<CardioIntervalSelection>(selection ?? {})
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <button className="absolute inset-0 bg-black/60" aria-label="Close cardio setup" onClick={onClose} />
+      <Card className="relative z-10 mb-4 w-[calc(100%-2rem)] max-w-md gap-4 py-5">
+        <CardHeader className="px-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-violet-600">Today&apos;s cardio</p>
+              <h2 className="mt-1 text-xl font-bold">{label}</h2>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close cardio setup"><X /></Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 px-5">
+          <CardioModalityFields label="Modality" selection={draft} onChange={setDraft} />
+          <p className="text-xs text-muted-foreground">The workout timer continues while this is open.</p>
+          <Button className="w-full bg-violet-600 hover:bg-violet-700" onClick={() => { onChange(draft); onClose() }}>
+            Save Cardio
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 function ExerciseInfoModal({ step, onClose }: { step: LissCoreStep; onClose: () => void }) {
@@ -244,6 +284,7 @@ function CompletedWorkout({
   stepResults,
   endedEarly,
   cableSetup,
+  cardioSelections,
   onCableSetupChange,
   onExit,
 }: {
@@ -253,6 +294,7 @@ function CompletedWorkout({
   stepResults: LissCoreStepResult[]
   endedEarly: boolean
   cableSetup: LissCoreCableSetup
+  cardioSelections: Record<string, CardioIntervalSelection>
   onCableSetupChange: (setup: LissCoreCableSetup) => void
   onExit: () => void
 }) {
@@ -270,13 +312,13 @@ function CompletedWorkout({
         ["Rotation — left", cableSetup.rotationLeft ?? cableSetup.rotation],
         ["Rotation — right", cableSetup.rotationRight ?? cableSetup.rotation],
         ["Crunch", cableSetup.crunch],
-        ["Anti-flexion", cableSetup.antiFlexion],
+        ["Back extension", cableSetup.backExtension],
       ] as const
     }
     return [
       ["Rotation", cableSetup.rotation],
       ["Crunch", cableSetup.crunch],
-      ["Anti-flexion", cableSetup.antiFlexion],
+      ["Back extension", cableSetup.backExtension],
     ] as const
   }, [cableSetup])
 
@@ -292,6 +334,7 @@ function CompletedWorkout({
       totalTimeSeconds,
       template: config.template,
       cableSetup,
+      cardioSelections,
       stepResults,
       ...summary,
       ...(Object.keys(ratings).length > 0 && { difficultyRatings: ratings }),
@@ -327,13 +370,27 @@ function CompletedWorkout({
           <CardContent className="grid grid-cols-2 gap-3 px-5 sm:grid-cols-4">
             {[
               ["Total", totalTimeSeconds],
-              ["Treadmill", summary.lissSeconds],
+              ["Cardio", summary.cardioSeconds],
               ["Abdominal", summary.abdominalSeconds],
               ["Extensor", summary.extensorSeconds],
             ].map(([label, seconds]) => (
               <div key={String(label)} className="rounded-xl bg-slate-50 p-3 text-center">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
                 <p className="mt-1 font-mono text-xl font-bold text-slate-900">{formatSummaryDuration(Number(seconds))}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="gap-4 py-5">
+          <CardHeader className="px-5">
+            <h2 className="font-bold text-slate-900">Cardio Used</h2>
+          </CardHeader>
+          <CardContent className="space-y-2 px-5">
+            {config.template.blocks.filter((block) => block.kind === "cardio").map((block, index) => (
+              <div key={block.id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm">
+                <span className="font-semibold text-slate-700">Cardio {index + 1}</span>
+                <span className="text-slate-500">{formatCardioSelection(cardioSelections[block.id]) ?? "Not recorded"}</span>
               </div>
             ))}
           </CardContent>
@@ -363,7 +420,7 @@ function CompletedWorkout({
             <p className="text-sm text-slate-500">Optional—leave anything blank that you don&apos;t want to log.</p>
           </CardHeader>
           <CardContent className="space-y-5 px-5">
-            {(["rotation", "crunch", "anti-flexion"] as CoreExerciseId[]).map((exerciseId) => (
+            {(["rotation", "crunch", "back-extension"] as CoreExerciseId[]).map((exerciseId) => (
               <DifficultyRow
                 key={exerciseId}
                 label={CORE_EXERCISE_NAMES[exerciseId]}
@@ -425,8 +482,10 @@ function ActiveWorkout({
   const steps = useMemo(() => buildLissCoreSteps(config.template), [config.template])
   const [voiceCues, setVoiceCues] = useState(config.voiceCues)
   const [cableSetup, setCableSetup] = useState(config.cableSetup)
+  const [cardioSelections, setCardioSelections] = useState(config.cardioSelections)
   const [openInfoStep, setOpenInfoStep] = useState<LissCoreStep | null>(null)
   const [editingCableStep, setEditingCableStep] = useState<LissCoreStep | null>(null)
+  const [editingCardioStep, setEditingCardioStep] = useState<LissCoreStep | null>(null)
   const initializedRef = useRef(false)
 
   const handleBoundary = useCallback((previousStep: LissCoreStep, nextStep: LissCoreStep) => {
@@ -443,16 +502,16 @@ function ActiveWorkout({
     if (nextStep.kind === "work") {
       audio.playExerciseStartChime()
       vibrate(180)
-      if (voiceCues) audio.speak(speechForStep(nextStep))
+      if (voiceCues) {
+        const modality = nextStep.blockId ? formatCardioSelection(cardioSelections[nextStep.blockId]) : null
+        audio.speak(`${speechForStep(nextStep)}${modality ? ` ${modality}.` : ""}`)
+      }
       return
     }
 
     audio.playExerciseEndSound()
     vibrate([180, 90, 100])
-    if (voiceCues && nextStep.transitionType === "between-rounds" && nextStep.round) {
-      audio.speak(`Round ${nextStep.round}.`)
-    }
-  }, [audio, voiceCues])
+  }, [audio, cardioSelections, voiceCues])
 
   const handleCue = useCallback((cue: SequenceTimerCue) => {
     audio.playWarningSound()
@@ -497,12 +556,15 @@ function ActiveWorkout({
       const restoredStep = steps[restoredSnapshot.stepIndex]
       if (!restored.completedWhileAway && restoredStep) {
         audio.playExerciseStartChime()
-        if (voiceCues) audio.speak(speechForStep(restoredStep))
+        if (voiceCues) {
+          const modality = restoredStep.blockId ? formatCardioSelection(cardioSelections[restoredStep.blockId]) : null
+          audio.speak(`${speechForStep(restoredStep)}${modality ? ` ${modality}.` : ""}`)
+        }
       }
     } else {
       startTimer()
     }
-  }, [audio, captureTimer, config.initialProgress, config.resumeDetectedAtMs, restoreTimer, resumeTimer, startTimer, steps, voiceCues])
+  }, [audio, captureTimer, cardioSelections, config.initialProgress, config.resumeDetectedAtMs, restoreTimer, resumeTimer, startTimer, steps, voiceCues])
 
   useEffect(() => {
     if (timer.isComplete) {
@@ -520,6 +582,7 @@ function ActiveWorkout({
       template: config.template,
       cableSetup,
       previousCableSetup: config.previousCableSetup,
+      cardioSelections,
       voiceCues,
       startedAt: config.startedAt,
       savedAt: new Date().toISOString(),
@@ -532,7 +595,7 @@ function ActiveWorkout({
       stepResults: captured.stepResults,
       endedEarly: captured.endedEarly,
     })
-  }, [cableSetup, captureTimer, config.previousCableSetup, config.startedAt, config.template, voiceCues])
+  }, [cableSetup, captureTimer, cardioSelections, config.previousCableSetup, config.startedAt, config.template, voiceCues])
 
   useEffect(() => {
     const interval = window.setInterval(saveProgressSnapshot, 2000)
@@ -561,6 +624,11 @@ function ActiveWorkout({
   const currentCableSetup = getCableSetupForExercise(cableSetup, currentStep?.exerciseId, currentStep?.side)
   const previousSetupText = formatCableSetup(previousSetup)
   const currentSetupText = formatCableSetup(currentCableSetup)
+  const currentCardioSelection = currentStep?.blockId ? cardioSelections[currentStep.blockId] : undefined
+  const currentCardioText = formatCardioSelection(currentCardioSelection)
+  const nextCardioText = nextWorkStep?.blockId && nextWorkStep.exerciseId === "cardio"
+    ? formatCardioSelection(cardioSelections[nextWorkStep.blockId])
+    : null
   const progressPercent = currentStep
     ? Math.min(100, Math.max(0, ((currentStep.durationSeconds - timer.remainingMs / 1000) / currentStep.durationSeconds) * 100))
     : 0
@@ -576,8 +644,8 @@ function ActiveWorkout({
       }
     } else if (step.exerciseId === "crunch") {
       setCableSetup((current) => ({ ...current, crunch: setup }))
-    } else if (step.exerciseId === "anti-flexion") {
-      setCableSetup((current) => ({ ...current, antiFlexion: setup }))
+    } else if (step.exerciseId === "back-extension") {
+      setCableSetup((current) => ({ ...current, backExtension: setup }))
     }
   }
 
@@ -596,6 +664,7 @@ function ActiveWorkout({
         stepResults={timer.stepResults}
         endedEarly={timer.endedEarly}
         cableSetup={cableSetup}
+        cardioSelections={cardioSelections}
         onCableSetupChange={setCableSetup}
         onExit={onExit}
       />
@@ -637,7 +706,7 @@ function ActiveWorkout({
 
       <main className="mx-auto flex min-h-[calc(100vh-61px)] w-full max-w-2xl flex-col p-4 pb-8">
         <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-          <span>{currentStep.round ? `Round ${currentStep.round} of ${config.template.rounds}` : "Phase 1 of 2"}</span>
+          <span>Block {(currentStep.blockIndex ?? 0) + 1} of {currentStep.blockCount ?? config.template.blocks.length}</span>
           <span>Step {timer.stepIndex + 1} of {steps.length}</span>
         </div>
 
@@ -651,6 +720,7 @@ function ActiveWorkout({
               {(nextWorkStep?.substep || currentStep.substep) && (
                 <p className="mt-2 text-lg font-semibold text-violet-300">{nextWorkStep?.substep ?? currentStep.substep}</p>
               )}
+              {nextCardioText && <p className="mt-2 text-lg font-semibold text-violet-300">{nextCardioText}</p>}
               <p className="mt-8 text-sm uppercase tracking-wider text-slate-400">Starting in</p>
             </>
           ) : (
@@ -680,7 +750,16 @@ function ActiveWorkout({
             <div className={`h-full rounded-full transition-[width] duration-200 ${isTransition ? "bg-amber-400" : "bg-violet-500"}`} style={{ width: `${progressPercent}%` }} />
           </div>
 
-          {!isTransition && currentStep.exerciseId !== "treadmill" && (
+          {!isTransition && currentStep.exerciseId === "cardio" && (
+            <div className="mt-6 flex w-full max-w-md items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-left">
+              <p className="text-sm text-slate-200"><span className="font-semibold">Modality:</span> {currentCardioText ?? "Not selected"}</p>
+              <Button variant="ghost" size="sm" className="text-violet-300 hover:bg-white/10 hover:text-white" onClick={() => setEditingCardioStep(currentStep)}>
+                <Settings2 /> Edit
+              </Button>
+            </div>
+          )}
+
+          {!isTransition && currentStep.exerciseId !== "cardio" && (
             <div className="mt-6 w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-3 text-left">
               {previousSetupText && <p className="text-xs text-slate-400"><span className="font-semibold text-slate-300">Last setup:</span> {previousSetupText}</p>}
               <div className="mt-1 flex items-center justify-between gap-3">
@@ -729,7 +808,7 @@ function ActiveWorkout({
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
             <span className="text-slate-400">Next: </span>
-            <span className="font-semibold text-white">{nextWorkStep ? `${nextWorkStep.label}${nextWorkStep.substep ? ` — ${nextWorkStep.substep}` : ""} · ${formatTimer(nextWorkStep.durationSeconds)}` : "Workout complete"}</span>
+            <span className="font-semibold text-white">{nextWorkStep ? `${nextWorkStep.label}${nextWorkStep.substep ? ` — ${nextWorkStep.substep}` : nextCardioText ? ` — ${nextCardioText}` : ""} · ${formatTimer(nextWorkStep.durationSeconds)}` : "Workout complete"}</span>
           </div>
         </div>
       </main>
@@ -739,9 +818,17 @@ function ActiveWorkout({
         <CableSetupModal
           label={`${editingCableStep.label}${editingCableStep.substep ? ` — ${editingCableStep.substep}` : ""}`}
           setup={getCableSetupForExercise(cableSetup, editingCableStep.exerciseId, editingCableStep.side) ?? {}}
-          includeNote={editingCableStep.exerciseId === "anti-flexion"}
+          includeNote={editingCableStep.exerciseId === "back-extension"}
           onChange={(setup) => updateCableSetupForStep(editingCableStep, setup)}
           onClose={() => setEditingCableStep(null)}
+        />
+      )}
+      {editingCardioStep && editingCardioStep.blockId && (
+        <CardioSetupModal
+          label={editingCardioStep.label}
+          selection={cardioSelections[editingCardioStep.blockId]}
+          onChange={(selection) => setCardioSelections((current) => ({ ...current, [editingCardioStep.blockId!]: selection }))}
+          onClose={() => setEditingCardioStep(null)}
         />
       )}
     </div>
@@ -762,16 +849,22 @@ export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
   const handleStart = (
     template: LissCoreTemplate,
     cableSetup: LissCoreCableSetup,
+    cardioSelections: Record<string, CardioIntervalSelection>,
     enabledVoiceCues: boolean
   ) => {
     clearLissCoreProgress()
     audio.playExerciseStartChime()
     vibrate(180)
-    if (enabledVoiceCues) audio.speak("Treadmill LISS.")
+    if (enabledVoiceCues) {
+      const firstCardio = template.blocks.find((block) => block.kind === "cardio")
+      const modality = firstCardio ? formatCardioSelection(cardioSelections[firstCardio.id]) : null
+      audio.speak(`Cardio.${modality ? ` ${modality}.` : ""}`)
+    }
     setActiveConfig({
       template,
       cableSetup,
       previousCableSetup,
+      cardioSelections,
       voiceCues: enabledVoiceCues,
       startedAt: new Date().toISOString(),
     })
@@ -784,6 +877,7 @@ export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
       template: normalizeLissCoreTemplate(pendingProgress.template),
       cableSetup: pendingProgress.cableSetup,
       previousCableSetup: pendingProgress.previousCableSetup,
+      cardioSelections: pendingProgress.cardioSelections,
       voiceCues: pendingProgress.voiceCues,
       startedAt: pendingProgress.startedAt,
       initialProgress: pendingProgress,

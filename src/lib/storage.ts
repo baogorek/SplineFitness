@@ -326,7 +326,16 @@ export function getLissCoreProgress(): LissCoreSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_PROGRESS)
-    return data ? JSON.parse(data) : null
+    if (!data) return null
+    const parsed = JSON.parse(data) as LissCoreSessionProgress
+    if (parsed.template?.version !== 2 || !Array.isArray(parsed.template.blocks)) {
+      localStorage.removeItem(STORAGE_KEYS.LISS_CORE_PROGRESS)
+      return null
+    }
+    parsed.cardioSelections ??= {}
+    parsed.cableSetup = normalizeLissCoreCableSetup(parsed.cableSetup)
+    parsed.previousCableSetup = normalizeLissCoreCableSetup(parsed.previousCableSetup)
+    return parsed
   } catch {
     return null
   }
@@ -364,14 +373,25 @@ const EMPTY_LISS_CORE_CABLE_SETUP: LissCoreCableSetup = {
   useSideSpecificRotation: false,
   rotation: {},
   crunch: {},
-  antiFlexion: {},
+  backExtension: {},
+}
+
+function normalizeLissCoreCableSetup(value?: Partial<LissCoreCableSetup>): LissCoreCableSetup {
+  return {
+    useSideSpecificRotation: value?.useSideSpecificRotation ?? false,
+    rotation: value?.rotation ?? {},
+    ...(value?.rotationLeft && { rotationLeft: value.rotationLeft }),
+    ...(value?.rotationRight && { rotationRight: value.rotationRight }),
+    crunch: value?.crunch ?? {},
+    backExtension: value?.backExtension ?? {},
+  }
 }
 
 export function getLissCoreCableSetup(): LissCoreCableSetup {
   if (typeof window === "undefined") return EMPTY_LISS_CORE_CABLE_SETUP
   try {
     const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_CABLE_SETUP)
-    return data ? { ...EMPTY_LISS_CORE_CABLE_SETUP, ...JSON.parse(data) } : EMPTY_LISS_CORE_CABLE_SETUP
+    return data ? normalizeLissCoreCableSetup(JSON.parse(data)) : EMPTY_LISS_CORE_CABLE_SETUP
   } catch {
     return EMPTY_LISS_CORE_CABLE_SETUP
   }

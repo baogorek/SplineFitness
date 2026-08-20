@@ -60,7 +60,7 @@ function cueThresholdMs(cue: SequenceTimerCue): number {
 }
 
 function relevantCues(step: LissCoreStep): SequenceTimerCue[] {
-  if (step.exerciseId === "treadmill") {
+  if (step.exerciseId === "cardio") {
     return ["five-minutes", "one-minute", "thirty-seconds", "ten-seconds"]
   }
   if (step.kind === "work") {

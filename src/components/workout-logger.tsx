@@ -72,7 +72,7 @@ const workoutModes = [
     icon: Activity,
     title: "LISS + Core Endurance",
     subtitle: "Aerobic + trunk stamina",
-    description: "30-minute LISS with guided abdominal and spinal-extensor endurance",
+    description: "Interleaved cardio with guided abdominal and spinal-extensor endurance",
     color: "bg-violet-500",
     lightBg: "bg-violet-50",
     border: "border-violet-200",

@@ -233,23 +233,28 @@ export interface SitSessionProgress {
 }
 
 // LISS + Core Endurance Types
-export type CoreExerciseId = "rotation" | "crunch" | "anti-flexion"
+export type CoreExerciseId = "rotation" | "crunch" | "back-extension"
 export type CoreDifficulty = "too-easy" | "about-right" | "too-hard"
 export type LissCoreStepKind = "work" | "transition" | "reset"
-export type LissCoreWorkCategory = "liss" | "abdominal" | "extensor"
+export type LissCoreWorkCategory = "cardio" | "abdominal" | "extensor"
+export type CardioModality = "treadmill" | "elliptical" | "other"
+export type LissCoreBlockKind = "cardio" | CoreExerciseId
+
+export interface LissCoreTemplateBlock {
+  id: string
+  kind: LissCoreBlockKind
+  durationSeconds: number
+  transitionAfterSeconds: number
+}
 
 export interface LissCoreTemplate {
-  lissDurationSeconds: number
-  rounds: number
-  treadmillTransitionSeconds: number
-  betweenExerciseSeconds: number
-  betweenRoundSeconds: number
-  rotationSideDurationSeconds: number
-  crunchDurationSeconds: number
-  antiFlexionHoldCount: number
-  antiFlexionHoldDurationSeconds: number
-  antiFlexionResetSeconds: number
-  exerciseOrder: CoreExerciseId[]
+  version: 2
+  blocks: LissCoreTemplateBlock[]
+}
+
+export interface CardioIntervalSelection {
+  modality?: CardioModality
+  otherLabel?: string
 }
 
 export interface CableExerciseSetup {
@@ -265,7 +270,9 @@ export interface LissCoreCableSetup {
   rotationLeft?: CableExerciseSetup
   rotationRight?: CableExerciseSetup
   crunch: CableExerciseSetup
-  antiFlexion: CableExerciseSetup
+  backExtension: CableExerciseSetup
+  /** Kept only so sessions completed before the back-extension update remain readable. */
+  antiFlexion?: CableExerciseSetup
 }
 
 export interface LissCoreStep {
@@ -273,14 +280,17 @@ export interface LissCoreStep {
   kind: LissCoreStepKind
   label: string
   durationSeconds: number
-  exerciseId?: "treadmill" | CoreExerciseId
+  exerciseId?: "cardio" | CoreExerciseId
   substep?: string
   round?: number
   side?: "left" | "right"
   holdNumber?: number
   workCategory?: LissCoreWorkCategory
-  transitionType?: "to-circuit" | "between-exercises" | "between-rounds" | "hold-reset"
+  transitionType?: "between-blocks"
   instructions?: string
+  blockId?: string
+  blockIndex?: number
+  blockCount?: number
 }
 
 export interface LissCoreStepResult {
@@ -297,13 +307,16 @@ export interface LissCoreWorkoutSession {
   totalTimeSeconds: number
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup
+  cardioSelections: Record<string, CardioIntervalSelection>
   stepResults: LissCoreStepResult[]
-  lissSeconds: number
+  cardioSeconds: number
+  /** Present on sessions saved before cardio became modality-neutral. */
+  lissSeconds?: number
   abdominalSeconds: number
   extensorSeconds: number
   completedIntervals: number
   skippedIntervals: number
-  difficultyRatings?: Partial<Record<CoreExerciseId | "overall", CoreDifficulty>>
+  difficultyRatings?: Partial<Record<CoreExerciseId | "anti-flexion" | "overall", CoreDifficulty>>
   notes?: string
   endedEarly: boolean
 }
@@ -313,6 +326,7 @@ export interface LissCoreSessionProgress {
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup
   previousCableSetup: LissCoreCableSetup
+  cardioSelections: Record<string, CardioIntervalSelection>
   voiceCues: boolean
   startedAt: string
   savedAt: string

@@ -1,36 +1,60 @@
 import {
   CableExerciseSetup,
+  CardioIntervalSelection,
+  CardioModality,
   CoreExerciseId,
+  LissCoreBlockKind,
   LissCoreCableSetup,
   LissCoreStep,
   LissCoreTemplate,
+  LissCoreTemplateBlock,
 } from "@/types/workout"
 
 export const DEFAULT_LISS_CORE_TEMPLATE: LissCoreTemplate = {
-  lissDurationSeconds: 30 * 60,
-  rounds: 2,
-  treadmillTransitionSeconds: 60,
-  betweenExerciseSeconds: 30,
-  betweenRoundSeconds: 60,
-  rotationSideDurationSeconds: 2 * 60,
-  crunchDurationSeconds: 4 * 60,
-  antiFlexionHoldCount: 2,
-  antiFlexionHoldDurationSeconds: 60,
-  antiFlexionResetSeconds: 15,
-  exerciseOrder: ["rotation", "crunch", "anti-flexion"],
+  version: 2,
+  blocks: [
+    { id: "cardio-1", kind: "cardio", durationSeconds: 10 * 60, transitionAfterSeconds: 30 },
+    { id: "rotation-1", kind: "rotation", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-2", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 30 },
+    { id: "crunch-1", kind: "crunch", durationSeconds: 4 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-3", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 30 },
+    { id: "back-extension-1", kind: "back-extension", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-4", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 30 },
+    { id: "rotation-2", kind: "rotation", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "crunch-2", kind: "crunch", durationSeconds: 4 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-5", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 0 },
+  ],
 }
 
 export const CORE_EXERCISE_NAMES: Record<CoreExerciseId, string> = {
   rotation: "Cable Rotation",
   crunch: "Cable Crunch",
-  "anti-flexion": "Cable Anti-Flexion",
+  "back-extension": "Cable Back Extension",
 }
 
-export const CORE_EXERCISE_INSTRUCTIONS: Record<CoreExerciseId | "treadmill", string> = {
-  treadmill: "Jog or walk continuously at a comfortable LISS intensity you can sustain for the full interval.",
-  rotation: "Keep the movement controlled and rotate through the trunk. Use a light resistance you can sustain continuously.",
-  crunch: "Use a high cable, preferably with a rope. Bring your ribs toward your pelvis instead of only hinging at the hips.",
-  "anti-flexion": "Cable in front, attachment at upper chest. Maintain an upright trunk against the forward pull. No intentional movement.",
+export const WORK_BLOCK_NAMES: Record<LissCoreBlockKind, string> = {
+  cardio: "Cardio",
+  ...CORE_EXERCISE_NAMES,
+}
+
+export const CARDIO_MODALITY_LABELS: Record<CardioModality, string> = {
+  treadmill: "Treadmill",
+  elliptical: "Elliptical",
+  other: "Other",
+}
+
+export const CORE_EXERCISE_INSTRUCTIONS: Record<CoreExerciseId | "cardio", string> = {
+  cardio: "Use a treadmill, elliptical, or another cardio modality at a comfortable continuous endurance intensity you can sustain for the full interval.",
+  rotation: "Use very light resistance for continuous, controlled torso rotation. Let the arms mainly connect your body to the cable instead of dominating the movement. Choose a load you can sustain for the full 2-minute interval on each side; this is endurance work, not conventional strength loading.",
+  crunch: "A kneeling position is preferred. Establish a relatively fixed hip angle and think “ribs toward pelvis.” The primary motion should come from spinal and trunk flexion, not repeated hip hinging. A small amount of hip movement is acceptable, but this should not become a hip-flexion exercise. Use enough resistance that the cable assists your return upward rather than requiring the spinal extensors to lift the torso, while remaining light enough for the full endurance interval.",
+  "back-extension": "Use a rope attachment and hold the rope ends behind the head or upper shoulder area with both hands. Establish a stable hip position, then perform very small-ROM spinal extension repetitions against the cable. Emphasize thoracic and trunk extension instead of turning the movement into a hip hinge. Keep the neck approximately neutral so the head travels with the torso rather than cranking into cervical extension. Use very light resistance suitable for continuous endurance work.",
+}
+
+function cloneDefaultTemplate(): LissCoreTemplate {
+  return {
+    version: 2,
+    blocks: DEFAULT_LISS_CORE_TEMPLATE.blocks.map((block) => ({ ...block })),
+  }
 }
 
 function clampInteger(value: number, min: number, max: number): number {
@@ -38,160 +62,116 @@ function clampInteger(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)))
 }
 
-export function normalizeLissCoreTemplate(template: LissCoreTemplate): LissCoreTemplate {
-  const uniqueOrder = template.exerciseOrder.filter(
-    (exercise, index, order) =>
-      ["rotation", "crunch", "anti-flexion"].includes(exercise) && order.indexOf(exercise) === index
-  )
-  const missingExercises = DEFAULT_LISS_CORE_TEMPLATE.exerciseOrder.filter(
-    (exercise) => !uniqueOrder.includes(exercise)
-  )
-
-  return {
-    lissDurationSeconds: clampInteger(template.lissDurationSeconds, 60, 4 * 60 * 60),
-    rounds: clampInteger(template.rounds, 1, 10),
-    treadmillTransitionSeconds: clampInteger(template.treadmillTransitionSeconds, 0, 30 * 60),
-    betweenExerciseSeconds: clampInteger(template.betweenExerciseSeconds, 0, 10 * 60),
-    betweenRoundSeconds: clampInteger(template.betweenRoundSeconds, 0, 30 * 60),
-    rotationSideDurationSeconds: clampInteger(template.rotationSideDurationSeconds, 10, 30 * 60),
-    crunchDurationSeconds: clampInteger(template.crunchDurationSeconds, 10, 30 * 60),
-    antiFlexionHoldCount: clampInteger(template.antiFlexionHoldCount, 1, 10),
-    antiFlexionHoldDurationSeconds: clampInteger(template.antiFlexionHoldDurationSeconds, 10, 10 * 60),
-    antiFlexionResetSeconds: clampInteger(template.antiFlexionResetSeconds, 0, 5 * 60),
-    exerciseOrder: [...uniqueOrder, ...missingExercises],
-  }
+function isBlockKind(value: unknown): value is LissCoreBlockKind {
+  return value === "cardio" || value === "rotation" || value === "crunch" || value === "back-extension"
 }
 
-function buildExerciseSteps(
-  exerciseId: CoreExerciseId,
-  round: number,
-  template: LissCoreTemplate
-): LissCoreStep[] {
-  if (exerciseId === "rotation") {
+/** Legacy round-based templates intentionally migrate to the new tested factory sequence. */
+export function normalizeLissCoreTemplate(template: LissCoreTemplate | null | undefined): LissCoreTemplate {
+  if (!template || template.version !== 2 || !Array.isArray(template.blocks) || template.blocks.length === 0) {
+    return cloneDefaultTemplate()
+  }
+
+  const usedIds = new Set<string>()
+  const blocks: LissCoreTemplateBlock[] = []
+  template.blocks.forEach((block, index) => {
+    if (!block || !isBlockKind(block.kind)) return
+    const baseId = typeof block.id === "string" && block.id.trim() ? block.id.trim() : `${block.kind}-${index + 1}`
+    let id = baseId
+    let suffix = 2
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`
+      suffix += 1
+    }
+    usedIds.add(id)
+
+    blocks.push({
+      id,
+      kind: block.kind,
+      durationSeconds: clampInteger(block.durationSeconds, block.kind === "cardio" ? 60 : 10, 4 * 60 * 60),
+      transitionAfterSeconds: clampInteger(block.transitionAfterSeconds, 0, 30 * 60),
+    })
+  })
+
+  return blocks.length > 0 ? { version: 2, blocks } : cloneDefaultTemplate()
+}
+
+function buildWorkSteps(block: LissCoreTemplateBlock, blockIndex: number, blockCount: number): LissCoreStep[] {
+  const shared = { blockId: block.id, blockIndex, blockCount }
+
+  if (block.kind === "cardio") {
+    return [{
+      id: block.id,
+      kind: "work",
+      label: "Cardio",
+      durationSeconds: block.durationSeconds,
+      exerciseId: "cardio",
+      workCategory: "cardio",
+      instructions: CORE_EXERCISE_INSTRUCTIONS.cardio,
+      ...shared,
+    }]
+  }
+
+  if (block.kind === "rotation") {
     return [
       {
-        id: `round-${round}-rotation-left`,
+        id: `${block.id}-left`,
         kind: "work",
         label: CORE_EXERCISE_NAMES.rotation,
-        durationSeconds: template.rotationSideDurationSeconds,
-        exerciseId,
+        durationSeconds: block.durationSeconds,
+        exerciseId: "rotation",
         substep: "LEFT SIDE",
         side: "left",
-        round,
         workCategory: "abdominal",
         instructions: CORE_EXERCISE_INSTRUCTIONS.rotation,
+        ...shared,
       },
       {
-        id: `round-${round}-rotation-right`,
+        id: `${block.id}-right`,
         kind: "work",
         label: CORE_EXERCISE_NAMES.rotation,
-        durationSeconds: template.rotationSideDurationSeconds,
-        exerciseId,
+        durationSeconds: block.durationSeconds,
+        exerciseId: "rotation",
         substep: "RIGHT SIDE",
         side: "right",
-        round,
         workCategory: "abdominal",
         instructions: CORE_EXERCISE_INSTRUCTIONS.rotation,
+        ...shared,
       },
     ]
   }
 
-  if (exerciseId === "crunch") {
-    return [{
-      id: `round-${round}-crunch`,
-      kind: "work",
-      label: CORE_EXERCISE_NAMES.crunch,
-      durationSeconds: template.crunchDurationSeconds,
-      exerciseId,
-      round,
-      workCategory: "abdominal",
-      instructions: CORE_EXERCISE_INSTRUCTIONS.crunch,
-    }]
-  }
-
-  const steps: LissCoreStep[] = []
-  for (let hold = 1; hold <= template.antiFlexionHoldCount; hold += 1) {
-    steps.push({
-      id: `round-${round}-anti-flexion-hold-${hold}`,
-      kind: "work",
-      label: CORE_EXERCISE_NAMES["anti-flexion"],
-      durationSeconds: template.antiFlexionHoldDurationSeconds,
-      exerciseId,
-      substep: `HOLD ${hold} OF ${template.antiFlexionHoldCount}`,
-      holdNumber: hold,
-      round,
-      workCategory: "extensor",
-      instructions: CORE_EXERCISE_INSTRUCTIONS["anti-flexion"],
-    })
-
-    if (hold < template.antiFlexionHoldCount && template.antiFlexionResetSeconds > 0) {
-      steps.push({
-        id: `round-${round}-anti-flexion-reset-${hold}`,
-        kind: "reset",
-        label: "Reset",
-        durationSeconds: template.antiFlexionResetSeconds,
-        exerciseId,
-        substep: `NEXT: HOLD ${hold + 1} OF ${template.antiFlexionHoldCount}`,
-        round,
-        transitionType: "hold-reset",
-      })
-    }
-  }
-  return steps
+  return [{
+    id: block.id,
+    kind: "work",
+    label: CORE_EXERCISE_NAMES[block.kind],
+    durationSeconds: block.durationSeconds,
+    exerciseId: block.kind,
+    workCategory: block.kind === "crunch" ? "abdominal" : "extensor",
+    instructions: CORE_EXERCISE_INSTRUCTIONS[block.kind],
+    ...shared,
+  }]
 }
 
 export function buildLissCoreSteps(input: LissCoreTemplate): LissCoreStep[] {
   const template = normalizeLissCoreTemplate(input)
-  const steps: LissCoreStep[] = [{
-    id: "treadmill-liss",
-    kind: "work",
-    label: "Treadmill LISS",
-    durationSeconds: template.lissDurationSeconds,
-    exerciseId: "treadmill",
-    workCategory: "liss",
-    instructions: CORE_EXERCISE_INSTRUCTIONS.treadmill,
-  }]
+  const steps: LissCoreStep[] = []
 
-  if (template.treadmillTransitionSeconds > 0) {
-    steps.push({
-      id: "transition-to-circuit",
-      kind: "transition",
-      label: "Move to Cable Station",
-      durationSeconds: template.treadmillTransitionSeconds,
-      round: 1,
-      transitionType: "to-circuit",
-    })
-  }
-
-  for (let round = 1; round <= template.rounds; round += 1) {
-    template.exerciseOrder.forEach((exerciseId, exerciseIndex) => {
-      steps.push(...buildExerciseSteps(exerciseId, round, template))
-
-      const hasAnotherExercise = exerciseIndex < template.exerciseOrder.length - 1
-      if (hasAnotherExercise && template.betweenExerciseSeconds > 0) {
-        steps.push({
-          id: `round-${round}-transition-${exerciseId}`,
-          kind: "transition",
-          label: "Transition",
-          durationSeconds: template.betweenExerciseSeconds,
-          round,
-          transitionType: "between-exercises",
-        })
-      }
-    })
-
-    if (round < template.rounds && template.betweenRoundSeconds > 0) {
+  template.blocks.forEach((block, blockIndex) => {
+    steps.push(...buildWorkSteps(block, blockIndex, template.blocks.length))
+    if (blockIndex < template.blocks.length - 1 && block.transitionAfterSeconds > 0) {
       steps.push({
-        id: `round-${round}-to-round-${round + 1}`,
+        id: `transition-after-${block.id}`,
         kind: "transition",
-        label: "Round Transition",
-        durationSeconds: template.betweenRoundSeconds,
-        round: round + 1,
-        substep: `ROUND ${round + 1} OF ${template.rounds}`,
-        transitionType: "between-rounds",
+        label: "Transition",
+        durationSeconds: block.transitionAfterSeconds,
+        transitionType: "between-blocks",
+        blockId: template.blocks[blockIndex + 1].id,
+        blockIndex: blockIndex + 1,
+        blockCount: template.blocks.length,
       })
     }
-  }
+  })
 
   return steps
 }
@@ -209,7 +189,7 @@ export function getCableSetupForExercise(
   exerciseId?: LissCoreStep["exerciseId"],
   side?: LissCoreStep["side"]
 ): CableExerciseSetup | null {
-  if (!exerciseId || exerciseId === "treadmill") return null
+  if (!exerciseId || exerciseId === "cardio") return null
   if (exerciseId === "rotation") {
     if (cableSetup.useSideSpecificRotation && side === "left") {
       return cableSetup.rotationLeft ?? cableSetup.rotation
@@ -219,10 +199,11 @@ export function getCableSetupForExercise(
     }
     return cableSetup.rotation
   }
-  return exerciseId === "crunch" ? cableSetup.crunch : cableSetup.antiFlexion
+  if (exerciseId === "crunch") return cableSetup.crunch
+  return cableSetup.backExtension
 }
 
-export function formatCableSetup(setup: CableExerciseSetup | null): string | null {
+export function formatCableSetup(setup: CableExerciseSetup | null | undefined): string | null {
   if (!setup) return null
   const parts = [
     setup.weight !== undefined ? `${setup.weight} lb` : null,
@@ -230,4 +211,10 @@ export function formatCableSetup(setup: CableExerciseSetup | null): string | nul
     setup.attachment?.trim() || null,
   ].filter((part): part is string => Boolean(part))
   return parts.length > 0 ? parts.join(" · ") : null
+}
+
+export function formatCardioSelection(selection?: CardioIntervalSelection): string | null {
+  if (!selection?.modality) return null
+  if (selection.modality === "other" && selection.otherLabel?.trim()) return selection.otherLabel.trim()
+  return CARDIO_MODALITY_LABELS[selection.modality]
 }
