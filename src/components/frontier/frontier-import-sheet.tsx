@@ -82,7 +82,7 @@ export function FrontierImportSheet({ card, onClose, onImport }: FrontierImportS
             Copied cells
           </label>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            Use names like “MT - Shoulders - Shoulder Press,” or columns headed Equipment,
+            Use names like “MT - Shoulders - Shoulder Press,” or columns headed Station / Area,
             Body Part, and Exercise. Put older-to-newer marks to the right.
           </p>
           <textarea

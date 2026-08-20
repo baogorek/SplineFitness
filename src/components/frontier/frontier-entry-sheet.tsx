@@ -198,7 +198,7 @@ export function FrontierEntrySheet({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-500">
-              {exercise ? (correcting ? "Correct the card" : "Move the frontier") : "New exercise"}
+              {exercise ? (correcting ? "Correct frontier" : "Edit exercise") : "New exercise"}
             </p>
             <h2 id="frontier-entry-title" className="mt-1 text-xl font-bold text-slate-900">
               {initialStructure?.name ?? "Add a row"}
@@ -212,7 +212,7 @@ export function FrontierEntrySheet({
         <div className="space-y-5">
           <div className="space-y-2">
             <label htmlFor="frontier-equipment" className="text-sm font-semibold text-slate-700">
-              Equipment
+              Station / area
             </label>
             <Input
               id="frontier-equipment"
@@ -228,7 +228,7 @@ export function FrontierEntrySheet({
               {equipmentOptions.map((option) => <option key={option} value={option} />)}
             </datalist>
             <p className="text-[11px] text-slate-400">
-              Equipment names belong only to this location card.
+              Group by where you perform the exercise, even if the equipment is not physically attached.
             </p>
           </div>
 

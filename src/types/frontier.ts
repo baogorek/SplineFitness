@@ -31,7 +31,7 @@ export interface FrontierChange {
 export interface FrontierExercise {
   id: string
   name: string
-  /** Location-specific station name. Optional only for cards saved before structured organization. */
+  /** Location-specific station or area. Optional only for cards saved before structured organization. */
   equipment?: string
   /** A simple organizational category, not an anatomical classification. */
   bodyPart?: FrontierBodyPart

@@ -113,11 +113,11 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
     const metric = inferRowMetric(parsedMarks)
     const warnings: string[] = []
 
-    if (structuredHeader && !equipment) {
-      warnings.push("Equipment is missing; this exercise will be ungrouped")
+    if (!equipment) {
+      warnings.push("Station / area is missing; this exercise will be placed under Unassigned station")
     }
-    if (structuredHeader && !bodyPart) {
-      warnings.push("Body part must be Legs, Back, Shoulders, Core, Chest, or Arms")
+    if (!bodyPart) {
+      warnings.push("Body part is missing; use Legs, Back, Shoulders, Core, Chest, or Arms")
     }
 
     if (rawMarks.some((mark) => /^\d+(?:\.\d+)?\s*b\s*\//i.test(mark))) {
@@ -169,7 +169,9 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
 function findStructuredHeader(table: string[][]): StructuredHeader | null {
   for (let rowIndex = 0; rowIndex < table.length; rowIndex += 1) {
     const cells = table[rowIndex].map((cell) => normalizeCell(cell).toLocaleLowerCase())
-    const equipmentColumn = cells.findIndex((cell) => /^(?:equipment|station)$/.test(cell))
+    const equipmentColumn = cells.findIndex((cell) => (
+      /^(?:equipment|station|station\s*\/\s*area)$/.test(cell)
+    ))
     const bodyPartColumn = cells.findIndex((cell) => /^(?:body\s*part|area)$/.test(cell))
     const exerciseColumn = cells.findIndex((cell) => /^exercise(?:\s+name)?$/.test(cell))
     if (equipmentColumn >= 0 && bodyPartColumn >= 0 && exerciseColumn >= 0) {

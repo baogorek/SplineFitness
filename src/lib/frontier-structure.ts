@@ -38,17 +38,30 @@ export function normalizeFrontierEquipment(value: string): string {
  * Reads the original spreadsheet convention without making the delimited name
  * the source of truth for new records. Exercise names may themselves contain
  * " - "; everything after the recognized body-part segment is retained.
+ *
+ * Known station aliases also support the older "MT - Exercise" shorthand. In
+ * that case the station can still be recovered, while the missing body part is
+ * left explicit for the import preview and editor to surface.
  */
 export function parseFrontierExerciseName(name: string): FrontierExerciseStructure | null {
   const segments = name.split(/\s+-\s+/)
-  if (segments.length < 3) return null
+  if (segments.length < 2) return null
 
-  const equipment = normalizeFrontierEquipment(segments[0] ?? "")
+  const equipmentSegment = segments[0]?.trim() ?? ""
+  const equipment = normalizeFrontierEquipment(equipmentSegment)
   const bodyPart = normalizeFrontierBodyPart(segments[1])
-  const exerciseName = segments.slice(2).join(" - ").trim()
-  if (!equipment || !bodyPart || !exerciseName) return null
+  if (bodyPart && segments.length >= 3) {
+    const exerciseName = segments.slice(2).join(" - ").trim()
+    if (!equipment || !exerciseName) return null
 
-  return { name: exerciseName, equipment, bodyPart }
+    return { name: exerciseName, equipment, bodyPart }
+  }
+
+  const aliasedEquipment = EQUIPMENT_ALIASES[equipmentSegment.toLocaleLowerCase()]
+  const exerciseName = segments.slice(1).join(" - ").trim()
+  if (!aliasedEquipment || !exerciseName) return null
+
+  return { name: exerciseName, equipment: aliasedEquipment, bodyPart: null }
 }
 
 export function getFrontierExerciseStructure(
