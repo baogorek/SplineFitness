@@ -5,6 +5,7 @@ import {
   Accessibility,
   ArrowRight,
   Cable,
+  Check,
   ChevronDown,
   Columns3,
   Dumbbell,
@@ -14,12 +15,14 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
+import { isFrontierAttemptToday } from "@/lib/frontier-attempts"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
 
 interface FrontierPaperCardProps {
   card: FrontierCard
   onExerciseClick: (exercise: FrontierExercise) => void
+  onToggleAttemptToday: (exercise: FrontierExercise) => void
   onAddExercise: () => void
   onOpenCardMenu: () => void
   onSwipe: (direction: "previous" | "next") => void
@@ -28,6 +31,7 @@ interface FrontierPaperCardProps {
 export function FrontierPaperCard({
   card,
   onExerciseClick,
+  onToggleAttemptToday,
   onAddExercise,
   onOpenCardMenu,
   onSwipe,
@@ -149,6 +153,7 @@ export function FrontierPaperCard({
                                 const expanded = expandedExerciseId === exercise.id
                                 const historyId = `frontier-history-${exercise.id}`
                                 const currentChange = getCurrentFrontierChange(exercise.metric, exercise.changes)
+                                const attemptedToday = isFrontierAttemptToday(exercise.attempts)
 
                                 return (
                                   <li key={exercise.id} className="border-b border-sky-200/80">
@@ -233,6 +238,30 @@ export function FrontierPaperCard({
                                           </div>
                                         ) : (
                                           <p className="text-xs text-slate-400">No marks recorded yet.</p>
+                                        )}
+
+                                        {currentChange && (
+                                          <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-indigo-100 pt-2.5">
+                                            <p className="text-[11px] text-slate-400">
+                                              Didn&apos;t move the frontier?
+                                            </p>
+                                            <button
+                                              type="button"
+                                              aria-pressed={attemptedToday}
+                                              aria-label={attemptedToday
+                                                ? `Remove today's attempt for ${displayName}`
+                                                : `Mark ${displayName} as tried today`}
+                                              onClick={() => onToggleAttemptToday(exercise)}
+                                              className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                                                attemptedToday
+                                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                  : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
+                                              }`}
+                                            >
+                                              {attemptedToday && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
+                                              Tried today
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
                                     )}

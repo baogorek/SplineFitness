@@ -28,6 +28,11 @@ import {
   FrontierExercise,
 } from "@/types/frontier"
 import { SpreadsheetImportRow } from "@/lib/frontier-import"
+import { appendUniqueFrontierChanges } from "@/lib/frontier-marks"
+import {
+  isFrontierAttemptToday,
+  removeFrontierAttemptsToday,
+} from "@/lib/frontier-attempts"
 import {
   frontierExerciseIdentity,
   getFrontierExerciseStructure,
@@ -262,17 +267,19 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       }))
 
       if (existing) {
-        if (changes.length > 0) {
+        const nextChanges = appendUniqueFrontierChanges(existing.changes, changes)
+        const addedMarks = nextChanges.length - existing.changes.length
+        if (addedMarks > 0) {
           const updatedExercise: FrontierExercise = {
             ...existing,
-            changes: [...existing.changes, ...changes],
+            changes: nextChanges,
             updatedAt: now,
           }
           const index = nextExercises.findIndex((exercise) => exercise.id === existing.id)
           nextExercises[index] = updatedExercise
           exercisesByName.set(rowIdentity, updatedExercise)
           appendedRows += 1
-          appendedMarks += changes.length
+          appendedMarks += addedMarks
         } else {
           skipped += 1
         }
@@ -309,7 +316,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       appendedMarks > 0
         ? `${appendedMarks} mark${appendedMarks === 1 ? "" : "s"} appended to ${appendedRows} existing`
         : null,
-      skipped > 0 ? `${skipped} empty existing row${skipped === 1 ? "" : "s"} skipped` : null,
+      skipped > 0
+        ? `${skipped} duplicate or empty existing row${skipped === 1 ? "" : "s"} skipped`
+        : null,
     ].filter(Boolean)
     setImportNotice(
       imported > 0 ? summary.join(" · ") : "Nothing new to import"
@@ -334,6 +343,33 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     })
     setEntrySheetOpen(false)
     setEditingExerciseId(null)
+  }
+
+  const handleToggleAttemptToday = (targetExercise: FrontierExercise) => {
+    if (!currentCard) return
+
+    const now = new Date()
+    const timestamp = now.toISOString()
+    const attempts = targetExercise.attempts ?? []
+    const nextAttempts = isFrontierAttemptToday(attempts, now)
+      ? removeFrontierAttemptsToday(attempts, now)
+      : [
+          ...attempts,
+          { id: crypto.randomUUID(), attemptedAt: timestamp },
+        ]
+    const updatedExercise: FrontierExercise = {
+      ...targetExercise,
+      attempts: nextAttempts,
+      updatedAt: timestamp,
+    }
+
+    commitCard({
+      ...currentCard,
+      exercises: currentCard.exercises.map((exercise) =>
+        exercise.id === updatedExercise.id ? updatedExercise : exercise
+      ),
+      updatedAt: timestamp,
+    })
   }
 
   const handleDeleteExercise = () => {
@@ -479,6 +515,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         <FrontierPaperCard
           key={currentCard.id}
           card={currentCard}
+          onToggleAttemptToday={handleToggleAttemptToday}
           onExerciseClick={(exercise) => {
             setEditingExerciseId(exercise.id)
             setEntrySheetOpen(true)

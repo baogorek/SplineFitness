@@ -28,6 +28,11 @@ export interface FrontierChange {
   kind: "progress" | "correction" | "import"
 }
 
+export interface FrontierAttempt {
+  id: string
+  attemptedAt: string
+}
+
 export interface FrontierExercise {
   id: string
   name: string
@@ -37,6 +42,8 @@ export interface FrontierExercise {
   bodyPart?: FrontierBodyPart
   metric: FrontierMetric
   changes: FrontierChange[]
+  /** Attempts that did not move the frontier. Successful efforts are represented by changes. */
+  attempts?: FrontierAttempt[]
   order: number
   createdAt: string
   updatedAt: string

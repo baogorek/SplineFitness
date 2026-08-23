@@ -1,10 +1,10 @@
-import { parseDuration } from "@/lib/frontier-utils"
 import {
   frontierExerciseIdentity,
   normalizeFrontierBodyPart,
   normalizeFrontierEquipment,
   parseFrontierExerciseName,
 } from "@/lib/frontier-structure"
+import { parseFrontierMarkHistory } from "@/lib/frontier-marks"
 import { FrontierBodyPart, FrontierMetric, FrontierValue } from "@/types/frontier"
 
 export interface SpreadsheetImportMark {
@@ -27,11 +27,6 @@ export interface SpreadsheetImportResult {
   suggestedCardName: string | null
   skippedRows: number
   ignoredBoundaryCells: number
-}
-
-interface StructuredMark {
-  metric: "weight-time" | "weight" | "reps" | "speed"
-  value: FrontierValue
 }
 
 interface StructuredHeader {
@@ -109,8 +104,8 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
       rawMarks.push(cell)
     })
 
-    const parsedMarks = rawMarks.map(parseStructuredMark)
-    const metric = inferRowMetric(parsedMarks)
+    const parsedHistory = parseFrontierMarkHistory(rawMarks)
+    const metric = parsedHistory?.metric ?? "freeform"
     const warnings: string[] = []
 
     if (!equipment) {
@@ -124,23 +119,21 @@ export function parseSpreadsheetPaste(text: string): SpreadsheetImportResult {
       warnings.push("Possible weight-unit typo kept as a custom mark")
     }
 
-    const marks = rawMarks.map((rawValue, index) => {
-      const parsed = parsedMarks[index]
-      if (metric === "freeform" || !parsed) return { rawValue }
-      return { rawValue, value: parsed.value }
-    })
+    const marks = dedupeSpreadsheetMarks(rawMarks.map((rawValue, index) => ({
+      rawValue,
+      ...(parsedHistory ? { value: parsedHistory.marks[index].value } : {}),
+    })))
 
     const normalizedName = frontierExerciseIdentity({ name, equipment, bodyPart })
     const duplicate = rowsByName.get(normalizedName)
     if (duplicate) {
       const mergedRawMarks = [...duplicate.marks.map((mark) => mark.rawValue), ...rawMarks]
-      const mergedParsedMarks = mergedRawMarks.map(parseStructuredMark)
-      duplicate.metric = inferRowMetric(mergedParsedMarks)
-      duplicate.marks = mergedRawMarks.map((rawValue, index) => {
-        const parsed = mergedParsedMarks[index]
-        if (duplicate.metric === "freeform" || !parsed) return { rawValue }
-        return { rawValue, value: parsed.value }
-      })
+      const mergedHistory = parseFrontierMarkHistory(mergedRawMarks)
+      duplicate.metric = mergedHistory?.metric ?? "freeform"
+      duplicate.marks = dedupeSpreadsheetMarks(mergedRawMarks.map((rawValue, index) => ({
+        rawValue,
+        ...(mergedHistory ? { value: mergedHistory.marks[index].value } : {}),
+      })))
       duplicate.warnings.push(...warnings, `Also found on spreadsheet row ${rowIndex + 1}`)
       return
     }
@@ -241,47 +234,21 @@ function isBoundaryCell(value: string): boolean {
   return /^x$/i.test(value.trim())
 }
 
-function parseStructuredMark(rawValue: string): StructuredMark | null {
-  const weightTime = rawValue.match(
-    /^(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?|#)\s*\/\s*(.+)$/i
-  )
-  if (weightTime) {
-    const seconds = parseDuration(weightTime[2])
-    if (seconds !== null && seconds > 0) {
-      return {
-        metric: "weight-time",
-        value: { primary: Number(weightTime[1]), secondary: seconds },
-      }
+function dedupeSpreadsheetMarks(marks: SpreadsheetImportMark[]): SpreadsheetImportMark[] {
+  return marks.reduce<SpreadsheetImportMark[]>((deduped, mark) => {
+    const previous = deduped.at(-1)
+    const valuesMatch = previous?.value && mark.value
+      ? previous.value.primary === mark.value.primary
+        && (previous.value.secondary ?? null) === (mark.value.secondary ?? null)
+      : false
+    const rawValuesMatch = !previous?.value && !mark.value
+      && previous?.rawValue.trim() === mark.rawValue.trim()
+
+    if (previous && (valuesMatch || rawValuesMatch)) {
+      deduped[deduped.length - 1] = mark
+    } else {
+      deduped.push(mark)
     }
-  }
-
-  const weight = rawValue.match(/^(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?|#)$/i)
-  if (weight) {
-    return { metric: "weight", value: { primary: Number(weight[1]) } }
-  }
-
-  const reps = rawValue.match(/^(\d+)\s*(?:reps?|x)$/i)
-  if (reps) {
-    return { metric: "reps", value: { primary: Number(reps[1]) } }
-  }
-
-  const speed = rawValue.match(/^(\d+(?:\.\d+)?)\s*mph$/i)
-  if (speed) {
-    return { metric: "speed", value: { primary: Number(speed[1]) } }
-  }
-
-  return null
-}
-
-function inferRowMetric(parsedMarks: Array<StructuredMark | null>): FrontierMetric {
-  if (parsedMarks.length === 0 || parsedMarks.some((mark) => mark === null)) {
-    return "freeform"
-  }
-
-  const metrics = new Set(parsedMarks.map((mark) => mark!.metric))
-  if ([...metrics].every((metric) => metric === "weight" || metric === "weight-time")) {
-    return metrics.has("weight-time") ? "weight-time" : "weight"
-  }
-
-  return metrics.size === 1 ? parsedMarks[0]!.metric : "freeform"
+    return deduped
+  }, [])
 }

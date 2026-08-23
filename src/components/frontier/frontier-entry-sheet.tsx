@@ -559,7 +559,10 @@ function DurationField({
         id="frontier-duration"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        inputMode="numeric"
+        inputMode="text"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         placeholder="e.g. 1:30"
         className="h-12 font-mono text-base"
       />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { getCurrentFrontier, getCurrentFrontierChange } from "./frontier-utils"
+import { getCurrentFrontier, getCurrentFrontierChange, parseDuration } from "./frontier-utils"
 import { FrontierChange } from "@/types/frontier"
 
 const changes: FrontierChange[] = [
@@ -24,5 +24,11 @@ describe("frontier current values", () => {
 
   it("uses the newest raw mark for freeform exercises", () => {
     expect(getCurrentFrontierChange("freeform", changes)?.id).toBe("mismatch")
+  })
+})
+
+describe("Frontier durations", () => {
+  it("accepts a minutes-and-seconds value when setting the first mark", () => {
+    expect(parseDuration("1:30")).toBe(90)
   })
 })

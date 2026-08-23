@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { parseFrontierExerciseName } from "./frontier-structure"
+import { normalizeFrontierCard, parseFrontierExerciseName } from "./frontier-structure"
+import { FrontierCard } from "@/types/frontier"
 
 describe("Frontier exercise name parsing", () => {
   it("parses the full station, body-part, and exercise convention", () => {
@@ -20,5 +21,38 @@ describe("Frontier exercise name parsing", () => {
 
   it("does not mistake an arbitrary hyphenated exercise name for a station", () => {
     expect(parseFrontierExerciseName("Machine - assisted pull-up")).toBeNull()
+  })
+})
+
+describe("Frontier card normalization", () => {
+  it("upgrades an obvious imported weight/time history on load", () => {
+    const card: FrontierCard = {
+      id: "card",
+      name: "Gym",
+      exercises: [{
+        id: "exercise",
+        name: "Hip Abduction",
+        equipment: "Machine",
+        bodyPart: "Legs",
+        metric: "freeform",
+        changes: [
+          { id: "first", rawValue: "120lb / 1:30", kind: "import" },
+          { id: "second", rawValue: "120 / 1:45", kind: "import" },
+        ],
+        order: 0,
+        createdAt: "2026-08-20T12:00:00.000Z",
+        updatedAt: "2026-08-20T12:00:00.000Z",
+      }],
+      order: 0,
+      createdAt: "2026-08-20T12:00:00.000Z",
+      updatedAt: "2026-08-20T12:00:00.000Z",
+    }
+
+    const normalized = normalizeFrontierCard(card)
+    expect(normalized.exercises[0].metric).toBe("weight-time")
+    expect(normalized.exercises[0].changes[1].value).toEqual({
+      primary: 120,
+      secondary: 105,
+    })
   })
 })

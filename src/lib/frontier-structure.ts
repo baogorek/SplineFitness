@@ -1,4 +1,5 @@
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
+import { normalizeFrontierExerciseMarks } from "@/lib/frontier-marks"
 
 export const FRONTIER_BODY_PARTS: FrontierBodyPart[] = [
   "Legs",
@@ -86,9 +87,11 @@ export function getFrontierExerciseStructure(
 export function normalizeFrontierCard(card: FrontierCard): FrontierCard {
   let changed = false
   const exercises = card.exercises.map((exercise) => {
-    const structure = getFrontierExerciseStructure(exercise)
+    const normalizedExercise = normalizeFrontierExerciseMarks(exercise)
+    const structure = getFrontierExerciseStructure(normalizedExercise)
     if (
-      structure.equipment === exercise.equipment
+      normalizedExercise === exercise
+      && structure.equipment === exercise.equipment
       && structure.bodyPart === exercise.bodyPart
       && structure.name === exercise.name
     ) {
@@ -97,7 +100,7 @@ export function normalizeFrontierCard(card: FrontierCard): FrontierCard {
 
     changed = true
     return {
-      ...exercise,
+      ...normalizedExercise,
       name: structure.name,
       ...(structure.equipment ? { equipment: structure.equipment } : {}),
       ...(structure.bodyPart ? { bodyPart: structure.bodyPart } : {}),
