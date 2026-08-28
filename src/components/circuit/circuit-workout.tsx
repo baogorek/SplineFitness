@@ -24,7 +24,6 @@ import { useDialogFocus } from "@/hooks/use-dialog-focus"
 import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
 import { scheduleCountdownTicks } from "@/lib/countdown-utils"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
-import { buildCircuitCompactConfig } from "@/lib/circuit-config"
 import {
   stageCompletedWorkout,
   getExercisePreferences,
@@ -63,6 +62,7 @@ type PersistedCircuitPhase = NonNullable<CircuitSessionProgress["phase"]>
 
 interface CircuitWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
 function resolveExerciseName(
@@ -103,50 +103,6 @@ function getPersistedPhase(phase: Phase): PersistedCircuitPhase {
   }
 }
 
-function buildGoogleCalendarUrl(session: CircuitWorkoutSession, workoutName: string): string {
-  const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
-  const totalTime = session.rounds.reduce((acc, r) => acc + r.totalTimeSeconds, 0)
-  const allResults = session.rounds.flatMap((r) => r.comboResults)
-  const completionRate = Math.round(
-    (allResults.filter((r) => r.completedWithoutStopping).length / allResults.length) * 100
-  )
-  const mins = Math.floor(totalTime / 60)
-  const secs = (totalTime % 60).toString().padStart(2, "0")
-
-  const lines = [
-    `Rounds: ${session.rounds.length}`,
-    `Total Time: ${mins}:${secs}`,
-    `Completion Rate: ${completionRate}%`,
-  ]
-  if (session.weakLinkPractice && session.weakLinkPractice.length > 0) {
-    lines.push("", "Weak Link Practice:")
-    session.weakLinkPractice.forEach((r) => {
-      lines.push(`  ${r.exerciseName} (${r.practiceTimeSeconds}s)`)
-    })
-  }
-  lines.push("", `Config: ${buildCircuitCompactConfig(session)}`)
-  lines.push("", "Per-Round Breakdown:")
-  session.rounds.forEach((round) => {
-    const rMins = Math.floor(round.totalTimeSeconds / 60)
-    const rSecs = (round.totalTimeSeconds % 60).toString().padStart(2, "0")
-    const completed = round.comboResults.filter((r) => r.completedWithoutStopping).length
-    lines.push(`  Round ${round.round}: ${rMins}:${rSecs} — ${completed}/${round.comboResults.length} completed`)
-  })
-
-  let details = lines.join("\n")
-  if (details.length > 1500) {
-    details = details.slice(0, 1497) + "..."
-  }
-
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: workoutName,
-    dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
-    details,
-  })
-  return `https://calendar.google.com/calendar/render?${params.toString()}`
-}
-
 async function copyTextToClipboard(text: string): Promise<boolean> {
   if (typeof navigator !== "undefined" && navigator.clipboard) {
     try {
@@ -183,7 +139,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
+export function CircuitWorkout({ onModeChange, onViewCalendar }: CircuitWorkoutProps) {
   const [initialCircuitProgress] = useState<CircuitSessionProgress | null>(() => getCircuitProgress())
   const [phase, setPhase] = useState<Phase>(() => initialCircuitProgress ? "resume-prompt" : "setup")
   const [activeWorkout, setActiveWorkout] = useState<WorkoutVariant>("A")
@@ -946,20 +902,10 @@ export function CircuitWorkout({ onModeChange }: CircuitWorkoutProps) {
           )}
 
           {completedSessionData && (
-            <>
-              <a
-                href={buildGoogleCalendarUrl(completedSessionData, workout.name)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Add to Google Calendar
-              </a>
-              <p className="text-center text-sm font-semibold text-amber-500 mt-1">
-                Remember to tap Save in Google Calendar!
-              </p>
-            </>
+            <Button variant="outline" onClick={onViewCalendar} className="h-12 w-full gap-2">
+              <Calendar className="h-4 w-4" />
+              View Workout Calendar
+            </Button>
           )}
 
           {FEATURES.AUTH_ENABLED ? (

@@ -16,12 +16,14 @@ import {
 import { FrontierCard } from "@/types/frontier"
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore"
@@ -56,6 +58,8 @@ interface PendingWorkoutEntry {
   revision: string
   session: ActiveWorkoutSession
 }
+
+const workoutSaveQueues = new Map<string, Promise<WorkoutHistoryEntry | null>>()
 
 function normalizeCompletedSession(session: ActiveWorkoutSession): ActiveWorkoutSession {
   return JSON.parse(JSON.stringify({
@@ -204,8 +208,7 @@ export async function syncPendingWorkoutSessions(): Promise<void> {
     (entry) => entry.ownerUid === null || entry.ownerUid === user.uid
   )
   for (const originalEntry of pending) {
-    const { entry } = queuePendingWorkoutSession(originalEntry.session)
-    await savePendingWorkoutEntry(entry)
+    await saveWorkoutSession(originalEntry.session)
   }
 }
 
@@ -236,7 +239,58 @@ export async function getWorkoutHistory(): Promise<WorkoutHistoryEntry[]> {
 
 export async function saveWorkoutSession(session: ActiveWorkoutSession): Promise<WorkoutHistoryEntry | null> {
   const { entry } = queuePendingWorkoutSession(session)
-  return savePendingWorkoutEntry(entry)
+  const previousSave = workoutSaveQueues.get(entry.id) ?? Promise.resolve(null)
+  const nextSave = previousSave.then(() => savePendingWorkoutEntry(entry))
+  workoutSaveQueues.set(entry.id, nextSave)
+
+  try {
+    return await nextSave
+  } finally {
+    if (workoutSaveQueues.get(entry.id) === nextSave) {
+      workoutSaveQueues.delete(entry.id)
+    }
+  }
+}
+
+export async function updateIntervalWorkoutNotes(
+  workoutId: string,
+  setNotes: Record<number, string>
+): Promise<boolean> {
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return false
+
+  const normalizedNotes = Object.fromEntries(
+    Object.entries(setNotes)
+      .map(([setNumber, note]) => [setNumber, note.trim()])
+      .filter(([, note]) => note)
+  )
+
+  try {
+    await updateDoc(doc(firestore, "users", user.uid, "workouts", workoutId), {
+      setNotes: normalizedNotes,
+      updatedAt: serverTimestamp(),
+    })
+    return true
+  } catch (error) {
+    console.error("Error updating interval workout notes:", error)
+    return false
+  }
+}
+
+export async function deleteWorkoutSession(workoutId: string): Promise<boolean> {
+  const user = firebaseAuth?.currentUser
+  if (!firestore || !user) return false
+
+  try {
+    await deleteDoc(doc(firestore, "users", user.uid, "workouts", workoutId))
+    writePendingWorkoutEntries(getPendingWorkoutEntries().filter((entry) => (
+      entry.id !== workoutId || (entry.ownerUid !== null && entry.ownerUid !== user.uid)
+    )))
+    return true
+  } catch (error) {
+    console.error("Error deleting workout session:", error)
+    return false
+  }
 }
 
 export function saveCurrentSession(session: Partial<WorkoutSession>): void {

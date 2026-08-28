@@ -23,8 +23,8 @@ const features = [
   },
   {
     icon: Calendar,
-    title: "Workout History",
-    description: "View and analyze your past workouts on a calendar",
+    title: "Workout Calendar",
+    description: "Review, correct, and manage your saved workouts",
   },
   {
     icon: UserPlus,

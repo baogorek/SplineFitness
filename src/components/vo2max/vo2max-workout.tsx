@@ -34,6 +34,7 @@ import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
 interface Vo2MaxWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
 type Vo2Stage = "setup" | "resume-prompt" | "timer" | "entry" | "complete"
@@ -71,14 +72,6 @@ function formatDuration(seconds: number): string {
 
 function formatDistanceInput(distance: number): string {
   return distance.toFixed(2)
-}
-
-function formatPace(secondsPerMile: number): string {
-  if (!Number.isFinite(secondsPerMile) || secondsPerMile <= 0) return "--"
-  const roundedSeconds = Math.round(secondsPerMile)
-  const minutes = Math.floor(roundedSeconds / 60)
-  const seconds = roundedSeconds % 60
-  return `${minutes}:${seconds.toString().padStart(2, "0")}/mi`
 }
 
 function calculateMetrics(
@@ -119,7 +112,7 @@ function Vo2MaxResultPanel({ value }: { value: number }) {
   )
 }
 
-export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
+export function Vo2MaxWorkout({ onModeChange, onViewCalendar }: Vo2MaxWorkoutProps) {
   const [initialResume] = useState<Vo2MaxSessionProgress | null>(() => getVo2MaxProgress())
   const [stage, setStage] = useState<Vo2Stage>(() => initialResume ? "resume-prompt" : "setup")
   const [pendingResume, setPendingResume] = useState<Vo2MaxSessionProgress | null>(initialResume)
@@ -448,40 +441,6 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
     setStage("setup")
   }, [pauseTimer, resetCalculation, resetTimer, resultStartOffsetInput])
 
-  const buildGoogleCalendarUrl = (session: Vo2MaxWorkoutSession): string => {
-    const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
-    const lines = [
-      `Relative VO2 Max: ${session.vo2Max.toFixed(1)} mL/kg/min`,
-      "Interpretation: body-mass scaled oxygen uptake in milliliters per kilogram per minute.",
-      `METs: ${session.mets.toFixed(1)}`,
-      `Test Distance: ${session.testDistanceMiles.toFixed(2)} mi (${Math.round(session.testDistanceMeters)} m)`,
-      `Final Treadmill Distance: ${session.finalDistanceMiles.toFixed(2)} mi`,
-      `Start Offset: ${session.startOffsetMiles.toFixed(2)} mi`,
-      `Duration: ${formatDuration(session.durationSeconds)}`,
-      `Average Pace: ${formatPace(session.averagePaceSecondsPerMile)}`,
-      `Average Speed: ${session.averageSpeedMph.toFixed(1)} mph`,
-      `Incline: ${session.inclinePercent}%`,
-    ]
-
-    if (session.endedEarly) {
-      lines.push("Ended Early: yes")
-    }
-    lines.push("", "Session Data:", JSON.stringify(session))
-
-    let details = lines.join("\n")
-    if (details.length > 1500) {
-      details = details.slice(0, 1497) + "..."
-    }
-
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: "VO2 Max Treadmill Cooper Test",
-      dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
-      details,
-    })
-    return `https://calendar.google.com/calendar/render?${params.toString()}`
-  }
-
   if (stage === "resume-prompt" && pendingResume) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -524,18 +483,10 @@ export function Vo2MaxWorkout({ onModeChange }: Vo2MaxWorkoutProps) {
 
           <Vo2MaxResultPanel value={completedSessionData.vo2Max} />
 
-          <a
-            href={buildGoogleCalendarUrl(completedSessionData)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700"
-          >
+          <Button variant="outline" onClick={onViewCalendar} className="h-12 w-full gap-2">
             <Calendar className="h-4 w-4" />
-            Add to Google Calendar
-          </a>
-          <p className="text-center text-sm font-semibold text-amber-500">
-            Remember to tap Save in Google Calendar!
-          </p>
+            View Workout Calendar
+          </Button>
 
           <CompletedWorkoutSave session={completedSessionData} />
 

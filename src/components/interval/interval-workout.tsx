@@ -13,6 +13,7 @@ import { IntervalTimer } from "./interval-timer"
 import {
   clearIntervalProgress,
   getIntervalProgress,
+  saveWorkoutSession,
   saveIntervalProgress,
   stageCompletedWorkout,
 } from "@/lib/storage"
@@ -27,9 +28,10 @@ import {
 
 interface IntervalWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
-export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
+export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkoutProps) {
   const [phase, setPhase] = useState<IntervalPhase>("ready")
   const [currentSet, setCurrentSet] = useState(1)
   const [workoutStarted, setWorkoutStarted] = useState(false)
@@ -450,40 +452,34 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
     audio.speak("Oxidative system approaching VO2 max.")
   }
 
-  const buildGoogleCalendarUrl = (session: IntervalWorkoutSession): string => {
-    const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
-    const mins = Math.floor(session.totalTimeSeconds / 60)
-    const secs = (session.totalTimeSeconds % 60).toString().padStart(2, "0")
-
-    const lines = [
-      `Sets: ${session.completedSets}/${session.totalSets}`,
-      `Total Time: ${mins}:${secs}`,
-    ]
-
-    if (session.setNotes) {
-      lines.push("")
-      Object.entries(session.setNotes)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .forEach(([set, note]) => {
-          lines.push(`Set ${set}: ${note}`)
-        })
+  const leaveCompletedWorkout = useCallback((next: () => void) => {
+    if (!completedSessionData) {
+      next()
+      return
     }
 
-    lines.push("", "Session Data:", JSON.stringify(session))
-
-    let details = lines.join("\n")
-    if (details.length > 1500) {
-      details = details.slice(0, 1497) + "..."
+    const notes = { ...setNotesRef.current }
+    const trimmedCurrentNote = currentNote.trim()
+    if (trimmedCurrentNote) {
+      notes[currentSet] = trimmedCurrentNote
+    } else {
+      delete notes[currentSet]
+    }
+    const filteredNotes = Object.fromEntries(
+      Object.entries(notes).filter(([, note]) => note.trim())
+    )
+    const updatedSession: IntervalWorkoutSession = { ...completedSessionData }
+    delete updatedSession.setNotes
+    if (Object.keys(filteredNotes).length > 0) {
+      updatedSession.setNotes = filteredNotes
     }
 
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: "4x4 Interval Training",
-      dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
-      details,
-    })
-    return `https://calendar.google.com/calendar/render?${params.toString()}`
-  }
+    setNotesRef.current = notes
+    setCompletedSessionData(updatedSession)
+    stageCompletedWorkout(updatedSession)
+    void saveWorkoutSession(updatedSession)
+    next()
+  }, [completedSessionData, currentNote, currentSet])
 
   const displayedCompletedSets = completedSessionData?.completedSets ?? TOTAL_SETS
 
@@ -594,26 +590,20 @@ export function IntervalWorkout({ onModeChange }: IntervalWorkoutProps) {
           )}
 
           {completedSessionData && (
-            <>
-              <a
-                href={buildGoogleCalendarUrl(completedSessionData)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Add to Google Calendar
-              </a>
-              <p className="text-center text-sm font-semibold text-amber-500 mt-1">
-                Remember to tap Save in Google Calendar!
-              </p>
-            </>
+            <Button
+              variant="outline"
+              onClick={() => leaveCompletedWorkout(onViewCalendar)}
+              className="h-12 w-full gap-2"
+            >
+              <Calendar className="h-4 w-4" />
+              View Workout Calendar
+            </Button>
           )}
 
           {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
 
           <button
-            onClick={onModeChange}
+            onClick={() => leaveCompletedWorkout(onModeChange)}
             className="mt-6 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-colors w-full"
           >
             Back to Home

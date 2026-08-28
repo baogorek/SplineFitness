@@ -102,7 +102,7 @@ export function CompletedWorkoutSave({ session }: CompletedWorkoutSaveProps) {
   if (status === "saved") {
     return (
       <div className="mt-4 rounded-lg border border-green-600/20 bg-green-600/10 p-3">
-        <p className="text-sm font-medium text-green-600">Saved to workout history</p>
+        <p className="text-sm font-medium text-green-600">Saved to Workout Calendar</p>
       </div>
     )
   }
@@ -121,8 +121,8 @@ export function CompletedWorkoutSave({ session }: CompletedWorkoutSaveProps) {
     <div className={`mt-4 rounded-lg border p-4 ${status === "error" ? "border-red-600/20 bg-red-600/10" : "border-amber-600/20 bg-amber-600/10"}`}>
       <p className={`text-sm font-medium ${status === "error" ? "text-red-700" : "text-amber-700"}`}>
         {message || (user
-          ? "This completed workout has not been saved to history yet."
-          : "Sign in to add this completed workout to your cloud history.")}
+          ? "This completed workout has not been saved to your Workout Calendar yet."
+          : "Sign in to add this completed workout to your Workout Calendar.")}
       </p>
       <Button
         variant="outline"

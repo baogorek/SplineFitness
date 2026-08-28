@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Activity, ArrowLeft, ChevronLeft, ChevronRight, Timer, Dumbbell, Gauge, HeartPulse, Zap, RefreshCw } from "lucide-react"
 import { WorkoutHistoryEntry } from "@/types/workout"
-import { getWorkoutHistory } from "@/lib/storage"
+import { getWorkoutHistory, syncPendingWorkoutSessions } from "@/lib/storage"
 import { formatMonthYear, groupWorkoutsByDate } from "./calendar-utils"
 import { CalendarGrid } from "./calendar-grid"
 import { WorkoutDetailModal } from "./workout-detail-modal"
@@ -30,6 +30,9 @@ export function CalendarView({ onBack }: CalendarViewProps) {
     setWorkouts([])
     setWorkoutsByDate(new Map())
     try {
+      if (user) {
+        await syncPendingWorkoutSessions()
+      }
       const history = await getWorkoutHistory()
       setWorkouts(history)
       setWorkoutsByDate(groupWorkoutsByDate(history))
@@ -38,11 +41,11 @@ export function CalendarView({ onBack }: CalendarViewProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     void fetchHistory()
-  }, [fetchHistory, user])
+  }, [fetchHistory])
 
   const handlePrevMonth = () => {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
@@ -64,6 +67,28 @@ export function CalendarView({ onBack }: CalendarViewProps) {
     setSelectedWorkouts([])
   }
 
+  const handleWorkoutUpdated = (updatedWorkout: WorkoutHistoryEntry) => {
+    const updated = workouts.map((workout) => (
+      workout.id === updatedWorkout.id ? updatedWorkout : workout
+    ))
+    setWorkouts(updated)
+    setWorkoutsByDate(groupWorkoutsByDate(updated))
+    setSelectedWorkouts((current) => current.map((workout) => (
+      workout.id === updatedWorkout.id ? updatedWorkout : workout
+    )))
+  }
+
+  const handleWorkoutDeleted = (workoutId: string) => {
+    const updated = workouts.filter((workout) => workout.id !== workoutId)
+    setWorkouts(updated)
+    setWorkoutsByDate(groupWorkoutsByDate(updated))
+    const remainingSelected = selectedWorkouts.filter((workout) => workout.id !== workoutId)
+    setSelectedWorkouts(remainingSelected)
+    if (remainingSelected.length === 0) {
+      setSelectedDate(null)
+    }
+  }
+
   const circuitCount = workouts.filter((w) => w.session.mode === "circuit").length
   const freeformCount = workouts.filter((w) => w.session.mode === "freeform" || w.session.mode === "traditional" as string).length
   const vo2MaxCount = workouts.filter((w) => w.session.mode === "vo2max").length
@@ -82,7 +107,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
                 Back
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">
-                HISTORY
+                WORKOUT CALENDAR
               </span>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -136,11 +161,11 @@ export function CalendarView({ onBack }: CalendarViewProps) {
       <main className="flex-1 p-4">
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <p className="text-muted-foreground">Loading history...</p>
+            <p className="text-muted-foreground">Loading workout calendar...</p>
           </div>
         ) : loadError ? (
           <div className="flex h-64 flex-col items-center justify-center text-center">
-            <p className="font-medium text-foreground">Workout history could not be loaded.</p>
+            <p className="font-medium text-foreground">Your workout calendar could not be loaded.</p>
             <p className="mt-1 text-sm text-muted-foreground">Check your connection and try again.</p>
             <Button variant="outline" onClick={fetchHistory} className="mt-4 gap-2">
               <RefreshCw className="h-4 w-4" />
@@ -166,7 +191,7 @@ export function CalendarView({ onBack }: CalendarViewProps) {
               </>
             ) : (
               <>
-                <p className="text-muted-foreground">Sign in to track your workout history</p>
+                <p className="text-muted-foreground">Sign in to use your Workout Calendar</p>
                 <p className="text-sm text-muted-foreground mt-2">
                   Your workouts will be saved and displayed here when you sign in.
                 </p>
@@ -184,6 +209,8 @@ export function CalendarView({ onBack }: CalendarViewProps) {
           date={selectedDate}
           workouts={selectedWorkouts}
           onClose={handleCloseModal}
+          onWorkoutUpdated={handleWorkoutUpdated}
+          onWorkoutDeleted={handleWorkoutDeleted}
         />
       )}
     </div>

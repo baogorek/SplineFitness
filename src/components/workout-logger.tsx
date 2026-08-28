@@ -84,7 +84,7 @@ const workoutModes = [
     icon: Gauge,
     title: "VO2 Max",
     subtitle: "Treadmill test",
-    description: "12-minute Cooper-style treadmill estimate with calendar recording",
+    description: "12-minute Cooper-style treadmill estimate with saved results",
     color: "bg-cyan-500",
     lightBg: "bg-cyan-50",
     border: "border-cyan-200",
@@ -118,9 +118,9 @@ const workoutModes = [
   {
     id: "history" as const,
     icon: Calendar,
-    title: "History",
-    subtitle: "Your progress",
-    description: "View past workouts on calendar",
+    title: "Workout Calendar",
+    subtitle: "Your training log",
+    description: "Review and edit your saved workouts",
     color: "bg-emerald-500",
     lightBg: "bg-emerald-50",
     border: "border-emerald-200",
@@ -344,32 +344,36 @@ export function WorkoutLogger() {
     setMode(null)
   }
 
+  const handleViewCalendar = () => {
+    setMode("history")
+  }
+
   if (checkingSavedProgress) {
     return <div className="text-muted-foreground">Loading...</div>
   }
 
   if (mode === "circuit") {
-    return <CircuitWorkout onModeChange={handleModeChange} />
+    return <CircuitWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "interval") {
-    return <IntervalWorkout onModeChange={handleModeChange} />
+    return <IntervalWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "sit") {
-    return <SitWorkout onModeChange={handleModeChange} />
+    return <SitWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "liss-core") {
-    return <LissCoreWorkout onModeChange={handleModeChange} />
+    return <LissCoreWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "vo2max") {
-    return <Vo2MaxWorkout onModeChange={handleModeChange} />
+    return <Vo2MaxWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "freeform") {
-    return <FreeformWorkout onModeChange={handleModeChange} />
+    return <FreeformWorkout onModeChange={handleModeChange} onViewCalendar={handleViewCalendar} />
   }
 
   if (mode === "frontier") {

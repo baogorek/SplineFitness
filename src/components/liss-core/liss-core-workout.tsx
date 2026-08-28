@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
+  Calendar,
   ChevronLeft,
   Gauge,
   Info,
@@ -65,6 +66,7 @@ import { CableSetupFields, CardioModalityFields, LissCoreSetup } from "./liss-co
 
 interface LissCoreWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
 interface ActiveConfig {
@@ -293,6 +295,7 @@ function CompletedWorkout({
   cardioSelections,
   onCableSetupChange,
   onWorkoutStaged,
+  onViewCalendar,
   onExit,
 }: {
   config: ActiveConfig
@@ -304,6 +307,7 @@ function CompletedWorkout({
   cardioSelections: Record<string, CardioIntervalSelection>
   onCableSetupChange: (setup: LissCoreCableSetup) => void
   onWorkoutStaged: () => void
+  onViewCalendar: () => void
   onExit: () => void
 }) {
   const { user, signInWithGoogle } = useAuth()
@@ -454,7 +458,7 @@ function CompletedWorkout({
             </Button>
             {!user && FEATURES.AUTH_ENABLED && (
               <button type="button" className="w-full text-center text-sm text-violet-700 underline-offset-4 hover:underline" onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))}>
-                Sign in to save this session to calendar history
+                Sign in to save this session to your Workout Calendar
               </button>
             )}
           </div>
@@ -462,6 +466,9 @@ function CompletedWorkout({
           <div className="space-y-3 text-center">
             <p className="text-sm font-medium text-emerald-600">Workout finished. Your cable setup is saved on this device.</p>
             {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
+            <Button variant="outline" className="h-12 w-full gap-2" onClick={onViewCalendar}>
+              <Calendar className="h-4 w-4" /> View Workout Calendar
+            </Button>
             <Button className="h-12 w-full" onClick={onExit}>Back to Home</Button>
           </div>
         )}
@@ -473,10 +480,12 @@ function CompletedWorkout({
 function ActiveWorkout({
   config,
   audio,
+  onViewCalendar,
   onExit,
 }: {
   config: ActiveConfig
   audio: ReturnType<typeof useAudio>
+  onViewCalendar: () => void
   onExit: () => void
 }) {
   const steps = useMemo(() => buildLissCoreSteps(config.template), [config.template])
@@ -669,6 +678,7 @@ function ActiveWorkout({
         cardioSelections={cardioSelections}
         onCableSetupChange={setCableSetup}
         onWorkoutStaged={() => { completionStagedRef.current = true }}
+        onViewCalendar={onViewCalendar}
         onExit={onExit}
       />
     )
@@ -838,7 +848,7 @@ function ActiveWorkout({
   )
 }
 
-export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
+export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkoutProps) {
   const audio = useAudio()
   const [defaultTemplate, setDefaultTemplate] = useState(() => (
     normalizeLissCoreTemplate(getLissCoreTemplate() ?? DEFAULT_LISS_CORE_TEMPLATE)
@@ -890,7 +900,7 @@ export function LissCoreWorkout({ onModeChange }: LissCoreWorkoutProps) {
   }
 
   if (activeConfig) {
-    return <ActiveWorkout config={activeConfig} audio={audio} onExit={onModeChange} />
+    return <ActiveWorkout config={activeConfig} audio={audio} onViewCalendar={onViewCalendar} onExit={onModeChange} />
   }
 
   return (

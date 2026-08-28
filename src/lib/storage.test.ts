@@ -7,9 +7,11 @@ const firebaseState = vi.hoisted(() => ({
 }))
 
 const firestoreMocks = vi.hoisted(() => ({
+  deleteDoc: vi.fn(),
   doc: vi.fn((...parts: unknown[]) => parts.slice(1).join("/")),
   getDocs: vi.fn(),
   setDoc: vi.fn(),
+  updateDoc: vi.fn(),
   batchSet: vi.fn(),
   batchDelete: vi.fn(),
   batchCommit: vi.fn(),
@@ -22,12 +24,14 @@ vi.mock("@/lib/firebase", () => ({
 
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(),
+  deleteDoc: firestoreMocks.deleteDoc,
   doc: firestoreMocks.doc,
   getDocs: firestoreMocks.getDocs,
   orderBy: vi.fn(),
   query: vi.fn(),
   serverTimestamp: vi.fn(() => "server-time"),
   setDoc: firestoreMocks.setDoc,
+  updateDoc: firestoreMocks.updateDoc,
   where: vi.fn(),
   writeBatch: vi.fn(() => ({
     set: firestoreMocks.batchSet,
@@ -36,7 +40,13 @@ vi.mock("firebase/firestore", () => ({
   })),
 }))
 
-import { saveFrontierCards, saveWorkoutSession, stageCompletedWorkout } from "./storage"
+import {
+  deleteWorkoutSession,
+  saveFrontierCards,
+  saveWorkoutSession,
+  stageCompletedWorkout,
+  updateIntervalWorkoutNotes,
+} from "./storage"
 import { FrontierCard } from "@/types/frontier"
 
 class MemoryStorage implements Storage {
@@ -86,8 +96,10 @@ describe("completed workout persistence", () => {
     })
     firebaseState.auth.currentUser = null
     firestoreMocks.doc.mockClear()
+    firestoreMocks.deleteDoc.mockReset()
     firestoreMocks.getDocs.mockReset()
     firestoreMocks.setDoc.mockReset()
+    firestoreMocks.updateDoc.mockReset()
     firestoreMocks.batchSet.mockReset()
     firestoreMocks.batchDelete.mockReset()
     firestoreMocks.batchCommit.mockReset()
@@ -148,6 +160,78 @@ describe("completed workout persistence", () => {
     )
     expect(localStorage.getItem("strength-tracker:pending-workouts")).toBeNull()
     errorSpy.mockRestore()
+  })
+
+  it("serializes revisions so a late older save cannot overwrite a correction", async () => {
+    firebaseState.auth.currentUser = { uid: "user-1" }
+    let finishFirstSave: (() => void) | undefined
+    firestoreMocks.setDoc
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishFirstSave = resolve
+      }))
+      .mockResolvedValueOnce(undefined)
+
+    const firstSave = saveWorkoutSession(session)
+    const correctedSession: FreeformWorkoutSession = {
+      ...session,
+      exercises: [{
+        id: "exercise-1",
+        name: "Deadlift",
+        tags: [],
+        sets: [],
+      }],
+    }
+    const correctedSave = saveWorkoutSession(correctedSession)
+
+    await vi.waitFor(() => expect(firestoreMocks.setDoc).toHaveBeenCalledTimes(1))
+    finishFirstSave?.()
+    await Promise.all([firstSave, correctedSave])
+
+    expect(firestoreMocks.setDoc).toHaveBeenCalledTimes(2)
+    expect(firestoreMocks.setDoc).toHaveBeenLastCalledWith(
+      "users/user-1/workouts/freeform-2026-08-19T12-34-56-000Z",
+      expect.objectContaining({ exercises: correctedSession.exercises })
+    )
+  })
+
+  it("updates interval performance notes on the existing workout", async () => {
+    firebaseState.auth.currentUser = { uid: "user-1" }
+    firestoreMocks.updateDoc.mockResolvedValueOnce(undefined)
+
+    await expect(updateIntervalWorkoutNotes("interval-1", {
+      1: " HR 170 ",
+      2: "",
+      4: "RPE 9",
+    })).resolves.toBe(true)
+
+    expect(firestoreMocks.updateDoc).toHaveBeenCalledWith(
+      "users/user-1/workouts/interval-1",
+      {
+        setNotes: { 1: "HR 170", 4: "RPE 9" },
+        updatedAt: "server-time",
+      }
+    )
+  })
+
+  it("deletes a workout and removes any matching pending retry", async () => {
+    firebaseState.auth.currentUser = { uid: "user-1" }
+    firestoreMocks.deleteDoc.mockResolvedValueOnce(undefined)
+    localStorage.setItem("strength-tracker:pending-workouts", JSON.stringify([
+      {
+        id: "freeform-2026-08-19T12-34-56-000Z",
+        ownerUid: "user-1",
+        revision: "revision-1",
+        session,
+      },
+    ]))
+
+    await expect(deleteWorkoutSession("freeform-2026-08-19T12-34-56-000Z"))
+      .resolves.toBe(true)
+
+    expect(firestoreMocks.deleteDoc).toHaveBeenCalledWith(
+      "users/user-1/workouts/freeform-2026-08-19T12-34-56-000Z"
+    )
+    expect(localStorage.getItem("strength-tracker:pending-workouts")).toBeNull()
   })
 
   it("reconciles the entire Frontier wallet so cloud deletions are durable", async () => {

@@ -7,7 +7,7 @@ A workout tracking app with an integrated blog, built with Next.js 16.
 - **Circuit Training**: Timed combos with rounds, audio cues, and load metrics
 - **Traditional Workouts**: Sets, reps, and weight tracking
 - **Frontier Cards**: Location-based pocket cards that retain only exercise frontiers
-- **Workout History**: Calendar view of past workouts
+- **Workout Calendar**: Review, edit, and manage saved workouts by date
 - **1-on-1 Booking**: Cal.com integration for personal training sessions
 - **Blog**: MDX-powered blog for fitness content
 
@@ -55,7 +55,7 @@ src/
 │   ├── blog/                 # Blog components
 │   ├── circuit/              # Circuit workout UI
 │   ├── traditional/          # Traditional workout UI
-│   ├── calendar/             # History calendar
+│   ├── calendar/             # Workout calendar
 │   ├── booking/              # Cal.com booking
 │   ├── shared/               # Shared components
 │   └── ui/                   # shadcn/ui components

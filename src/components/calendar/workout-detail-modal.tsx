@@ -1,10 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Activity, X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge } from "lucide-react"
+import { Activity, X, Timer, Dumbbell, Clock, Zap, BookOpen, Gauge, Pencil, Save, Trash2 } from "lucide-react"
 import {
   CircuitWorkoutSession,
   FreeformWorkoutSession,
@@ -19,11 +20,14 @@ import { formatCableSetup, formatCardioSelection } from "@/data/liss-core"
 import { circuitWorkouts } from "@/data/circuit-workouts"
 import { formatDisplayDate } from "./calendar-utils"
 import { useDialogFocus } from "@/hooks/use-dialog-focus"
+import { deleteWorkoutSession, updateIntervalWorkoutNotes } from "@/lib/storage"
 
 interface WorkoutDetailModalProps {
   date: Date
   workouts: WorkoutHistoryEntry[]
   onClose: () => void
+  onWorkoutUpdated: (workout: WorkoutHistoryEntry) => void
+  onWorkoutDeleted: (workoutId: string) => void
 }
 
 function FreeformDataView({ session }: { session: FreeformWorkoutSession }) {
@@ -354,8 +358,68 @@ function WorkoutDataView({ session }: { session: WorkoutSession }) {
   )
 }
 
-export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailModalProps) {
+export function WorkoutDetailModal({
+  date,
+  workouts,
+  onClose,
+  onWorkoutUpdated,
+  onWorkoutDeleted,
+}: WorkoutDetailModalProps) {
   const dialogRef = useDialogFocus<HTMLDivElement>(true, onClose)
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null)
+  const [draftNotes, setDraftNotes] = useState<Record<number, string>>({})
+  const [pendingWorkoutId, setPendingWorkoutId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<{ workoutId: string; message: string } | null>(null)
+
+  const startEditingInterval = (entry: WorkoutHistoryEntry) => {
+    if (entry.session.mode !== "interval") return
+    setDraftNotes({ ...entry.session.setNotes })
+    setEditingWorkoutId(entry.id)
+    setActionError(null)
+  }
+
+  const saveIntervalNotes = async (entry: WorkoutHistoryEntry) => {
+    if (entry.session.mode !== "interval") return
+    setPendingWorkoutId(entry.id)
+    setActionError(null)
+
+    const normalizedNotes = Object.fromEntries(
+      Object.entries(draftNotes)
+        .map(([setNumber, note]) => [Number(setNumber), note.trim()])
+        .filter(([, note]) => note)
+    ) as Record<number, string>
+    const saved = await updateIntervalWorkoutNotes(entry.id, normalizedNotes)
+    setPendingWorkoutId(null)
+
+    if (!saved) {
+      setActionError({ workoutId: entry.id, message: "Performance notes could not be saved. Please try again." })
+      return
+    }
+
+    const updatedSession: IntervalWorkoutSession = { ...entry.session }
+    delete updatedSession.setNotes
+    if (Object.keys(normalizedNotes).length > 0) {
+      updatedSession.setNotes = normalizedNotes
+    }
+    onWorkoutUpdated({ ...entry, session: updatedSession })
+    setEditingWorkoutId(null)
+  }
+
+  const deleteWorkout = async (entry: WorkoutHistoryEntry) => {
+    if (!window.confirm("Delete this workout from your calendar? This cannot be undone.")) return
+
+    setPendingWorkoutId(entry.id)
+    setActionError(null)
+    const deleted = await deleteWorkoutSession(entry.id)
+    setPendingWorkoutId(null)
+
+    if (!deleted) {
+      setActionError({ workoutId: entry.id, message: "The workout could not be deleted. Please try again." })
+      return
+    }
+
+    onWorkoutDeleted(entry.id)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -426,6 +490,72 @@ export function WorkoutDetailModal({ date, workouts, onClose }: WorkoutDetailMod
               </div>
 
               <WorkoutDataView session={entry.session} />
+
+              {entry.session.mode === "interval" && editingWorkoutId === entry.id && (
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Edit set performance
+                  </p>
+                  {Array.from({ length: entry.session.completedSets }, (_, index) => index + 1).map((setNumber) => (
+                    <label key={setNumber} className="block space-y-1">
+                      <span className="text-xs font-semibold text-foreground">Set {setNumber}</span>
+                      <input
+                        type="text"
+                        value={draftNotes[setNumber] ?? ""}
+                        onChange={(event) => setDraftNotes((current) => ({
+                          ...current,
+                          [setNumber]: event.target.value,
+                        }))}
+                        placeholder="e.g. HR 178, RPE 8"
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </label>
+                  ))}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void saveIntervalNotes(entry)}
+                      disabled={pendingWorkoutId === entry.id}
+                      className="gap-1.5"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      {pendingWorkoutId === entry.id ? "Saving…" : "Save notes"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingWorkoutId(null)}
+                      disabled={pendingWorkoutId === entry.id}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {actionError?.workoutId === entry.id && (
+                <p className="text-sm font-medium text-red-600" role="alert">{actionError.message}</p>
+              )}
+
+              <div className="flex items-center justify-between gap-2">
+                {entry.session.mode === "interval" && editingWorkoutId !== entry.id ? (
+                  <Button variant="outline" size="sm" onClick={() => startEditingInterval(entry)} className="gap-1.5">
+                    <Pencil className="h-3.5 w-3.5" /> Edit performance
+                  </Button>
+                ) : (
+                  <span />
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void deleteWorkout(entry)}
+                  disabled={pendingWorkoutId === entry.id}
+                  className="gap-1.5 text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {pendingWorkoutId === entry.id && editingWorkoutId !== entry.id ? "Deleting…" : "Delete"}
+                </Button>
+              </div>
 
               {workouts.indexOf(entry) < workouts.length - 1 && <Separator className="mt-4" />}
             </div>

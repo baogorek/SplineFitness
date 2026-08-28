@@ -40,6 +40,7 @@ import {
 
 interface SitWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
 const KEEPALIVE_PHASES: SitPhase[] = [
@@ -107,7 +108,7 @@ function getPhaseTargetSeconds(phase: SitPhase): number {
   }
 }
 
-export function SitWorkout({ onModeChange }: SitWorkoutProps) {
+export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
   const [phase, setPhase] = useState<SitPhase>("ready")
   const [tissuePrepSet, setTissuePrepSet] = useState(1)
   const [sprintNumber, setSprintNumber] = useState(1)
@@ -636,34 +637,6 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
     audio.speak("Phosphocreatine resynthesis active.")
   }
 
-  const buildGoogleCalendarUrl = (session: SitWorkoutSession): string => {
-    const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
-    const mins = Math.floor(session.totalTimeSeconds / 60)
-    const secs = (session.totalTimeSeconds % 60).toString().padStart(2, "0")
-
-    const lines = [
-      `Sprints: ${session.sprintTimes.length}`,
-      `Best Sprint: ${session.bestSprintTimeSeconds !== null ? `${session.bestSprintTimeSeconds.toFixed(1)}s` : "—"}`,
-    ]
-    session.sprintTimes.forEach((s) => {
-      lines.push(`  Sprint ${s.sprintNumber}: ${s.timeSeconds.toFixed(1)}s`)
-    })
-    lines.push(`Total Time: ${mins}:${secs}`, "", "Session Data:", JSON.stringify(session))
-
-    let details = lines.join("\n")
-    if (details.length > 1500) {
-      details = details.slice(0, 1497) + "..."
-    }
-
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: "SIT Sprint Training",
-      dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
-      details,
-    })
-    return `https://calendar.google.com/calendar/render?${params.toString()}`
-  }
-
   if (pendingResume) {
     const savedAtLabel = formatSavedAtLabel(pendingResume.savedAt)
     const completedSprints = pendingResume.sprintHistory.length
@@ -756,20 +729,10 @@ export function SitWorkout({ onModeChange }: SitWorkoutProps) {
           )}
 
           {completedSessionData && (
-            <>
-              <a
-                href={buildGoogleCalendarUrl(completedSessionData)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Add to Google Calendar
-              </a>
-              <p className="text-center text-sm font-semibold text-amber-500 mt-1">
-                Remember to tap Save in Google Calendar!
-              </p>
-            </>
+            <Button variant="outline" onClick={onViewCalendar} className="h-12 w-full gap-2">
+              <Calendar className="h-4 w-4" />
+              View Workout Calendar
+            </Button>
           )}
 
           {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}

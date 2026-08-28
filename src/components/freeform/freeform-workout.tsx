@@ -13,6 +13,7 @@ import { restoreElapsedSeconds } from "@/lib/timer-persistence"
 
 interface FreeformWorkoutProps {
   onModeChange: () => void
+  onViewCalendar: () => void
 }
 
 function createEmptyExercise(): FreeformExercise {
@@ -45,7 +46,7 @@ function getSessionDurationSeconds(session: FreeformWorkoutSession): number {
   )
 }
 
-function formatSetForCalendar(set: FreeformExercise["sets"][number]): string {
+function formatSet(set: FreeformExercise["sets"][number]): string {
   const parts = []
   if (set.weight) {
     parts.push(`${set.weight} lbs`)
@@ -56,40 +57,7 @@ function formatSetForCalendar(set: FreeformExercise["sets"][number]): string {
   return parts.length > 0 ? `Set ${set.id} (${parts.join(", ")})` : `Set ${set.id}`
 }
 
-function formatExerciseForCalendar(exercise: FreeformExercise): string {
-  const tags = exercise.tags.length > 0 ? ` [${exercise.tags.join(", ")}]` : ""
-  if (exercise.sets.length === 0) {
-    return `${exercise.name}${tags}`
-  }
-  return `${exercise.name}${tags}: ${exercise.sets.map(formatSetForCalendar).join("; ")}`
-}
-
-function buildGoogleCalendarUrl(session: FreeformWorkoutSession): string {
-  const toCalDate = (iso: string) => iso.replace(/[-:]/g, "").replace(/\.\d+Z/, "Z")
-  const duration = formatDuration(getSessionDurationSeconds(session))
-  const lines = [
-    `Duration: ${duration}`,
-    `Exercises: ${session.exercises.length}`,
-    "",
-    "Exercise Log:",
-    ...session.exercises.map((exercise) => `  ${formatExerciseForCalendar(exercise)}`),
-  ]
-
-  let details = lines.join("\n")
-  if (details.length > 1500) {
-    details = details.slice(0, 1497) + "..."
-  }
-
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: "Freeform Workout",
-    dates: `${toCalDate(session.startedAt)}/${toCalDate(session.completedAt || session.startedAt)}`,
-    details,
-  })
-  return `https://calendar.google.com/calendar/render?${params.toString()}`
-}
-
-export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
+export function FreeformWorkout({ onModeChange, onViewCalendar }: FreeformWorkoutProps) {
   const [initialResume] = useState<FreeformSessionProgress | null>(() => getFreeformProgress())
   const [exercises, setExercises] = useState<FreeformExercise[]>([createEmptyExercise()])
   const [saving, setSaving] = useState(false)
@@ -281,7 +249,7 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
                   <div className="space-y-0.5">
                     {exercise.sets.map((set) => (
                       <p key={set.id} className="text-xs text-muted-foreground font-mono">
-                        {formatSetForCalendar(set)}
+                        {formatSet(set)}
                       </p>
                     ))}
                   </div>
@@ -290,18 +258,14 @@ export function FreeformWorkout({ onModeChange }: FreeformWorkoutProps) {
             ))}
           </div>
 
-          <a
-            href={buildGoogleCalendarUrl(completedSessionData)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors w-full mt-2"
+          <Button
+            variant="outline"
+            onClick={onViewCalendar}
+            className="h-12 w-full gap-2"
           >
             <Calendar className="h-4 w-4" />
-            Add to Google Calendar
-          </a>
-          <p className="text-center text-sm font-semibold text-amber-500 mt-1">
-            Remember to tap Save in Google Calendar!
-          </p>
+            View Workout Calendar
+          </Button>
 
           {FEATURES.AUTH_ENABLED ? (
             <CompletedWorkoutSave session={completedSessionData} />
