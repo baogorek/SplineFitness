@@ -15,6 +15,21 @@ export const DEFAULT_LISS_CORE_TEMPLATE: LissCoreTemplate = {
   blocks: [
     { id: "cardio-1", kind: "cardio", durationSeconds: 10 * 60, transitionAfterSeconds: 30 },
     { id: "rotation-1", kind: "rotation", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "crunch-1", kind: "crunch", durationSeconds: 4 * 60, transitionAfterSeconds: 30 },
+    { id: "back-extension-1", kind: "back-extension", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-2", kind: "cardio", durationSeconds: 16 * 60, transitionAfterSeconds: 30 },
+    { id: "rotation-2", kind: "rotation", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "crunch-2", kind: "crunch", durationSeconds: 4 * 60, transitionAfterSeconds: 30 },
+    { id: "back-extension-2", kind: "back-extension", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
+    { id: "cardio-3", kind: "cardio", durationSeconds: 16 * 60, transitionAfterSeconds: 0 },
+  ],
+}
+
+const LEGACY_SPLIT_CIRCUIT_TEMPLATE: LissCoreTemplate = {
+  version: 2,
+  blocks: [
+    { id: "cardio-1", kind: "cardio", durationSeconds: 10 * 60, transitionAfterSeconds: 30 },
+    { id: "rotation-1", kind: "rotation", durationSeconds: 2 * 60, transitionAfterSeconds: 30 },
     { id: "cardio-2", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 30 },
     { id: "crunch-1", kind: "crunch", durationSeconds: 4 * 60, transitionAfterSeconds: 30 },
     { id: "cardio-3", kind: "cardio", durationSeconds: 8 * 60, transitionAfterSeconds: 30 },
@@ -94,6 +109,26 @@ export function normalizeLissCoreTemplate(template: LissCoreTemplate | null | un
   })
 
   return blocks.length > 0 ? { version: 2, blocks } : cloneDefaultTemplate()
+}
+
+function templatesMatch(left: LissCoreTemplate, right: LissCoreTemplate): boolean {
+  return left.version === right.version
+    && left.blocks.length === right.blocks.length
+    && left.blocks.every((block, index) => {
+      const comparison = right.blocks[index]
+      return block.id === comparison.id
+        && block.kind === comparison.kind
+        && block.durationSeconds === comparison.durationSeconds
+        && block.transitionAfterSeconds === comparison.transitionAfterSeconds
+    })
+}
+
+/** Upgrade only the former factory default; leave user-customized templates untouched. */
+export function migrateSavedLissCoreTemplate(template: LissCoreTemplate | null | undefined): LissCoreTemplate {
+  const normalized = normalizeLissCoreTemplate(template)
+  return templatesMatch(normalized, LEGACY_SPLIT_CIRCUIT_TEMPLATE)
+    ? cloneDefaultTemplate()
+    : normalized
 }
 
 function buildWorkSteps(block: LissCoreTemplateBlock, blockIndex: number, blockCount: number): LissCoreStep[] {
@@ -201,6 +236,26 @@ export function getCableSetupForExercise(
   }
   if (exerciseId === "crunch") return cableSetup.crunch
   return cableSetup.backExtension
+}
+
+export function setCableSetupForExercise(
+  cableSetup: LissCoreCableSetup,
+  exerciseId: LissCoreStep["exerciseId"],
+  side: LissCoreStep["side"],
+  setup: CableExerciseSetup
+): LissCoreCableSetup {
+  if (!exerciseId || exerciseId === "cardio") return cableSetup
+  if (exerciseId === "rotation") {
+    if (cableSetup.useSideSpecificRotation && side === "left") {
+      return { ...cableSetup, rotationLeft: setup }
+    }
+    if (cableSetup.useSideSpecificRotation && side === "right") {
+      return { ...cableSetup, rotationRight: setup }
+    }
+    return { ...cableSetup, rotation: setup }
+  }
+  if (exerciseId === "crunch") return { ...cableSetup, crunch: setup }
+  return { ...cableSetup, backExtension: setup }
 }
 
 export function formatCableSetup(setup: CableExerciseSetup | null | undefined): string | null {

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   Calendar,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Gauge,
   Info,
   Pause,
@@ -36,7 +38,9 @@ import {
   formatCardioSelection,
   getCableSetupForExercise,
   getNextWorkStep,
+  migrateSavedLissCoreTemplate,
   normalizeLissCoreTemplate,
+  setCableSetupForExercise,
 } from "@/data/liss-core"
 import {
   clearLissCoreProgress,
@@ -106,6 +110,15 @@ function formatSummaryDuration(seconds: number): string {
   const minutes = Math.floor(rounded / 60)
   const remainder = rounded % 60
   return `${minutes}:${remainder.toString().padStart(2, "0")}`
+}
+
+function formatCableSetupDetails(setup: CableExerciseSetup | null): string | null {
+  if (!setup) return null
+  const parts = [
+    setup.pulleyPosition?.trim() ? `Pulley ${setup.pulleyPosition.trim()}` : null,
+    setup.attachment?.trim() || null,
+  ].filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? parts.join(" · ") : null
 }
 
 function getResumeLabel(progress: LissCoreSessionProgress): string {
@@ -627,14 +640,18 @@ function ActiveWorkout({
   const currentStep = steps[timer.stepIndex] ?? steps[steps.length - 1]
   const nextWorkStep = getNextWorkStep(steps, timer.stepIndex)
   const infoStep = currentStep?.kind === "work" ? currentStep : nextWorkStep
+  const cableDisplayStep = currentStep?.kind === "work"
+    ? currentStep.exerciseId !== "cardio" ? currentStep : null
+    : nextWorkStep?.exerciseId !== "cardio" ? nextWorkStep : null
   const previousSetup = getCableSetupForExercise(
     config.previousCableSetup,
-    currentStep?.exerciseId,
-    currentStep?.side
+    cableDisplayStep?.exerciseId,
+    cableDisplayStep?.side
   )
-  const currentCableSetup = getCableSetupForExercise(cableSetup, currentStep?.exerciseId, currentStep?.side)
+  const currentCableSetup = getCableSetupForExercise(cableSetup, cableDisplayStep?.exerciseId, cableDisplayStep?.side)
   const previousSetupText = formatCableSetup(previousSetup)
-  const currentSetupText = formatCableSetup(currentCableSetup)
+  const currentSetupDetails = formatCableSetupDetails(currentCableSetup)
+  const currentCableWeight = Number.isFinite(currentCableSetup?.weight) ? currentCableSetup?.weight : undefined
   const currentCardioSelection = currentStep?.blockId ? cardioSelections[currentStep.blockId] : undefined
   const currentCardioText = formatCardioSelection(currentCardioSelection)
   const nextCardioText = nextWorkStep?.blockId && nextWorkStep.exerciseId === "cardio"
@@ -645,19 +662,23 @@ function ActiveWorkout({
     : 0
 
   const updateCableSetupForStep = (step: LissCoreStep, setup: CableExerciseSetup) => {
-    if (step.exerciseId === "rotation") {
-      if (cableSetup.useSideSpecificRotation && step.side === "left") {
-        setCableSetup((current) => ({ ...current, rotationLeft: setup }))
-      } else if (cableSetup.useSideSpecificRotation && step.side === "right") {
-        setCableSetup((current) => ({ ...current, rotationRight: setup }))
-      } else {
-        setCableSetup((current) => ({ ...current, rotation: setup }))
-      }
-    } else if (step.exerciseId === "crunch") {
-      setCableSetup((current) => ({ ...current, crunch: setup }))
-    } else if (step.exerciseId === "back-extension") {
-      setCableSetup((current) => ({ ...current, backExtension: setup }))
-    }
+    setCableSetup((current) => setCableSetupForExercise(
+      current,
+      step.exerciseId,
+      step.side,
+      setup
+    ))
+  }
+
+  const adjustCableWeightForStep = (step: LissCoreStep, delta: number) => {
+    setCableSetup((current) => {
+      const setup = getCableSetupForExercise(current, step.exerciseId, step.side) ?? {}
+      const weight = Number.isFinite(setup.weight) ? setup.weight ?? 0 : 0
+      return setCableSetupForExercise(current, step.exerciseId, step.side, {
+        ...setup,
+        weight: Math.max(0, weight + delta),
+      })
+    })
   }
 
   const handleVoiceToggle = () => {
@@ -772,15 +793,42 @@ function ActiveWorkout({
             </div>
           )}
 
-          {!isTransition && currentStep.exerciseId !== "cardio" && (
+          {cableDisplayStep && (
             <div className="mt-6 w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-3 text-left">
               {previousSetupText && <p className="text-xs text-slate-400"><span className="font-semibold text-slate-300">Last setup:</span> {previousSetupText}</p>}
-              <div className="mt-1 flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-200"><span className="font-semibold">Today:</span> {currentSetupText ?? "Not recorded"}</p>
-                <Button variant="ghost" size="sm" className="text-violet-300 hover:bg-white/10 hover:text-white" onClick={() => setEditingCableStep(currentStep)}>
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{isTransition ? "Next load" : "Current load"}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Decrease ${cableDisplayStep.label} weight by 5 pounds`}
+                      disabled={currentCableWeight === undefined || currentCableWeight <= 0}
+                      className="h-11 w-11 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      onClick={() => adjustCableWeightForStep(cableDisplayStep, -5)}
+                    >
+                      <ChevronDown />
+                    </Button>
+                    <output aria-live="polite" className="min-w-20 text-center text-2xl font-bold tabular-nums text-white">
+                      {currentCableWeight === undefined ? "—" : `${currentCableWeight} lb`}
+                    </output>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={`Increase ${cableDisplayStep.label} weight by 5 pounds`}
+                      className="h-11 w-11 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      onClick={() => adjustCableWeightForStep(cableDisplayStep, 5)}
+                    >
+                      <ChevronUp />
+                    </Button>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" className="text-violet-300 hover:bg-white/10 hover:text-white" onClick={() => setEditingCableStep(cableDisplayStep)}>
                   <Settings2 /> Edit
                 </Button>
               </div>
+              {currentSetupDetails && <p className="mt-2 text-xs text-slate-400">{currentSetupDetails}</p>}
               {currentCableSetup?.setupNote && <p className="mt-1 text-xs text-slate-400">{currentCableSetup.setupNote}</p>}
             </div>
           )}
@@ -851,7 +899,7 @@ function ActiveWorkout({
 export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkoutProps) {
   const audio = useAudio()
   const [defaultTemplate, setDefaultTemplate] = useState(() => (
-    normalizeLissCoreTemplate(getLissCoreTemplate() ?? DEFAULT_LISS_CORE_TEMPLATE)
+    migrateSavedLissCoreTemplate(getLissCoreTemplate() ?? DEFAULT_LISS_CORE_TEMPLATE)
   ))
   const [previousCableSetup] = useState<LissCoreCableSetup>(() => getLissCoreCableSetup())
   const [voiceCues, setVoiceCues] = useState(() => getLissCoreVoiceCues())
