@@ -116,11 +116,9 @@ export function formatFrontierChange(
 }
 
 export function formatDuration(totalSeconds: number): string {
-  const safeSeconds = Math.max(0, Math.round(totalSeconds))
-  const minutes = Math.floor(safeSeconds / 60)
-  const seconds = safeSeconds % 60
+  const { minutes, seconds } = durationParts(totalSeconds)
   return minutes > 0
-    ? `${minutes}:${seconds.toString().padStart(2, "0")}`
+    ? `${minutes}:${padSeconds(seconds)}`
     : `${seconds}s`
 }
 
@@ -128,14 +126,16 @@ export function parseDuration(value: string): number | null {
   const normalized = value.trim().toLowerCase()
   if (!normalized) return null
 
-  const colonMatch = normalized.match(/^(\d+):([0-5]?\d)$/)
+  const colonMatch = normalized.match(/^(\d+):([0-5]?\d(?:\.\d+)?)$/)
   if (colonMatch) {
-    return Number(colonMatch[1]) * 60 + Number(colonMatch[2])
+    const seconds = Number(colonMatch[1]) * 60 + Number(colonMatch[2])
+    return Number.isFinite(seconds) ? seconds : null
   }
 
-  const minuteSecondMatch = normalized.match(/^(?:(\d+)m)?\s*(?:(\d+)s)?$/)
+  const minuteSecondMatch = normalized.match(/^(?:(\d+)m)?\s*(?:(\d+(?:\.\d+)?|\.\d+)s)?$/)
   if (minuteSecondMatch && (minuteSecondMatch[1] || minuteSecondMatch[2])) {
-    return Number(minuteSecondMatch[1] || 0) * 60 + Number(minuteSecondMatch[2] || 0)
+    const seconds = Number(minuteSecondMatch[1] || 0) * 60 + Number(minuteSecondMatch[2] || 0)
+    return Number.isFinite(seconds) ? seconds : null
   }
 
   const seconds = Number(normalized)
@@ -144,10 +144,24 @@ export function parseDuration(value: string): number | null {
 
 export function formatDurationInput(totalSeconds: number | undefined): string {
   if (totalSeconds === undefined) return ""
-  const safeSeconds = Math.max(0, Math.round(totalSeconds))
-  const minutes = Math.floor(safeSeconds / 60)
-  const seconds = safeSeconds % 60
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+  const { minutes, seconds } = durationParts(totalSeconds)
+  return `${minutes}:${padSeconds(seconds)}`
+}
+
+function durationParts(totalSeconds: number): { minutes: number; seconds: string } {
+  // Split the decimal text so subtracting minutes cannot introduce floating-point noise.
+  const [whole, fraction] = Math.max(0, totalSeconds).toLocaleString("en-US", {
+    useGrouping: false,
+    maximumFractionDigits: 20,
+  }).split(".")
+  return {
+    minutes: Math.floor(Number(whole) / 60),
+    seconds: `${Number(whole) % 60}${fraction ? `.${fraction}` : ""}`,
+  }
+}
+
+function padSeconds(seconds: string): string {
+  return Number(seconds) < 10 ? `0${seconds}` : seconds
 }
 
 function formatNumber(value: number): string {

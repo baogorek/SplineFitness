@@ -42,6 +42,7 @@ import {
 import { FrontierEntrySave, FrontierEntrySheet } from "./frontier-entry-sheet"
 import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
+import { FrontierTimer } from "./frontier-timer"
 
 interface FrontierWalletProps {
   onBack: () => void
@@ -75,6 +76,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [locationSheetMode, setLocationSheetMode] = useState<"add" | "edit" | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [timerSession, setTimerSession] = useState<{ exercise: FrontierExercise | null } | null>(null)
+  const [timerExpanded, setTimerExpanded] = useState(true)
   const saveVersionRef = useRef(0)
 
   useEffect(() => {
@@ -478,7 +481,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-col px-2 pb-8 pt-6 sm:px-6 sm:pt-8">
+      <main className={`mx-auto flex w-full max-w-3xl flex-col px-2 pt-6 sm:px-6 sm:pt-8 ${timerSession ? "pb-28" : "pb-8"}`}>
         <div className="mb-4 flex items-center justify-between px-2 sm:px-8">
           <Button
             variant="outline"
@@ -525,6 +528,15 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
             setEntrySheetOpen(true)
           }}
           onOpenCardMenu={() => setLocationSheetMode("edit")}
+          timerInUse={timerSession !== null}
+          onOpenTimer={() => {
+            setTimerSession((current) => current ?? { exercise: null })
+            setTimerExpanded(true)
+          }}
+          onTimeExercise={(exercise) => {
+            setTimerSession((current) => current ?? { exercise })
+            setTimerExpanded(true)
+          }}
           onSwipe={navigate}
         />
 
@@ -567,6 +579,16 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           Swipe the card to move through your wallet.
         </p>
       </main>
+
+      {timerSession && (
+        <FrontierTimer
+          exercise={timerSession.exercise}
+          expanded={timerExpanded}
+          onExpand={() => setTimerExpanded(true)}
+          onMinimize={() => setTimerExpanded(false)}
+          onClose={() => setTimerSession(null)}
+        />
+      )}
 
       {entrySheetOpen && (
         <FrontierEntrySheet

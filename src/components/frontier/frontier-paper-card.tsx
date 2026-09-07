@@ -12,11 +12,13 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Timer,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
 import { isFrontierAttemptToday } from "@/lib/frontier-attempts"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
+import { isTimedFrontierExercise } from "@/lib/frontier-timer"
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
 
 interface FrontierPaperCardProps {
@@ -25,6 +27,9 @@ interface FrontierPaperCardProps {
   onToggleAttemptToday: (exercise: FrontierExercise) => void
   onAddExercise: () => void
   onOpenCardMenu: () => void
+  onOpenTimer: () => void
+  onTimeExercise: (exercise: FrontierExercise) => void
+  timerInUse: boolean
   onSwipe: (direction: "previous" | "next") => void
 }
 
@@ -34,6 +39,9 @@ export function FrontierPaperCard({
   onToggleAttemptToday,
   onAddExercise,
   onOpenCardMenu,
+  onOpenTimer,
+  onTimeExercise,
+  timerInUse,
   onSwipe,
 }: FrontierPaperCardProps) {
   const touchStartXRef = useRef<number | null>(null)
@@ -74,6 +82,16 @@ export function FrontierPaperCard({
                 {card.name}
               </h2>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenTimer}
+              className="shrink-0 border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"
+              aria-label={timerInUse ? "Open active timer" : "Open timer"}
+            >
+              <Timer aria-hidden="true" className="mr-1.5 h-4 w-4" />
+              Timer
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -190,6 +208,19 @@ export function FrontierPaperCard({
 
                                     {expanded && (
                                       <div id={historyId} className="bg-indigo-50/45 px-3 pb-3.5 pt-1 sm:px-5">
+                                        {isTimedFrontierExercise(exercise) && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="mb-3 mt-1 h-11 w-full border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
+                                            disabled={timerInUse}
+                                            onClick={() => onTimeExercise(exercise)}
+                                            aria-label={`Time ${displayName}`}
+                                          >
+                                            <Timer aria-hidden="true" className="mr-2 h-4 w-4" />
+                                            {timerInUse ? "Finish the active timer to start another" : "Time this exercise"}
+                                          </Button>
+                                        )}
                                         <div className="mb-2 flex items-center justify-between gap-3">
                                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                                             History{exercise.changes.length > 0 ? ` · ${exercise.changes.length}` : ""}
