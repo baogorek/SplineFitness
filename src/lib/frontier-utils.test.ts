@@ -3,6 +3,7 @@ import {
   formatDuration,
   formatDurationInput,
   formatFrontierValue,
+  formatFrontierChange,
   getCurrentFrontier,
   getCurrentFrontierChange,
   isFrontierImprovement,
@@ -25,6 +26,12 @@ const changes: FrontierChange[] = [
 ]
 
 describe("frontier current values", () => {
+  it("formats typed imported marks consistently while retaining custom text", () => {
+    const mark: FrontierChange = { id: "hip", kind: "import", rawValue: "130lb/1:45", value: { primary: 130, secondary: 105 } }
+    expect(formatFrontierChange("weight-time", mark)).toBe("130 lb / 1:45")
+    expect(formatFrontierChange("freeform", mark)).toBe("130lb/1:45")
+    expect(mark.rawValue).toBe("130lb/1:45")
+  })
   it("does not let a history-only mismatched mark replace a typed frontier", () => {
     expect(getCurrentFrontier(changes)).toEqual({ primary: 20, secondary: 60 })
     expect(getCurrentFrontierChange("weight-time", changes)?.id).toBe("valid")

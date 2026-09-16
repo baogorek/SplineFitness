@@ -155,7 +155,7 @@ export function normalizeFrontierExerciseMarks(
   let metric = exercise.metric
   let changes = exercise.changes
 
-  if (metric === "freeform") {
+  if (metric === "freeform" && exercise.metricSource !== "user") {
     const rawValues = changes.map((change) => change.rawValue)
     if (rawValues.every((rawValue): rawValue is string => Boolean(rawValue))) {
       const parsed = parseFrontierMarkHistory(rawValues)
@@ -167,7 +167,7 @@ export function normalizeFrontierExerciseMarks(
         }))
       }
     }
-  } else {
+  } else if (metric !== "freeform") {
     changes = changes.map((change) => {
       if (change.value || !change.rawValue) return change
       const parsed = parseFrontierMark(change.rawValue, metric)

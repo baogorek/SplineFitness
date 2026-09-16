@@ -111,6 +111,7 @@ export function formatFrontierChange(
   change: FrontierChange | null
 ): string {
   if (!change) return "No mark yet"
+  if (metric !== "freeform" && change.value) return formatFrontierValue(metric, change.value)
   if (change.rawValue) return change.rawValue
   return formatFrontierValue(metric, change.value ?? null)
 }

@@ -8,6 +8,14 @@ import {
 import { FrontierChange, FrontierExercise } from "@/types/frontier"
 
 describe("Frontier mark parsing", () => {
+  it("retains fractional seconds in imported weight/time marks", () => {
+    expect(parseFrontierMark("130 lb / 1:06.6")).toEqual({
+      metric: "weight-time",
+      value: { primary: 130, secondary: 66.6 },
+    })
+    expect(parseFrontierMark("130 lb / 6.6s")?.value.secondary).toBe(6.6)
+  })
+
   it.each([
     "130lb/1:45",
     "130lb / 1:45",

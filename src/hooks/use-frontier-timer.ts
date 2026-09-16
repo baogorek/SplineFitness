@@ -82,7 +82,10 @@ export function useFrontierTimer(cues: FrontierTimerCues) {
 
   const finish = useCallback(() => {
     const now = Date.now()
-    update(finishFrontierTimer(stateRef.current, now), now)
+    const next = finishFrontierTimer(stateRef.current, now)
+    if (next === stateRef.current) return null
+    update(next, now)
+    return getFrontierTimerSnapshot(next, now)
   }, [update])
 
   const reset = useCallback(() => update(createFrontierTimer(), Date.now()), [update])

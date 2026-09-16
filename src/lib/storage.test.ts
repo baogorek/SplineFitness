@@ -261,4 +261,12 @@ describe("completed workout persistence", () => {
     )
     expect(localStorage.getItem("strength-tracker:frontier-pending:user-1")).toBeNull()
   })
+
+  it("reports failed local Frontier saves so the effort can be retried", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.spyOn(localStorage, "setItem").mockImplementationOnce(() => { throw new Error("Storage full") })
+    await expect(saveFrontierCards([])).rejects.toThrow("Storage full")
+    await expect(saveFrontierCards([])).resolves.toBeUndefined()
+    expect(localStorage.getItem("strength-tracker:frontier-cards")).toBe("[]")
+  })
 })

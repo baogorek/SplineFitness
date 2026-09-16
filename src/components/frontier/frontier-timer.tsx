@@ -11,7 +11,8 @@ import { useWakeLock } from "@/hooks/use-wake-lock"
 import { formatFrontierTimerTime, getFrontierTimerTarget } from "@/lib/frontier-timer"
 import { formatDurationInput, formatFrontierChange, getCurrentFrontierChange, parseDuration } from "@/lib/frontier-utils"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
-import { FrontierExercise } from "@/types/frontier"
+import { getFrontierTimerProposal, FrontierTimerProposal } from "@/lib/frontier-effort"
+import { FrontierAttempt, FrontierExercise } from "@/types/frontier"
 
 interface FrontierTimerProps {
   exercise: FrontierExercise | null
@@ -19,10 +20,21 @@ interface FrontierTimerProps {
   onExpand: () => void
   onMinimize: () => void
   onClose: () => void
+  initialWeight?: number
+  choices: { cardId: string; cardName: string; exercise: FrontierExercise }[]
+  onSelectExercise: (cardId: string, exerciseId: string) => void
+  onRecord: (attempt: FrontierAttempt, update?: { baseline: FrontierExercise; proposal: FrontierTimerProposal }) => Promise<void>
 }
 
-export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose }: FrontierTimerProps) {
+export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose, initialWeight, choices, onSelectExercise, onRecord }: FrontierTimerProps) {
   const [targetInput, setTargetInput] = useState(() => formatDurationInput(getFrontierTimerTarget(exercise) ?? undefined))
+  const [weightInput, setWeightInput] = useState(() => String(initialWeight ?? (exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes)?.value?.primary : undefined) ?? ""))
+  const [baseline, setBaseline] = useState(exercise)
+  const [effort, setEffort] = useState<FrontierAttempt | null>(null)
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [updated, setUpdated] = useState(false)
+  const [retryUpdate, setRetryUpdate] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const audio = useAudio()
   const timer = useFrontierTimer({
@@ -66,6 +78,35 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
         countingDown || ready
       )
   const currentMark = exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes) : null
+  const weight = Number(weightInput)
+  const invalidWeight = exercise?.metric === "weight-time" && Boolean(weightInput.trim()) && (!Number.isFinite(weight) || weight <= 0)
+  const proposal = baseline && effort ? getFrontierTimerProposal(baseline, effort.elapsedSeconds ?? 0, effort.weight) : null
+
+  const saveEffort = async (attempt: FrontierAttempt, updateFrontier = false) => {
+    setSaveState("saving")
+    setSaveError(null)
+    setRetryUpdate(updateFrontier)
+    try {
+      await onRecord(attempt, updateFrontier && baseline && proposal ? { baseline, proposal } : undefined)
+      setSaveState("saved")
+      if (updateFrontier) setUpdated(true)
+    } catch (error) {
+      setSaveState("error")
+      setSaveError(error instanceof Error ? error.message : "Could not save this effort. Please retry.")
+    }
+  }
+
+  const finishEffort = () => {
+    const result = timer.finish()
+    if (!result || result.elapsedSeconds <= 0 || !exercise) return
+    const attempt: FrontierAttempt = {
+      id: crypto.randomUUID(), attemptedAt: new Date().toISOString(), source: "timer",
+      elapsedSeconds: result.elapsedSeconds,
+      ...(baseline?.metric === "weight-time" && weightInput.trim() ? { weight } : {}),
+    }
+    setEffort(attempt)
+    void saveEffort(attempt)
+  }
 
   if (!expanded) {
     return (
@@ -79,7 +120,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
           <span role="timer" aria-live="off" className="font-mono text-2xl font-bold tabular-nums text-indigo-950">{displayTime}</span>
           <Maximize2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
         </button>
-        <Button size="icon" variant="outline" className="h-12 w-12 shrink-0" onClick={running ? timer.pause : timer.resume} aria-label={running ? "Pause timer" : "Resume timer"}>
+        <Button size="icon" variant="outline" className="h-12 w-12 shrink-0" onClick={ready || finished ? onExpand : running ? timer.pause : timer.resume} aria-label={ready || finished ? "Open timer" : running ? "Pause timer" : "Resume timer"}>
           {running ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </Button>
       </div>
@@ -110,6 +151,27 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
 
         {ready && (
           <div className="mt-6 space-y-2">
+            {!exercise && (
+              <div className="mb-4 space-y-2">
+                <label htmlFor="frontier-timer-exercise" className="text-sm font-semibold">Exercise</label>
+                <select id="frontier-timer-exercise" className="h-12 w-full min-w-0 rounded-md border border-slate-200 bg-white px-3 text-sm" value="" onChange={(event) => {
+                  if (!event.target.value) return
+                  const choice = choices[Number(event.target.value)]
+                  if (choice) onSelectExercise(choice.cardId, choice.exercise.id)
+                }}>
+                  <option value="">Just a stopwatch</option>
+                  {choices.map((choice, index) => <option key={`${choice.cardId}-${choice.exercise.id}`} value={index}>{choice.exercise.name} · {choice.cardName}</option>)}
+                </select>
+                <p className="text-xs text-slate-500">Choose an exercise to record your effort when you finish.</p>
+              </div>
+            )}
+            {exercise?.metric === "weight-time" && (
+              <div className="mb-4 space-y-2">
+                <label htmlFor="frontier-timer-weight" className="text-sm font-semibold">Weight used (lb) <span className="font-normal text-slate-400">(optional)</span></label>
+                <Input id="frontier-timer-weight" inputMode="decimal" value={weightInput} onChange={(event) => setWeightInput(event.target.value)} aria-invalid={invalidWeight} className="h-12 bg-white font-mono" />
+                <p className={`text-xs ${invalidWeight ? "text-red-600" : "text-slate-500"}`}>{invalidWeight ? "Enter a weight greater than zero." : "Confirm the weight to receive a frontier suggestion."}</p>
+              </div>
+            )}
             <label htmlFor="frontier-timer-target" className="text-sm font-semibold">Target time <span className="font-normal text-slate-400">(optional)</span></label>
             <Input
               id="frontier-timer-target"
@@ -154,22 +216,53 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
         {ready ? (
           <>
             <p className="mb-4 text-center text-sm leading-relaxed text-slate-500">Count down to your target, then keep counting total time until you finish.</p>
-            <Button className="h-14 w-full bg-indigo-600 text-base font-bold text-white hover:bg-indigo-700" disabled={invalidTarget} onClick={() => timer.start(parsedTarget)}>
+            <Button className="h-14 w-full bg-indigo-600 text-base font-bold text-white hover:bg-indigo-700" disabled={invalidTarget || invalidWeight} onClick={() => {
+              setBaseline(exercise)
+              timer.start(parsedTarget)
+            }}>
               <Play className="mr-2 h-5 w-5" />Start · 5s to get ready
             </Button>
           </>
         ) : finished ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="h-14 bg-white" onClick={timer.reset}><RotateCcw className="mr-2 h-4 w-4" />New effort</Button>
-            <Button className="h-14 bg-indigo-600 text-white hover:bg-indigo-700" onClick={onClose}>Done</Button>
-          </div>
+          <>
+            {effort && (
+              <div className="mb-4 space-y-3">
+                <p role="status" className={`text-sm ${saveState === "error" ? "text-red-700" : "text-emerald-700"}`}>{saveState === "saving" ? "Saving…" : saveState === "saved" ? updated ? "Effort recorded · Frontier updated" : "Effort recorded · Tried today" : retryUpdate ? "Effort recorded · Frontier update not saved" : "Effort could not be saved"}</p>
+                {saveError && (
+                  <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                    <p>{saveError}</p>
+                    <Button variant="outline" className="mt-2" onClick={() => void saveEffort(effort, retryUpdate)}>Retry save</Button>
+                  </div>
+                )}
+                {proposal && baseline && !updated && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                    <p className="text-sm font-semibold">Update frontier to <span className="break-words font-mono">{formatFrontierChange(baseline.metric, { id: "proposal", kind: "progress", ...proposal })}</span>?</p>
+                    <p className="mt-1 text-xs text-slate-600">Suggested time rounded to the nearest 15 seconds.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} lb.`}</p>
+                    <Button className="mt-3 w-full bg-indigo-600 text-white hover:bg-indigo-700" disabled={saveState !== "saved"} onClick={() => void saveEffort(effort, true)}>Update frontier</Button>
+                    <p className="mt-2 text-xs text-slate-500">Choose Done to keep only the recorded effort.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" className="h-14 bg-white" disabled={saveState === "saving" || saveState === "error"} onClick={() => {
+                timer.reset()
+                setEffort(null)
+                setUpdated(false)
+                setSaveState("idle")
+                setSaveError(null)
+                setTargetInput(formatDurationInput(getFrontierTimerTarget(exercise) ?? undefined))
+              }}><RotateCcw className="mr-2 h-4 w-4" />New effort</Button>
+              <Button className="h-14 bg-indigo-600 text-white hover:bg-indigo-700" disabled={saveState === "saving"} onClick={onClose}>Done</Button>
+            </div>
+          </>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3">
               <Button variant="outline" className="h-14 bg-white text-base" onClick={running ? timer.pause : timer.resume}>
                 {running ? <Pause className="mr-2 h-5 w-5" /> : <Play className="mr-2 h-5 w-5" />}{running ? "Pause" : "Resume"}
               </Button>
-              <Button className="h-14 bg-indigo-600 text-base text-white hover:bg-indigo-700" onClick={preparing ? timer.reset : timer.finish}>
+              <Button className="h-14 bg-indigo-600 text-base text-white hover:bg-indigo-700" onClick={preparing ? timer.reset : finishEffort}>
                 {preparing ? <X className="mr-2 h-5 w-5" /> : <Square className="mr-2 h-5 w-5" />}{preparing ? "Cancel" : "Finish"}
               </Button>
             </div>

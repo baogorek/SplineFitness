@@ -889,6 +889,7 @@ function saveLocalFrontierCards(cards: FrontierCard[]): void {
     localStorage.setItem(STORAGE_KEYS.FRONTIER_CARDS, JSON.stringify(cards))
   } catch (error) {
     console.warn("Error saving Frontier Cards:", error)
+    throw error
   }
 }
 

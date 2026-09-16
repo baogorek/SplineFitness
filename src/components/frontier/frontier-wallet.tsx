@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ClipboardPaste,
   Cloud,
+  History,
   Plus,
   Smartphone,
   Trash2,
@@ -25,24 +26,29 @@ import {
 import {
   FrontierCard,
   FrontierChange,
+  FrontierEntrySave,
   FrontierExercise,
 } from "@/types/frontier"
 import { SpreadsheetImportRow } from "@/lib/frontier-import"
 import { appendUniqueFrontierChanges } from "@/lib/frontier-marks"
+import { updateFrontierExercise } from "@/lib/frontier-exercise"
 import {
   isFrontierAttemptToday,
   removeFrontierAttemptsToday,
+  hasAutomaticFrontierEffortToday,
 } from "@/lib/frontier-attempts"
+import { recordFrontierTimerEffort } from "@/lib/frontier-effort"
 import {
   frontierExerciseIdentity,
   getFrontierExerciseStructure,
   normalizeFrontierCard,
   normalizeFrontierEquipment,
 } from "@/lib/frontier-structure"
-import { FrontierEntrySave, FrontierEntrySheet } from "./frontier-entry-sheet"
+import { FrontierEntrySheet } from "./frontier-entry-sheet"
 import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
 import { FrontierTimer } from "./frontier-timer"
+import { FrontierRecency } from "./frontier-recency"
 
 interface FrontierWalletProps {
   onBack: () => void
@@ -66,6 +72,7 @@ function createCard(name: string, order: number): FrontierCard {
 export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const { user } = useAuth()
   const [cards, setCards] = useState<FrontierCard[]>([])
+  const cardsRef = useRef<FrontierCard[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
@@ -76,8 +83,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [locationSheetMode, setLocationSheetMode] = useState<"add" | "edit" | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  const [timerSession, setTimerSession] = useState<{ exercise: FrontierExercise | null } | null>(null)
+  const [timerSession, setTimerSession] = useState<{ cardId: string; exercise: FrontierExercise | null; initialWeight?: number } | null>(null)
   const [timerExpanded, setTimerExpanded] = useState(true)
+  const [recencyOpen, setRecencyOpen] = useState(false)
   const saveVersionRef = useRef(0)
 
   useEffect(() => {
@@ -115,6 +123,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         }
       }
 
+      cardsRef.current = nextCards
       setCards(nextCards)
       const lastCardId = window.localStorage.getItem(LAST_CARD_KEY)
       const savedIndex = nextCards.findIndex((card) => card.id === lastCardId)
@@ -134,8 +143,10 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     try {
       await saveFrontierCards(wallet)
       if (saveVersionRef.current === version) setSaveStatus("saved")
+      return true
     } catch {
       if (saveVersionRef.current === version) setSaveStatus("error")
+      return false
     }
   }, [])
 
@@ -151,6 +162,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const editingExercise = currentCard?.exercises.find(
     (exercise) => exercise.id === editingExerciseId
   ) ?? null
+  const timerExercise = cards.find((card) => card.id === timerSession?.cardId)?.exercises.find(
+    (exercise) => exercise.id === timerSession?.exercise?.id
+  ) ?? timerSession?.exercise ?? null
 
   const rememberCard = (card: FrontierCard) => {
     window.localStorage.setItem(LAST_CARD_KEY, card.id)
@@ -169,7 +183,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   }
 
   const commitCard = (updatedCard: FrontierCard) => {
-    const nextCards = cards.map((card) => card.id === updatedCard.id ? updatedCard : card)
+    const nextCards = cardsRef.current.map((card) => card.id === updatedCard.id ? updatedCard : card)
+    cardsRef.current = nextCards
     setCards(nextCards)
     void persistCard(nextCards)
   }
@@ -198,6 +213,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         equipment,
         bodyPart: entry.bodyPart,
         metric: entry.metric,
+        metricSource: "user",
         changes,
         order: currentCard.exercises.length,
         createdAt: now,
@@ -209,29 +225,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         updatedAt: now,
       })
     } else {
-      const nextChanges = (entry.value || entry.rawValue)
-        && entry.valueAction !== "unchanged"
-        && entry.valueAction !== "none"
-        ? [
-            ...editingExercise.changes,
-            {
-              id: crypto.randomUUID(),
-              ...(entry.value ? { value: entry.value } : {}),
-              ...(entry.rawValue ? { rawValue: entry.rawValue } : {}),
-              recordedAt: now,
-              kind: entry.valueAction,
-            },
-          ]
-        : editingExercise.changes
-      const updatedExercise: FrontierExercise = {
-        ...editingExercise,
-        name: entry.name,
-        equipment,
-        bodyPart: entry.bodyPart,
-        metric: entry.metric,
-        changes: nextChanges,
-        updatedAt: now,
-      }
+      const updatedExercise = updateFrontierExercise(editingExercise, { ...entry, equipment }, now)
       commitCard({
         ...currentCard,
         exercises: currentCard.exercises.map((exercise) =>
@@ -352,13 +346,14 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     if (!currentCard) return
 
     const now = new Date()
+    if (hasAutomaticFrontierEffortToday(targetExercise, now)) return
     const timestamp = now.toISOString()
     const attempts = targetExercise.attempts ?? []
     const nextAttempts = isFrontierAttemptToday(attempts, now)
       ? removeFrontierAttemptsToday(attempts, now)
       : [
           ...attempts,
-          { id: crypto.randomUUID(), attemptedAt: timestamp },
+          { id: crypto.randomUUID(), attemptedAt: timestamp, source: "manual" as const },
         ]
     const updatedExercise: FrontierExercise = {
       ...targetExercise,
@@ -396,6 +391,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     if (locationSheetMode === "add") {
       const card = createCard(trimmedName, cards.length)
       const nextCards = [...cards, card]
+      cardsRef.current = nextCards
       setCards(nextCards)
       setCurrentIndex(nextCards.length - 1)
       rememberCard(card)
@@ -417,6 +413,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
 
     const nextCards = cards.filter((card) => card.id !== currentCard.id)
     const nextIndex = Math.min(currentIndex, nextCards.length - 1)
+    cardsRef.current = nextCards
     setCards(nextCards)
     setCurrentIndex(nextIndex)
     rememberCard(nextCards[nextIndex])
@@ -482,6 +479,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       </header>
 
       <main className={`mx-auto flex w-full max-w-3xl flex-col px-2 pt-6 sm:px-6 sm:pt-8 ${timerSession ? "pb-28" : "pb-8"}`}>
+        <Button variant="outline" size="sm" className="mx-auto mb-4 border-indigo-200 bg-white/80 text-indigo-700" onClick={() => setRecencyOpen(true)}>
+          <History className="mr-1.5 h-4 w-4" />Least recently tried
+        </Button>
         <div className="mb-4 flex items-center justify-between px-2 sm:px-8">
           <Button
             variant="outline"
@@ -530,11 +530,11 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           onOpenCardMenu={() => setLocationSheetMode("edit")}
           timerInUse={timerSession !== null}
           onOpenTimer={() => {
-            setTimerSession((current) => current ?? { exercise: null })
+            setTimerSession((current) => current ?? { cardId: currentCard.id, exercise: null })
             setTimerExpanded(true)
           }}
           onTimeExercise={(exercise) => {
-            setTimerSession((current) => current ?? { exercise })
+            setTimerSession((current) => current ?? { cardId: currentCard.id, exercise })
             setTimerExpanded(true)
           }}
           onSwipe={navigate}
@@ -557,23 +557,11 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           ))}
         </div>
 
-        <div className="mt-4 flex flex-col items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setImportNotice(null)
-              setImportSheetOpen(true)
-            }}
-            className="border-white/80 bg-white/75 text-indigo-700 shadow-sm"
-          >
-            <ClipboardPaste className="h-4 w-4" />
-            Paste spreadsheet
-          </Button>
-          {importNotice && (
-            <p role="status" className="text-xs font-medium text-emerald-700">{importNotice}</p>
-          )}
-        </div>
+        {importNotice && (
+          <p role="status" className="mt-4 text-center text-xs font-medium text-emerald-700">
+            {importNotice}
+          </p>
+        )}
 
         <p className="mt-3 text-center text-xs text-slate-400">
           Swipe the card to move through your wallet.
@@ -582,7 +570,21 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
 
       {timerSession && (
         <FrontierTimer
-          exercise={timerSession.exercise}
+          key={`${timerSession.cardId}-${timerSession.exercise?.id ?? "stopwatch"}`}
+          exercise={timerExercise}
+          initialWeight={timerSession.initialWeight}
+          choices={cards.flatMap((card) => card.exercises.map((exercise) => ({ cardId: card.id, cardName: card.name, exercise })))}
+          onSelectExercise={(cardId, exerciseId) => {
+            const exercise = cards.find((card) => card.id === cardId)?.exercises.find((item) => item.id === exerciseId)
+            if (exercise) setTimerSession({ cardId, exercise })
+          }}
+          onRecord={async (attempt, update) => {
+            if (!timerSession.exercise) return
+            const nextCards = recordFrontierTimerEffort(cardsRef.current, timerSession.cardId, timerSession.exercise.id, attempt, update)
+            cardsRef.current = nextCards
+            setCards(nextCards)
+            if (!await persistCard(nextCards)) throw new Error("Could not save this effort. Please retry.")
+          }}
           expanded={timerExpanded}
           onExpand={() => setTimerExpanded(true)}
           onMinimize={() => setTimerExpanded(false)}
@@ -592,7 +594,14 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
 
       {entrySheetOpen && (
         <FrontierEntrySheet
+          key={editingExerciseId ?? "new"}
           exercise={editingExercise}
+          active={!(timerSession && timerExpanded)}
+          timerInUse={timerSession !== null && (timerSession.cardId !== currentCard.id || timerSession.exercise?.id !== editingExerciseId)}
+          onTime={editingExercise ? (weight) => {
+            setTimerSession((current) => current ?? { cardId: currentCard.id, exercise: editingExercise, initialWeight: weight })
+            setTimerExpanded(true)
+          } : undefined}
           equipmentOptions={equipmentOptions}
           onClose={() => {
             setEntrySheetOpen(false)
@@ -604,6 +613,18 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         />
       )}
 
+      {recencyOpen && (
+        <FrontierRecency cards={cards} onClose={() => setRecencyOpen(false)} onSelect={(cardId, exerciseId) => {
+          const index = cards.findIndex((card) => card.id === cardId)
+          if (index < 0) return
+          setCurrentIndex(index)
+          rememberCard(cards[index])
+          setEditingExerciseId(exerciseId)
+          setEntrySheetOpen(true)
+          setRecencyOpen(false)
+        }} />
+      )}
+
       {locationSheetMode && (
         <LocationSheet
           mode={locationSheetMode}
@@ -612,6 +633,11 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           onClose={() => setLocationSheetMode(null)}
           onSave={handleLocationSave}
           onDelete={locationSheetMode === "edit" ? handleDeleteLocation : undefined}
+          onImport={locationSheetMode === "edit" ? () => {
+            setLocationSheetMode(null)
+            setImportNotice(null)
+            setImportSheetOpen(true)
+          } : undefined}
         />
       )}
 
@@ -653,6 +679,7 @@ interface LocationSheetProps {
   onClose: () => void
   onSave: (name: string) => void
   onDelete?: () => void
+  onImport?: () => void
 }
 
 function LocationSheet({
@@ -662,6 +689,7 @@ function LocationSheet({
   onClose,
   onSave,
   onDelete,
+  onImport,
 }: LocationSheetProps) {
   const [name, setName] = useState(initialName)
   const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
@@ -724,6 +752,15 @@ function LocationSheet({
         >
           {mode === "add" ? "Add card" : "Save name"}
         </Button>
+
+        {mode === "edit" && onImport && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <Button variant="outline" onClick={onImport} className="w-full text-indigo-700">
+              <ClipboardPaste className="h-4 w-4" />
+              Paste spreadsheet
+            </Button>
+          </div>
+        )}
 
         {mode === "edit" && onDelete && (
           <div className="mt-4 border-t border-slate-200 pt-4">

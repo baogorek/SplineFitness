@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { History, RotateCcw, Trash2, X } from "lucide-react"
+import { useState } from "react"
+import { History, RotateCcw, Timer, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -21,20 +21,12 @@ import {
 import { cn } from "@/lib/utils"
 import {
   FrontierBodyPart,
+  FrontierChange,
+  FrontierEntrySave,
   FrontierExercise,
   FrontierMetric,
   FrontierValue,
 } from "@/types/frontier"
-
-export interface FrontierEntrySave {
-  name: string
-  equipment: string
-  bodyPart: FrontierBodyPart
-  metric: FrontierMetric
-  value: FrontierValue | null
-  rawValue: string | null
-  valueAction: "progress" | "correction" | "unchanged" | "none"
-}
 
 interface FrontierEntrySheetProps {
   exercise: FrontierExercise | null
@@ -43,6 +35,9 @@ interface FrontierEntrySheetProps {
   onSave: (entry: FrontierEntrySave) => void
   onUndo?: () => void
   onDelete?: () => void
+  active?: boolean
+  onTime?: (weight?: number) => void
+  timerInUse?: boolean
 }
 
 function valuesMatch(a: FrontierValue | null, b: FrontierValue): boolean {
@@ -56,33 +51,45 @@ export function FrontierEntrySheet({
   onSave,
   onUndo,
   onDelete,
+  active = true,
+  onTime,
+  timerInUse = false,
 }: FrontierEntrySheetProps) {
   const initialStructure = exercise ? getFrontierExerciseStructure(exercise) : null
-  const currentChange = exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes) : null
-  const current = exercise ? getCurrentFrontier(exercise.changes) : null
+  const savedChange = exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes) : null
+  const savedCurrent = exercise ? getCurrentFrontier(exercise.changes) : null
   const [name, setName] = useState(initialStructure?.name ?? "")
   const [equipment, setEquipment] = useState(initialStructure?.equipment ?? "")
   const [bodyPart, setBodyPart] = useState<FrontierBodyPart | "">(
     initialStructure?.bodyPart ?? ""
   )
   const [metric, setMetric] = useState<FrontierMetric>(exercise?.metric ?? "reps")
-  const [primary, setPrimary] = useState(current ? String(current.primary) : "")
-  const [duration, setDuration] = useState(
-    metric === "weight-time"
-      ? formatDurationInput(current?.secondary)
-      : metric.startsWith("duration")
-        ? formatDurationInput(current?.primary)
-        : ""
+  // Untouched fields follow a newly confirmed timer mark; actual drafts stay intact.
+  const [primaryDraft, setPrimary] = useState<string | null>(null)
+  const primary = primaryDraft ?? (savedCurrent ? String(savedCurrent.primary) : "")
+  const [durationDraft, setDuration] = useState<string | null>(null)
+  const duration = durationDraft ?? (metric === "weight-time"
+    ? formatDurationInput(savedCurrent?.secondary)
+    : metric.startsWith("duration")
+      ? formatDurationInput(savedCurrent?.primary)
+      : ""
   )
-  const [customMark, setCustomMark] = useState(
-    exercise?.metric === "freeform" ? currentChange?.rawValue ?? "" : ""
-  )
+  const [customMarkDraft, setCustomMark] = useState<string | null>(null)
+  const customMark = customMarkDraft ?? (exercise?.metric === "freeform" ? savedChange?.rawValue ?? "" : "")
   const [correcting, setCorrecting] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showMetricOptions, setShowMetricOptions] = useState(!exercise || exercise.changes.length === 0)
 
-  const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
+  const metricChanged = Boolean(exercise && metric !== exercise.metric)
+  const currentChange = metricChanged ? null : savedChange
+  const current = metricChanged ? null : savedCurrent
+  const historyCount = (exercise?.changes.length ?? 0)
+    + (exercise?.metricHistory ?? []).reduce((count, history) => count + history.changes.length, 0)
+  const hasHistory = historyCount > 0 || Boolean(exercise?.metricHistory?.length)
 
-  const parsedValue = useMemo<FrontierValue | null>(() => {
+  const dialogRef = useDialogFocus<HTMLElement>(active, onClose)
+
+  const parsedValue = ((): FrontierValue | null => {
     if (metric === "freeform") return null
 
     if (metric === "weight-time") {
@@ -105,7 +112,7 @@ export function FrontierEntrySheet({
     if (!Number.isFinite(value) || value <= 0) return null
     if (metric === "reps" && !Number.isInteger(value)) return null
     return { primary: value }
-  }, [duration, metric, primary])
+  })()
 
   const rawValue = metric === "freeform" ? customMark.trim() || null : null
   const hasMeasure = Boolean(parsedValue || rawValue)
@@ -115,6 +122,7 @@ export function FrontierEntrySheet({
         name.trim() !== initialStructure?.name
         || equipment.trim() !== initialStructure?.equipment
         || bodyPart !== initialStructure?.bodyPart
+        || metricChanged
       )
   )
   const valueChanged = metric === "freeform"
@@ -136,7 +144,7 @@ export function FrontierEntrySheet({
     name.trim()
       && equipment.trim()
       && bodyPart
-      && (!exercise
+      && (!exercise || metricChanged
         ? hasMeasure || measureFieldsEmpty
         : hasMeasure
           ? correcting || improvement || (detailsChanged && !valueChanged)
@@ -144,10 +152,19 @@ export function FrontierEntrySheet({
   )
 
   const handleMetricChange = (nextMetric: FrontierMetric) => {
+    if (nextMetric === metric) return
     setMetric(nextMetric)
-    setPrimary("")
-    setDuration("")
-    setCustomMark("")
+    setCorrecting(false)
+    const restoring = nextMetric === exercise?.metric
+    setPrimary(restoring && savedCurrent ? String(savedCurrent.primary) : "")
+    setDuration(restoring
+      ? nextMetric === "weight-time"
+        ? formatDurationInput(savedCurrent?.secondary)
+        : nextMetric.startsWith("duration")
+          ? formatDurationInput(savedCurrent?.primary)
+          : ""
+      : "")
+    setCustomMark(restoring && nextMetric === "freeform" ? savedChange?.rawValue ?? "" : "")
   }
 
   const handleSubmit = () => {
@@ -159,13 +176,15 @@ export function FrontierEntrySheet({
       metric,
       value: parsedValue,
       rawValue,
-      valueAction: !exercise
-        ? hasMeasure ? "progress" : "none"
-        : !valueChanged
-          ? "unchanged"
-          : correcting
-            ? "correction"
-            : "progress",
+      valueAction: !hasMeasure
+        ? "none"
+        : !exercise || metricChanged
+          ? "progress"
+          : !valueChanged
+            ? "unchanged"
+            : correcting
+              ? "correction"
+              : "progress",
     })
   }
 
@@ -175,11 +194,11 @@ export function FrontierEntrySheet({
   }
 
   const selectedMetric = FRONTIER_METRIC_OPTIONS.find((option) => option.value === metric)
-  const invalidFrontier = Boolean(exercise && hasMeasure && valueChanged && !improvement && !correcting)
-  const invalidNewMeasure = Boolean(!exercise && !hasMeasure && !measureFieldsEmpty)
+  const invalidFrontier = Boolean(exercise && !metricChanged && hasMeasure && valueChanged && !improvement && !correcting)
+  const invalidMeasure = !hasMeasure && !measureFieldsEmpty
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center">
+    <div className={active ? "fixed inset-0 z-[70] flex items-end justify-center sm:items-center" : "hidden"}>
       <button
         type="button"
         aria-label="Close editor"
@@ -210,6 +229,14 @@ export function FrontierEntrySheet({
         </div>
 
         <div className="space-y-5">
+          {exercise && onTime && (
+            <div className="space-y-2">
+              <Button variant="outline" className="h-12 w-full border-indigo-200 text-indigo-700" disabled={timerInUse} onClick={() => onTime(metric === "weight-time" && Number(primary) > 0 ? Number(primary) : undefined)}>
+                <Timer className="mr-2 h-4 w-4" />{timerInUse ? "Finish the active timer to start another" : "Time this exercise"}
+              </Button>
+              <p className="text-xs text-slate-500">Your edits stay here while you time the exercise. Frontier suggestions use the saved measurement and mark.</p>
+            </div>
+          )}
           <div className="space-y-2">
             <label htmlFor="frontier-equipment" className="text-sm font-semibold text-slate-700">
               Station / area
@@ -267,7 +294,25 @@ export function FrontierEntrySheet({
             />
           </div>
 
-          {(!exercise || exercise.changes.length === 0) && (
+          {!showMetricOptions && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+              <div>
+                <p className="text-xs text-slate-500">Measurement</p>
+                <p className="text-sm font-semibold text-slate-800">{selectedMetric?.shortLabel}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Change measurement"
+                aria-expanded={false}
+                onClick={() => setShowMetricOptions(true)}
+              >
+                Change
+              </Button>
+            </div>
+          )}
+
+          {showMetricOptions && (
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-700">What moves forward?</p>
               <div className="grid grid-cols-2 gap-2">
@@ -295,6 +340,15 @@ export function FrontierEntrySheet({
             </div>
           )}
 
+          {metricChanged && (
+            <p role="status" className="rounded-xl bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+              This starts a new frontier. Add a starting mark now or leave it blank.
+              {exercise && exercise.changes.length > 0 && (
+                <> Previous marks stay in history as {FRONTIER_METRIC_OPTIONS.find((option) => option.value === exercise.metric)?.shortLabel}.</>
+              )}
+            </p>
+          )}
+
           {exercise && currentChange && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
@@ -318,9 +372,9 @@ export function FrontierEntrySheet({
             onCustomMarkChange={setCustomMark}
           />
 
-          {invalidNewMeasure && (
+          {invalidMeasure && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Enter a valid performance measure, or leave the measure fields blank and add it later.
+              Enter a valid performance measure.{!currentChange && " You can also leave the measure fields blank and add it later."}
             </p>
           )}
 
@@ -344,6 +398,8 @@ export function FrontierEntrySheet({
           >
             {!exercise
               ? hasMeasure ? "Add to card" : "Add exercise"
+              : metricChanged
+                ? "Save measurement"
                 : correcting
                   ? "Save correction"
                 : detailsChanged && !valueChanged
@@ -354,52 +410,53 @@ export function FrontierEntrySheet({
           {exercise && (
             <div className="border-t border-slate-200 pt-4">
               <div className="flex flex-wrap gap-2">
-                <Button
+                {!metricChanged && currentChange && <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCorrecting((value) => !value)}
                   className={cn(correcting && "border-amber-300 bg-amber-50 text-amber-800")}
                 >
                   Correct value
-                </Button>
-                {exercise.changes.length > 1 && onUndo && (
+                </Button>}
+                {!metricChanged && exercise.changes.length > 1 && onUndo && (
                   <Button variant="outline" size="sm" onClick={onUndo}>
                     <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                     Undo last change
                   </Button>
                 )}
-                {exercise.changes.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowHistory((value) => !value)}>
+                {hasHistory && (
+                  <Button variant="ghost" size="sm" aria-expanded={showHistory} onClick={() => setShowHistory((value) => !value)}>
                     <History className="mr-1.5 h-3.5 w-3.5" />
-                    {showHistory ? "Hide history" : `History (${exercise.changes.length})`}
+                    {showHistory ? "Hide history" : `History (${historyCount})`}
                   </Button>
                 )}
               </div>
 
-              {showHistory && exercise.changes.length > 0 && (
-                <ol className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 px-3">
-                  {[...exercise.changes].reverse().map((change, index) => (
-                    <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <div>
-                        <span className="font-mono font-semibold text-slate-800">
-                          {formatFrontierChange(exercise.metric, change)}
-                        </span>
-                        {change.kind === "correction" && (
-                          <span className="ml-2 text-[10px] font-semibold uppercase text-amber-600">
-                            correction
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-slate-400">
-                        {index === 0
-                          ? "Current"
-                          : change.recordedAt
-                            ? new Date(change.recordedAt).toLocaleDateString()
-                            : "Imported"}
-                      </span>
-                    </li>
+              {showHistory && hasHistory && (
+                <div className="mt-3 space-y-4">
+                  {exercise.changes.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold text-slate-500">
+                        {FRONTIER_METRIC_OPTIONS.find((option) => option.value === exercise.metric)?.shortLabel}
+                      </p>
+                      <FrontierHistoryList metric={exercise.metric} changes={exercise.changes} currentId={savedChange?.id} />
+                    </div>
+                  )}
+                  {[...(exercise.metricHistory ?? [])].reverse().map((history) => (
+                    <div key={history.id}>
+                      <p className="mb-2 text-xs font-semibold text-slate-500">
+                        {FRONTIER_METRIC_OPTIONS.find((option) => option.value === history.metric)?.shortLabel}
+                        {" · Previous measurement · "}{new Date(history.endedAt).toLocaleDateString()}
+                      </p>
+                      <FrontierHistoryList metric={history.metric} changes={history.changes} />
+                      {history.attempts.length > 0 && (
+                        <p className="mt-2 text-xs text-slate-400">
+                          Tried on {history.attempts.map((attempt) => new Date(attempt.attemptedAt).toLocaleDateString()).join(", ")}
+                        </p>
+                      )}
+                    </div>
                   ))}
-                </ol>
+                </div>
               )}
 
               {onDelete && (
@@ -418,6 +475,37 @@ export function FrontierEntrySheet({
         </div>
       </section>
     </div>
+  )
+}
+
+function FrontierHistoryList({ metric, changes, currentId }: {
+  metric: FrontierMetric
+  changes: FrontierChange[]
+  currentId?: string
+}) {
+  if (changes.length === 0) return null
+  return (
+    <ol className="divide-y divide-slate-100 rounded-xl border border-slate-200 px-3">
+      {[...changes].reverse().map((change) => (
+        <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+          <div>
+            <span className="font-mono font-semibold text-slate-800">
+              {formatFrontierChange(metric, change)}
+            </span>
+            {change.kind === "correction" && (
+              <span className="ml-2 text-[10px] font-semibold uppercase text-amber-600">correction</span>
+            )}
+          </div>
+          <span className="text-xs text-slate-400">
+            {change.id === currentId
+              ? "Current"
+              : change.recordedAt
+                ? new Date(change.recordedAt).toLocaleDateString()
+                : "Imported"}
+          </span>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -563,11 +651,11 @@ function DurationField({
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
-        placeholder="e.g. 1:30"
+        placeholder="e.g. 6.6 or 1:30"
         className="h-12 font-mono text-base"
       />
       <p className="text-[11px] text-slate-400">
-        {optional ? "Add now or later. Use 1:30, 90, or 1m30s" : "Use 1:30, 90, or 1m30s"}
+        {optional && "Add now or later. "}Use seconds (6.6), minutes:seconds (1:30.5), or 1m30s.
       </p>
     </div>
   )

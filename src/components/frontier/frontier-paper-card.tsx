@@ -16,9 +16,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
-import { isFrontierAttemptToday } from "@/lib/frontier-attempts"
+import { formatFrontierLastTried, getFrontierLastTried, hasAutomaticFrontierEffortToday, hasFrontierEffortToday } from "@/lib/frontier-attempts"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
-import { isTimedFrontierExercise } from "@/lib/frontier-timer"
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
 
 interface FrontierPaperCardProps {
@@ -73,15 +72,10 @@ export function FrontierPaperCard({
         className="relative flex min-h-[32rem] max-h-[72vh] touch-pan-y flex-col overflow-hidden rounded-[26px] border border-slate-300 bg-[#fffdf7] shadow-[0_22px_60px_-28px_rgba(15,23,42,0.6)] sm:max-h-[68vh]"
       >
         <div className="border-b-2 border-indigo-300/70 px-5 pb-3 pt-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-500">
-                Spline Fitness · Frontier Card
-              </p>
-              <h2 className="mt-1 truncate font-serif text-2xl font-bold text-slate-900">
-                {card.name}
-              </h2>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-500">
+              Spline Fitness · Frontier Card
+            </p>
             <Button
               variant="outline"
               size="sm"
@@ -97,11 +91,12 @@ export function FrontierPaperCard({
               size="icon"
               onClick={onOpenCardMenu}
               className="shrink-0 text-slate-500 hover:bg-indigo-50"
-              aria-label={`Edit ${card.name}`}
+              aria-label={`Card settings for ${card.name}`}
             >
               <MoreHorizontal className="h-5 w-5" />
             </Button>
           </div>
+          <h2 className="mt-2 break-words font-serif text-2xl font-bold leading-tight text-slate-900">{card.name}</h2>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -171,7 +166,8 @@ export function FrontierPaperCard({
                                 const expanded = expandedExerciseId === exercise.id
                                 const historyId = `frontier-history-${exercise.id}`
                                 const currentChange = getCurrentFrontierChange(exercise.metric, exercise.changes)
-                                const attemptedToday = isFrontierAttemptToday(exercise.attempts)
+                                const attemptedToday = hasFrontierEffortToday(exercise)
+                                const automaticToday = hasAutomaticFrontierEffortToday(exercise)
 
                                 return (
                                   <li key={exercise.id} className="border-b border-sky-200/80">
@@ -181,13 +177,13 @@ export function FrontierPaperCard({
                                         onClick={() => setExpandedExerciseId(expanded ? null : exercise.id)}
                                         aria-expanded={expanded}
                                         aria-controls={historyId}
-                                        className="group grid min-h-14 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2.5 pl-3 pr-1 text-left transition-colors hover:bg-indigo-50/60 focus-visible:bg-indigo-50 focus-visible:outline-none sm:pl-5"
+                                        className="group grid min-h-14 min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 py-2.5 pl-3 pr-1 text-left transition-colors hover:bg-indigo-50/60 focus-visible:bg-indigo-50 focus-visible:outline-none sm:pl-5"
                                       >
                                         <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-800">
                                           {displayName}
                                         </span>
-                                        <span className="flex items-center gap-1.5">
-                                          <span className="whitespace-nowrap font-mono text-sm font-bold text-indigo-950 transition-colors group-hover:text-indigo-700">
+                                        <span className="flex min-w-0 items-center justify-end gap-1.5">
+                                          <span className="min-w-0 break-words text-right font-mono text-sm font-bold text-indigo-950 transition-colors group-hover:text-indigo-700">
                                             {formatFrontierChange(exercise.metric, currentChange)}
                                           </span>
                                           <ChevronDown
@@ -208,19 +204,17 @@ export function FrontierPaperCard({
 
                                     {expanded && (
                                       <div id={historyId} className="bg-indigo-50/45 px-3 pb-3.5 pt-1 sm:px-5">
-                                        {isTimedFrontierExercise(exercise) && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="mb-3 mt-1 h-11 w-full border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
-                                            disabled={timerInUse}
-                                            onClick={() => onTimeExercise(exercise)}
-                                            aria-label={`Time ${displayName}`}
-                                          >
-                                            <Timer aria-hidden="true" className="mr-2 h-4 w-4" />
-                                            {timerInUse ? "Finish the active timer to start another" : "Time this exercise"}
-                                          </Button>
-                                        )}
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="mb-3 mt-1 h-11 w-full border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
+                                          disabled={timerInUse}
+                                          onClick={() => onTimeExercise(exercise)}
+                                          aria-label={`Time ${displayName}`}
+                                        >
+                                          <Timer aria-hidden="true" className="mr-2 h-4 w-4" />
+                                          {timerInUse ? "Finish the active timer to start another" : "Time this exercise"}
+                                        </Button>
                                         <div className="mb-2 flex items-center justify-between gap-3">
                                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                                             History{exercise.changes.length > 0 ? ` · ${exercise.changes.length}` : ""}
@@ -271,29 +265,28 @@ export function FrontierPaperCard({
                                           <p className="text-xs text-slate-400">No marks recorded yet.</p>
                                         )}
 
-                                        {currentChange && (
-                                          <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-indigo-100 pt-2.5">
-                                            <p className="text-[11px] text-slate-400">
-                                              Didn&apos;t move the frontier?
-                                            </p>
-                                            <button
-                                              type="button"
-                                              aria-pressed={attemptedToday}
-                                              aria-label={attemptedToday
-                                                ? `Remove today's attempt for ${displayName}`
-                                                : `Mark ${displayName} as tried today`}
-                                              onClick={() => onToggleAttemptToday(exercise)}
-                                              className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-                                                attemptedToday
-                                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                  : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
-                                              }`}
-                                            >
-                                              {attemptedToday && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
-                                              Tried today
-                                            </button>
-                                          </div>
-                                        )}
+                                        <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-indigo-100 pt-2.5">
+                                          <p className="text-[11px] text-slate-400">
+                                            {formatFrontierLastTried(getFrontierLastTried(exercise))}
+                                          </p>
+                                          <button
+                                            type="button"
+                                            aria-pressed={attemptedToday}
+                                            disabled={automaticToday}
+                                            aria-label={automaticToday ? `${displayName} tried today` : attemptedToday
+                                              ? `Remove today's attempt for ${displayName}`
+                                              : `Mark ${displayName} as tried today`}
+                                            onClick={() => onToggleAttemptToday(exercise)}
+                                            className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                                              attemptedToday
+                                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
+                                            }`}
+                                          >
+                                            {attemptedToday && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
+                                            Tried today
+                                          </button>
+                                        </div>
                                       </div>
                                     )}
                                   </li>

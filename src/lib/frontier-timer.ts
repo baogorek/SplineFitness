@@ -1,4 +1,4 @@
-import { getCurrentFrontierChange } from "@/lib/frontier-utils"
+import { getCurrentFrontierChange, parseDuration } from "@/lib/frontier-utils"
 import { FrontierExercise } from "@/types/frontier"
 
 export const FRONTIER_PREP_SECONDS = 5
@@ -19,10 +19,22 @@ export function isTimedFrontierExercise(exercise: FrontierExercise): boolean {
 }
 
 export function getFrontierTimerTarget(exercise: FrontierExercise | null): number | null {
-  if (!exercise || !isTimedFrontierExercise(exercise)) return null
-  const value = getCurrentFrontierChange(exercise.metric, exercise.changes)?.value
+  if (!exercise) return null
+  const change = getCurrentFrontierChange(exercise.metric, exercise.changes)
+  if (exercise.metric === "freeform") return parseCustomTimedMark(change?.rawValue)?.seconds ?? null
+  if (!isTimedFrontierExercise(exercise)) return null
+  const value = change?.value
   const seconds = exercise.metric === "weight-time" ? value?.secondary : value?.primary
   return seconds !== undefined && Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
+
+/** Only an explicit trailing duration is safe to time; bare numbers may be reps or loads. */
+export function parseCustomTimedMark(rawValue: string | undefined): { prefix: string; seconds: number } | null {
+  if (!rawValue) return null
+  const match = rawValue.trim().match(/^(?:(.*\/\s*))?([^/]+)$/)
+  if (!match || !/[:ms]/i.test(match[2])) return null
+  const seconds = parseDuration(match[2].trim())
+  return seconds !== null && seconds > 0 ? { prefix: match[1] ?? "", seconds } : null
 }
 
 function timelineMs(state: FrontierTimerState, nowMs: number): number {
