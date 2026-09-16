@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { getFrontierTimerProposal, recordFrontierTimerEffort } from "./frontier-effort"
+import { getFrontierTimerProposal, recordFrontierTimerEffort, undoFrontierTimerEffort, getLatestFrontierTimerEffort } from "./frontier-effort"
+import { getFrontierLastTried } from "./frontier-attempts"
 import { getFrontierTimerTarget } from "./frontier-timer"
 import { FrontierAttempt, FrontierCard, FrontierExercise, FrontierMetric } from "@/types/frontier"
 
@@ -109,5 +110,67 @@ describe("recording a timed effort", () => {
     const cards = recordFrontierTimerEffort(wallet(entry), "original", "exercise", attempt)
     expect(cards[0].exercises[0].attempts).toEqual([])
     expect(cards[0].exercises[0].metricHistory?.[0].attempts).toHaveLength(1)
+  })
+})
+
+describe("undoing a timed effort", () => {
+  const earlier: FrontierAttempt = { ...attempt, id: "earlier", attemptedAt: "2026-09-01T16:00:00Z" }
+
+  it("restores the previous tried date and leaves other cards untouched", () => {
+    const cards = recordFrontierTimerEffort(wallet({ ...exercise(), attempts: [earlier] }), "original", "exercise", attempt)
+    const result = undoFrontierTimerEffort(cards, "original", "exercise", attempt.id)
+    expect(result[0].exercises[0].attempts).toEqual([earlier])
+    expect(getFrontierLastTried(result[0].exercises[0])).toBe(earlier.attemptedAt)
+    expect(result[1]).toBe(cards[1])
+    expect(cards[0].exercises[0].attempts).toHaveLength(2)
+  })
+
+  it("removes the effort's confirmed mark and restores the original frontier", () => {
+    const baseline = exercise()
+    const cards = recordFrontierTimerEffort(wallet(baseline), "original", "exercise", attempt, { baseline, proposal: { value: { primary: 105 } } })
+    const result = undoFrontierTimerEffort(cards, "original", "exercise", attempt.id)
+    expect(result[0].exercises[0].changes).toEqual(baseline.changes)
+    expect(getFrontierLastTried(result[0].exercises[0])).toBeNull()
+  })
+
+  it("preserves a later independent effort and mark", () => {
+    const baseline = exercise()
+    let cards = recordFrontierTimerEffort(wallet(baseline), "original", "exercise", attempt, { baseline, proposal: { value: { primary: 105 } } })
+    const later = { ...attempt, id: "later", attemptedAt: "2026-09-16T12:00:00Z", elapsedSeconds: 135 }
+    cards = recordFrontierTimerEffort(cards, "original", "exercise", later, { baseline: cards[0].exercises[0], proposal: { value: { primary: 135 } } })
+    const result = undoFrontierTimerEffort(cards, "original", "exercise", attempt.id)
+    expect(result[0].exercises[0].attempts).toEqual([later])
+    expect(result[0].exercises[0].changes.at(-1)?.value).toEqual({ primary: 135 })
+    expect(getFrontierLastTried(result[0].exercises[0])).toBe(later.attemptedAt)
+  })
+
+  it("removes archived effort dates and linked marks without changing the new measurement", () => {
+    const entry: FrontierExercise = { ...exercise("reps", 12), metricHistory: [{
+      id: "past", metric: "duration-longer", endedAt: attempt.attemptedAt, attempts: [earlier, attempt],
+      changes: [{ id: "timed", attemptId: attempt.id, kind: "progress", value: { primary: 105 }, recordedAt: attempt.attemptedAt }],
+    }] }
+    const result = undoFrontierTimerEffort(wallet(entry), "original", "exercise", attempt.id)
+    expect(result[0].exercises[0].metric).toBe("reps")
+    expect(result[0].exercises[0].changes).toEqual(entry.changes)
+    expect(result[0].exercises[0].metricHistory?.[0].changes).toEqual([])
+    expect(getFrontierLastTried(result[0].exercises[0])).toBe(earlier.attemptedAt)
+  })
+
+  it("does not remove an earlier effort when retrying an undo", () => {
+    const cards = recordFrontierTimerEffort(wallet({ ...exercise(), attempts: [earlier] }), "original", "exercise", attempt)
+    const result = undoFrontierTimerEffort(cards, "original", "exercise", attempt.id)
+    expect(undoFrontierTimerEffort(result, "original", "exercise", attempt.id)).toBe(result)
+    expect(result[0].exercises[0].attempts).toEqual([earlier])
+  })
+
+  it("finds the latest timed effort across measurements without selecting manual check-ins", () => {
+    expect(getLatestFrontierTimerEffort({ ...exercise(), attempts: [earlier, { ...attempt, source: "manual" }], metricHistory: [{
+      id: "past", metric: "freeform", changes: [], attempts: [attempt], endedAt: attempt.attemptedAt,
+    }] })).toEqual(attempt)
+    expect(getLatestFrontierTimerEffort(exercise())).toBeNull()
+  })
+
+  it("does not let timer undo remove a manual check-in", () => {
+    expect(() => undoFrontierTimerEffort(wallet({ ...exercise(), attempts: [{ ...attempt, source: "manual" }] }), "original", "exercise", attempt.id)).toThrow("Only a timed effort")
   })
 })

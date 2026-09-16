@@ -6,6 +6,7 @@ import {
   getLeastRecentlyTried,
   formatFrontierLastTried,
   hasAutomaticFrontierEffortToday,
+  setFrontierAttemptToday,
 } from "./frontier-attempts"
 import { FrontierAttempt, FrontierCard, FrontierExercise } from "@/types/frontier"
 
@@ -89,5 +90,42 @@ describe("least recently tried", () => {
     expect(hasAutomaticFrontierEffortToday({ ...entry, changes: [{ id: "mark", kind: "progress", recordedAt: attemptedAt }] }, today)).toBe(true)
     expect(hasAutomaticFrontierEffortToday({ ...entry, attempts: [{ id: "effort", source: "timer", attemptedAt }] }, today)).toBe(true)
     expect(hasAutomaticFrontierEffortToday({ ...entry, attempts: [{ id: "manual", attemptedAt }] }, today)).toBe(false)
+  })
+})
+
+describe("check-ins across cards", () => {
+  const today = new Date(2026, 8, 16, 12)
+  const exercise: FrontierExercise = { id: "exercise", name: "Hold", metric: "reps", changes: [], order: 0, createdAt: "", updatedAt: "" }
+  const cards: FrontierCard[] = ["home", "gym"].map((id) => ({ id, name: id, exercises: [exercise], order: 0, createdAt: "", updatedAt: "" }))
+
+  it("marks the selected card's exercise and keeps retries idempotent", () => {
+    let result = setFrontierAttemptToday(cards, "gym", "exercise", true, today)
+    result = setFrontierAttemptToday(result, "gym", "exercise", true, today)
+    expect(result[0]).toBe(cards[0])
+    expect(result[1].exercises[0].attempts).toHaveLength(1)
+    expect(getFrontierLastTried(result[1].exercises[0])).toBe(today.toISOString())
+    expect(getLeastRecentlyTried(result)[0].card.id).toBe("home")
+  })
+
+  it("undoes today's manual check-in without changing earlier attempts", () => {
+    const oldAttempt = { id: "old", attemptedAt: "2026-08-01T12:00:00Z" }
+    const initial = [{ ...cards[0], exercises: [{ ...exercise, attempts: [oldAttempt] }] }]
+    const checked = setFrontierAttemptToday(initial, "home", "exercise", true, today)
+    let result = setFrontierAttemptToday(checked, "home", "exercise", false, today)
+    result = setFrontierAttemptToday(result, "home", "exercise", false, today)
+    expect(result[0].exercises[0].attempts).toEqual([oldAttempt])
+  })
+
+  it("preserves automatic efforts and never creates a redundant manual attempt", () => {
+    const initial = [{ ...cards[0], exercises: [{ ...exercise, attempts: [{ id: "timer", source: "timer" as const, attemptedAt: today.toISOString(), elapsedSeconds: 30 }] }] }]
+    expect(setFrontierAttemptToday(initial, "home", "exercise", true, today)).toBe(initial)
+    expect(setFrontierAttemptToday(initial, "home", "exercise", false, today)).toBe(initial)
+  })
+
+  it("handles manual check-ins archived under an earlier measurement", () => {
+    const initial = [{ ...cards[0], exercises: [{ ...exercise, metricHistory: [{ id: "past", metric: "freeform" as const, changes: [], attempts: [{ id: "manual", attemptedAt: today.toISOString() }], endedAt: today.toISOString() }] }] }]
+    expect(setFrontierAttemptToday(initial, "home", "exercise", true, today)).toBe(initial)
+    const result = setFrontierAttemptToday(initial, "home", "exercise", false, today)
+    expect(getFrontierLastTried(result[0].exercises[0])).toBeNull()
   })
 })

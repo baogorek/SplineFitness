@@ -45,6 +45,31 @@ export function hasAutomaticFrontierEffortToday(exercise: FrontierExercise, toda
   ))
 }
 
+/** An explicit desired state keeps retrying a failed check-in from toggling it off. */
+export function setFrontierAttemptToday(
+  cards: FrontierCard[], cardId: string, exerciseId: string, tried: boolean, today = new Date(),
+): FrontierCard[] {
+  const card = cards.find((item) => item.id === cardId)
+  const exercise = card?.exercises.find((item) => item.id === exerciseId)
+  if (!card || !exercise) throw new Error("This exercise was removed.")
+  if (hasAutomaticFrontierEffortToday(exercise, today) || (tried && hasFrontierEffortToday(exercise, today))) return cards
+  const timestamp = today.toISOString()
+  const updated: FrontierExercise = {
+    ...exercise,
+    attempts: tried
+      ? [...(exercise.attempts ?? []), { id: crypto.randomUUID(), attemptedAt: timestamp, source: "manual" }]
+      : removeFrontierAttemptsToday(exercise.attempts, today),
+    ...(!tried && exercise.metricHistory ? { metricHistory: exercise.metricHistory.map((history) => ({
+      ...history, attempts: removeFrontierAttemptsToday(history.attempts, today),
+    })) } : {}),
+    updatedAt: timestamp,
+  }
+  return cards.map((item) => item.id === cardId ? {
+    ...card, updatedAt: timestamp,
+    exercises: card.exercises.map((item) => item.id === exerciseId ? updated : item),
+  } : item)
+}
+
 export function isFrontierAttemptToday(
   attempts: FrontierAttempt[] | undefined,
   today = new Date()

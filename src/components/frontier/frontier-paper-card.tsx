@@ -5,7 +5,6 @@ import {
   Accessibility,
   ArrowRight,
   Cable,
-  Check,
   ChevronDown,
   Columns3,
   Dumbbell,
@@ -16,14 +15,17 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
-import { formatFrontierLastTried, getFrontierLastTried, hasAutomaticFrontierEffortToday, hasFrontierEffortToday } from "@/lib/frontier-attempts"
+import { formatFrontierLastTried, getFrontierLastTried } from "@/lib/frontier-attempts"
+import { FrontierAttemptButton } from "./frontier-attempt-button"
+import { FrontierEffortUndo } from "./frontier-effort-undo"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
 
 interface FrontierPaperCardProps {
   card: FrontierCard
   onExerciseClick: (exercise: FrontierExercise) => void
-  onToggleAttemptToday: (exercise: FrontierExercise) => void
+  onSetAttemptToday: (exercise: FrontierExercise, tried: boolean) => Promise<void>
+  onUndoEffort: (exercise: FrontierExercise, attemptId: string) => Promise<void>
   onAddExercise: () => void
   onOpenCardMenu: () => void
   onOpenTimer: () => void
@@ -35,7 +37,8 @@ interface FrontierPaperCardProps {
 export function FrontierPaperCard({
   card,
   onExerciseClick,
-  onToggleAttemptToday,
+  onSetAttemptToday,
+  onUndoEffort,
   onAddExercise,
   onOpenCardMenu,
   onOpenTimer,
@@ -166,8 +169,6 @@ export function FrontierPaperCard({
                                 const expanded = expandedExerciseId === exercise.id
                                 const historyId = `frontier-history-${exercise.id}`
                                 const currentChange = getCurrentFrontierChange(exercise.metric, exercise.changes)
-                                const attemptedToday = hasFrontierEffortToday(exercise)
-                                const automaticToday = hasAutomaticFrontierEffortToday(exercise)
 
                                 return (
                                   <li key={exercise.id} className="border-b border-sky-200/80">
@@ -269,24 +270,9 @@ export function FrontierPaperCard({
                                           <p className="text-[11px] text-slate-400">
                                             {formatFrontierLastTried(getFrontierLastTried(exercise))}
                                           </p>
-                                          <button
-                                            type="button"
-                                            aria-pressed={attemptedToday}
-                                            disabled={automaticToday}
-                                            aria-label={automaticToday ? `${displayName} tried today` : attemptedToday
-                                              ? `Remove today's attempt for ${displayName}`
-                                              : `Mark ${displayName} as tried today`}
-                                            onClick={() => onToggleAttemptToday(exercise)}
-                                            className={`flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-                                              attemptedToday
-                                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100"
-                                            }`}
-                                          >
-                                            {attemptedToday && <Check aria-hidden="true" className="h-3.5 w-3.5" />}
-                                            Tried today
-                                          </button>
+                                          <FrontierAttemptButton exercise={exercise} onSetToday={(tried) => onSetAttemptToday(exercise, tried)} />
                                         </div>
+                                        <FrontierEffortUndo exercise={exercise} onUndo={(attemptId) => onUndoEffort(exercise, attemptId)} />
                                       </div>
                                     )}
                                   </li>

@@ -4,6 +4,48 @@ import { FrontierAttempt, FrontierCard, FrontierChange, FrontierExercise } from 
 
 export type FrontierTimerProposal = Pick<FrontierChange, "value" | "rawValue">
 
+export function getLatestFrontierTimerEffort(exercise: FrontierExercise): FrontierAttempt | null {
+  return [exercise, ...(exercise.metricHistory ?? [])]
+    .flatMap((history) => history.attempts ?? [])
+    .filter((attempt) => attempt.source === "timer" && Number.isFinite(Date.parse(attempt.attemptedAt)))
+    .reduce<FrontierAttempt | null>((latest, attempt) => (
+      !latest || Date.parse(attempt.attemptedAt) >= Date.parse(latest.attemptedAt) ? attempt : latest
+    ), null)
+}
+
+export function hasFrontierMarkForEffort(exercise: FrontierExercise, attemptId: string): boolean {
+  return [exercise, ...(exercise.metricHistory ?? [])].some((history) => (
+    history.changes.some((change) => change.attemptId === attemptId)
+  ))
+}
+
+/** Undo one effort and its linked mark without reverting unrelated or later edits. */
+export function undoFrontierTimerEffort(
+  cards: FrontierCard[], cardId: string, exerciseId: string, attemptId: string,
+): FrontierCard[] {
+  const card = cards.find((item) => item.id === cardId)
+  const exercise = card?.exercises.find((item) => item.id === exerciseId)
+  if (!card || !exercise) return cards
+  const attempt = [exercise, ...(exercise.metricHistory ?? [])]
+    .flatMap((history) => history.attempts ?? []).find((item) => item.id === attemptId)
+  if (!attempt) return cards // A repeated save retries the same removal.
+  if (attempt.source !== "timer") throw new Error("Only a timed effort can be undone here.")
+  const withoutEffort = <T extends { attempts?: FrontierAttempt[]; changes: FrontierChange[] }>(history: T): T => ({
+    ...history,
+    attempts: history.attempts?.filter((item) => item.id !== attemptId) ?? [],
+    changes: history.changes.filter((change) => change.attemptId !== attemptId),
+  })
+  const updated: FrontierExercise = {
+    ...withoutEffort(exercise),
+    ...(exercise.metricHistory ? { metricHistory: exercise.metricHistory.map(withoutEffort) } : {}),
+    updatedAt: new Date().toISOString(),
+  }
+  return cards.map((item) => item.id === cardId ? {
+    ...card, updatedAt: updated.updatedAt,
+    exercises: card.exercises.map((item) => item.id === exerciseId ? updated : item),
+  } : item)
+}
+
 export function getFrontierTimerProposal(
   exercise: FrontierExercise,
   elapsedSeconds: number,

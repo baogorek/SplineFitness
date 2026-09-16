@@ -6,11 +6,13 @@ import { useDialogFocus } from "@/hooks/use-dialog-focus"
 import { formatFrontierLastTried, getLeastRecentlyTried } from "@/lib/frontier-attempts"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
 import { FrontierCard } from "@/types/frontier"
+import { FrontierAttemptButton } from "./frontier-attempt-button"
 
-export function FrontierRecency({ cards, onClose, onSelect }: {
+export function FrontierRecency({ cards, onClose, onSelect, onSetAttemptToday }: {
   cards: FrontierCard[]
   onClose: () => void
   onSelect: (cardId: string, exerciseId: string) => void
+  onSetAttemptToday: (cardId: string, exerciseId: string, tried: boolean) => Promise<void>
 }) {
   const dialogRef = useDialogFocus<HTMLElement>(true, onClose)
   const entries = getLeastRecentlyTried(cards)
@@ -27,8 +29,8 @@ export function FrontierRecency({ cards, onClose, onSelect }: {
         </div>
         <ol className="min-h-0 overflow-y-auto overscroll-contain divide-y divide-slate-100">
           {entries.map(({ card, exercise, lastTried }) => (
-            <li key={`${card.id}-${exercise.id}`}>
-              <button type="button" className="flex min-h-20 w-full items-center gap-3 rounded-lg px-2 py-3 text-left hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400" onClick={() => onSelect(card.id, exercise.id)}>
+            <li key={`${card.id}-${exercise.id}`} className="flex items-center gap-2 py-1">
+              <button type="button" className="flex min-h-20 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-3 text-left hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400" onClick={() => onSelect(card.id, exercise.id)}>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-sm font-semibold">{getFrontierExerciseStructure(exercise).name}</span>
                   <span className="mt-0.5 block break-words text-xs text-slate-500">{card.name}</span>
@@ -36,6 +38,7 @@ export function FrontierRecency({ cards, onClose, onSelect }: {
                 </span>
                 <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
               </button>
+              <FrontierAttemptButton exercise={exercise} onSetToday={(tried) => onSetAttemptToday(card.id, exercise.id, tried)} />
             </li>
           ))}
         </ol>

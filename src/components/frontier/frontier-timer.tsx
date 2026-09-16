@@ -11,7 +11,7 @@ import { useWakeLock } from "@/hooks/use-wake-lock"
 import { formatFrontierTimerTime, getFrontierTimerTarget } from "@/lib/frontier-timer"
 import { formatDurationInput, formatFrontierChange, getCurrentFrontierChange, parseDuration } from "@/lib/frontier-utils"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
-import { getFrontierTimerProposal, FrontierTimerProposal } from "@/lib/frontier-effort"
+import { getFrontierTimerProposal, hasFrontierMarkForEffort, FrontierTimerProposal } from "@/lib/frontier-effort"
 import { FrontierAttempt, FrontierExercise } from "@/types/frontier"
 
 interface FrontierTimerProps {
@@ -24,9 +24,10 @@ interface FrontierTimerProps {
   choices: { cardId: string; cardName: string; exercise: FrontierExercise }[]
   onSelectExercise: (cardId: string, exerciseId: string) => void
   onRecord: (attempt: FrontierAttempt, update?: { baseline: FrontierExercise; proposal: FrontierTimerProposal }) => Promise<void>
+  onUndoEffort: (attemptId: string) => Promise<void>
 }
 
-export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose, initialWeight, choices, onSelectExercise, onRecord }: FrontierTimerProps) {
+export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose, initialWeight, choices, onSelectExercise, onRecord, onUndoEffort }: FrontierTimerProps) {
   const [targetInput, setTargetInput] = useState(() => formatDurationInput(getFrontierTimerTarget(exercise) ?? undefined))
   const [weightInput, setWeightInput] = useState(() => String(initialWeight ?? (exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes)?.value?.primary : undefined) ?? ""))
   const [baseline, setBaseline] = useState(exercise)
@@ -34,7 +35,8 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [saveError, setSaveError] = useState<string | null>(null)
   const [updated, setUpdated] = useState(false)
-  const [retryUpdate, setRetryUpdate] = useState(false)
+  const [retryAction, setRetryAction] = useState<"record" | "update" | "undo">("record")
+  const [undone, setUndone] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const audio = useAudio()
   const timer = useFrontierTimer({
@@ -81,11 +83,15 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
   const weight = Number(weightInput)
   const invalidWeight = exercise?.metric === "weight-time" && Boolean(weightInput.trim()) && (!Number.isFinite(weight) || weight <= 0)
   const proposal = baseline && effort ? getFrontierTimerProposal(baseline, effort.elapsedSeconds ?? 0, effort.weight) : null
+  const linkedMark = exercise && effort && hasFrontierMarkForEffort(exercise, effort.id)
+  const resultStatus = saveState === "saving" ? "Saving…"
+    : saveState === "error" ? retryAction === "undo" ? "Could not save the removal" : retryAction === "update" ? "Effort recorded · Frontier update not saved" : "Effort could not be saved"
+    : undone ? "Effort removed" : updated ? "Effort recorded · Frontier updated" : "Effort recorded · Tried today"
 
   const saveEffort = async (attempt: FrontierAttempt, updateFrontier = false) => {
     setSaveState("saving")
     setSaveError(null)
-    setRetryUpdate(updateFrontier)
+    setRetryAction(updateFrontier ? "update" : "record")
     try {
       await onRecord(attempt, updateFrontier && baseline && proposal ? { baseline, proposal } : undefined)
       setSaveState("saved")
@@ -93,6 +99,22 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
     } catch (error) {
       setSaveState("error")
       setSaveError(error instanceof Error ? error.message : "Could not save this effort. Please retry.")
+    }
+  }
+
+  const undoEffort = async () => {
+    if (!effort) return
+    setSaveState("saving")
+    setSaveError(null)
+    setRetryAction("undo")
+    try {
+      await onUndoEffort(effort.id)
+      setSaveState("saved")
+      setUndone(true)
+      setUpdated(false)
+    } catch (error) {
+      setSaveState("error")
+      setSaveError(error instanceof Error ? error.message : "Could not save the removal. Please retry.")
     }
   }
 
@@ -227,20 +249,25 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
           <>
             {effort && (
               <div className="mb-4 space-y-3">
-                <p role="status" className={`text-sm ${saveState === "error" ? "text-red-700" : "text-emerald-700"}`}>{saveState === "saving" ? "Saving…" : saveState === "saved" ? updated ? "Effort recorded · Frontier updated" : "Effort recorded · Tried today" : retryUpdate ? "Effort recorded · Frontier update not saved" : "Effort could not be saved"}</p>
+                <p role="status" className={`text-sm ${saveState === "error" ? "text-red-700" : "text-emerald-700"}`}>{resultStatus}</p>
                 {saveError && (
                   <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
                     <p>{saveError}</p>
-                    <Button variant="outline" className="mt-2" onClick={() => void saveEffort(effort, retryUpdate)}>Retry save</Button>
+                    <Button variant="outline" className="mt-2" onClick={() => void (retryAction === "undo" ? undoEffort() : saveEffort(effort, retryAction === "update"))}>{retryAction === "undo" ? "Retry undo" : "Retry save"}</Button>
                   </div>
                 )}
-                {proposal && baseline && !updated && (
+                {proposal && baseline && !updated && !undone && (
                   <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                     <p className="text-sm font-semibold">Update frontier to <span className="break-words font-mono">{formatFrontierChange(baseline.metric, { id: "proposal", kind: "progress", ...proposal })}</span>?</p>
                     <p className="mt-1 text-xs text-slate-600">Suggested time rounded to the nearest 15 seconds.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} lb.`}</p>
                     <Button className="mt-3 w-full bg-indigo-600 text-white hover:bg-indigo-700" disabled={saveState !== "saved"} onClick={() => void saveEffort(effort, true)}>Update frontier</Button>
                     <p className="mt-2 text-xs text-slate-500">Choose Done to keep only the recorded effort.</p>
                   </div>
+                )}
+                {!undone && (
+                  <Button variant="outline" className="h-auto min-h-11 w-full whitespace-normal text-slate-600" disabled={saveState !== "saved"} onClick={() => void undoEffort()}>
+                    <RotateCcw aria-hidden="true" className="mr-1.5 h-4 w-4" />{linkedMark ? "Undo effort and frontier mark" : "Undo effort"}
+                  </Button>
                 )}
               </div>
             )}
@@ -249,6 +276,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
                 timer.reset()
                 setEffort(null)
                 setUpdated(false)
+                setUndone(false)
                 setSaveState("idle")
                 setSaveError(null)
                 setTargetInput(formatDurationInput(getFrontierTimerTarget(exercise) ?? undefined))

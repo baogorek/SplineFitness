@@ -33,11 +33,9 @@ import { SpreadsheetImportRow } from "@/lib/frontier-import"
 import { appendUniqueFrontierChanges } from "@/lib/frontier-marks"
 import { updateFrontierExercise } from "@/lib/frontier-exercise"
 import {
-  isFrontierAttemptToday,
-  removeFrontierAttemptsToday,
-  hasAutomaticFrontierEffortToday,
+  setFrontierAttemptToday,
 } from "@/lib/frontier-attempts"
-import { recordFrontierTimerEffort } from "@/lib/frontier-effort"
+import { recordFrontierTimerEffort, undoFrontierTimerEffort } from "@/lib/frontier-effort"
 import {
   frontierExerciseIdentity,
   getFrontierExerciseStructure,
@@ -342,32 +340,18 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     setEditingExerciseId(null)
   }
 
-  const handleToggleAttemptToday = (targetExercise: FrontierExercise) => {
-    if (!currentCard) return
+  const handleSetAttemptToday = async (cardId: string, exerciseId: string, tried: boolean) => {
+    const nextCards = setFrontierAttemptToday(cardsRef.current, cardId, exerciseId, tried)
+    cardsRef.current = nextCards
+    setCards(nextCards)
+    if (!await persistCard(nextCards)) throw new Error("Could not save. Please retry.")
+  }
 
-    const now = new Date()
-    if (hasAutomaticFrontierEffortToday(targetExercise, now)) return
-    const timestamp = now.toISOString()
-    const attempts = targetExercise.attempts ?? []
-    const nextAttempts = isFrontierAttemptToday(attempts, now)
-      ? removeFrontierAttemptsToday(attempts, now)
-      : [
-          ...attempts,
-          { id: crypto.randomUUID(), attemptedAt: timestamp, source: "manual" as const },
-        ]
-    const updatedExercise: FrontierExercise = {
-      ...targetExercise,
-      attempts: nextAttempts,
-      updatedAt: timestamp,
-    }
-
-    commitCard({
-      ...currentCard,
-      exercises: currentCard.exercises.map((exercise) =>
-        exercise.id === updatedExercise.id ? updatedExercise : exercise
-      ),
-      updatedAt: timestamp,
-    })
+  const handleUndoTimedEffort = async (cardId: string, exerciseId: string, attemptId: string) => {
+    const nextCards = undoFrontierTimerEffort(cardsRef.current, cardId, exerciseId, attemptId)
+    cardsRef.current = nextCards
+    setCards(nextCards)
+    if (!await persistCard(nextCards)) throw new Error("Could not save the removal. Please retry.")
   }
 
   const handleDeleteExercise = () => {
@@ -518,7 +502,8 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         <FrontierPaperCard
           key={currentCard.id}
           card={currentCard}
-          onToggleAttemptToday={handleToggleAttemptToday}
+          onSetAttemptToday={(exercise, tried) => handleSetAttemptToday(currentCard.id, exercise.id, tried)}
+          onUndoEffort={(exercise, attemptId) => handleUndoTimedEffort(currentCard.id, exercise.id, attemptId)}
           onExerciseClick={(exercise) => {
             setEditingExerciseId(exercise.id)
             setEntrySheetOpen(true)
@@ -585,6 +570,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
             setCards(nextCards)
             if (!await persistCard(nextCards)) throw new Error("Could not save this effort. Please retry.")
           }}
+          onUndoEffort={(attemptId) => timerSession.exercise
+            ? handleUndoTimedEffort(timerSession.cardId, timerSession.exercise.id, attemptId)
+            : Promise.resolve()}
           expanded={timerExpanded}
           onExpand={() => setTimerExpanded(true)}
           onMinimize={() => setTimerExpanded(false)}
@@ -614,7 +602,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       )}
 
       {recencyOpen && (
-        <FrontierRecency cards={cards} onClose={() => setRecencyOpen(false)} onSelect={(cardId, exerciseId) => {
+        <FrontierRecency cards={cards} onSetAttemptToday={handleSetAttemptToday} onClose={() => setRecencyOpen(false)} onSelect={(cardId, exerciseId) => {
           const index = cards.findIndex((card) => card.id === cardId)
           if (index < 0) return
           setCurrentIndex(index)
