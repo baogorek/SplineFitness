@@ -8,7 +8,6 @@ import {
   ChevronRight,
   ClipboardPaste,
   Cloud,
-  History,
   Plus,
   Smartphone,
   Trash2,
@@ -46,7 +45,6 @@ import { FrontierEntrySheet } from "./frontier-entry-sheet"
 import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
 import { FrontierTimer } from "./frontier-timer"
-import { FrontierRecency } from "./frontier-recency"
 
 interface FrontierWalletProps {
   onBack: () => void
@@ -83,7 +81,6 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [reloadKey, setReloadKey] = useState(0)
   const [timerSession, setTimerSession] = useState<{ cardId: string; exercise: FrontierExercise | null; initialWeight?: number } | null>(null)
   const [timerExpanded, setTimerExpanded] = useState(true)
-  const [recencyOpen, setRecencyOpen] = useState(false)
   const saveVersionRef = useRef(0)
 
   useEffect(() => {
@@ -463,9 +460,6 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       </header>
 
       <main className={`mx-auto flex w-full max-w-3xl flex-col px-2 pt-6 sm:px-6 sm:pt-8 ${timerSession ? "pb-28" : "pb-8"}`}>
-        <Button variant="outline" size="sm" className="mx-auto mb-4 border-indigo-200 bg-white/80 text-indigo-700" onClick={() => setRecencyOpen(true)}>
-          <History className="mr-1.5 h-4 w-4" />Least recently tried
-        </Button>
         <div className="mb-4 flex items-center justify-between px-2 sm:px-8">
           <Button
             variant="outline"
@@ -599,18 +593,6 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
           onUndo={editingExercise?.changes.length && editingExercise.changes.length > 1 ? handleUndo : undefined}
           onDelete={editingExercise ? handleDeleteExercise : undefined}
         />
-      )}
-
-      {recencyOpen && (
-        <FrontierRecency cards={cards} onSetAttemptToday={handleSetAttemptToday} onClose={() => setRecencyOpen(false)} onSelect={(cardId, exerciseId) => {
-          const index = cards.findIndex((card) => card.id === cardId)
-          if (index < 0) return
-          setCurrentIndex(index)
-          rememberCard(cards[index])
-          setEditingExerciseId(exerciseId)
-          setEntrySheetOpen(true)
-          setRecencyOpen(false)
-        }} />
       )}
 
       {locationSheetMode && (

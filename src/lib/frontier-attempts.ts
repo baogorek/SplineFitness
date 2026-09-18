@@ -12,24 +12,33 @@ export function getFrontierLastTried(exercise: FrontierExercise): string | null 
   ), null)
 }
 
-export function getLeastRecentlyTried(cards: FrontierCard[]) {
-  return cards.flatMap((card) => card.exercises.map((exercise) => ({
-    card, exercise, lastTried: getFrontierLastTried(exercise),
-  }))).sort((a, b) => (
-    (a.lastTried ? Date.parse(a.lastTried) : -Infinity)
-      - (b.lastTried ? Date.parse(b.lastTried) : -Infinity)
-    || a.exercise.name.localeCompare(b.exercise.name)
-    || a.card.name.localeCompare(b.card.name)
-  ))
-}
-
-export function formatFrontierLastTried(timestamp: string | null, today = new Date()): string {
-  if (!timestamp || !Number.isFinite(Date.parse(timestamp))) return "No recorded attempts"
+function frontierDaysSince(timestamp: string | null, today: Date): number | null {
+  if (!timestamp || !Number.isFinite(Date.parse(timestamp))) return null
   const date = new Date(timestamp)
   // Count calendar days, including across daylight-saving changes.
   const dayNumber = (value: Date) => Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()) / 86400000
-  const days = Math.max(0, dayNumber(today) - dayNumber(date))
+  return Math.max(0, dayNumber(today) - dayNumber(date))
+}
+
+export function formatFrontierLastTried(timestamp: string | null, today = new Date()): string {
+  const days = frontierDaysSince(timestamp, today)
+  if (days === null) return "No recorded attempts"
   return days === 0 ? "Tried today" : days === 1 ? "Last tried yesterday" : `Last tried ${days} days ago`
+}
+
+export function getFrontierRecency(timestamp: string | null, today = new Date()): {
+  days: number | null
+  tone: "recent" | "aging" | "stale" | "unknown"
+  shortLabel: string
+  description: string
+} {
+  const days = frontierDaysSince(timestamp, today)
+  return {
+    days,
+    tone: days === null ? "unknown" : days < 7 ? "recent" : days < 14 ? "aging" : "stale",
+    shortLabel: days === null ? "—" : days === 0 ? "Today" : `${days}d`,
+    description: formatFrontierLastTried(timestamp, today),
+  }
 }
 
 export function hasFrontierEffortToday(exercise: FrontierExercise, today = new Date()): boolean {

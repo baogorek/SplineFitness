@@ -3,7 +3,7 @@ import {
   isFrontierAttemptToday,
   removeFrontierAttemptsToday,
   getFrontierLastTried,
-  getLeastRecentlyTried,
+  getFrontierRecency,
   formatFrontierLastTried,
   hasAutomaticFrontierEffortToday,
   setFrontierAttemptToday,
@@ -43,7 +43,7 @@ describe("Frontier attempts", () => {
   })
 })
 
-describe("least recently tried", () => {
+describe("last tried history", () => {
   const entry: FrontierExercise = { id: "hold", name: "Hold", metric: "duration-longer", changes: [], order: 0, createdAt: "2026-09-15T12:00:00Z", updatedAt: "2026-09-15T12:00:00Z" }
   const old = "2026-08-01T12:00:00Z"
   const recent = "2026-09-14T12:00:00Z"
@@ -64,19 +64,6 @@ describe("least recently tried", () => {
     expect(getFrontierLastTried(withHistory)).toBe(recent)
     expect(getFrontierLastTried({ ...withHistory, attempts: [{ id: "latest", attemptedAt: entry.updatedAt }] })).toBe(entry.updatedAt)
   })
-  it("sorts all cards with unrecorded exercises first and oldest efforts next", () => {
-    const cards: FrontierCard[] = [
-      { id: "gym", name: "Gym", createdAt: "", updatedAt: "", order: 0, exercises: [
-        { ...entry, id: "recent", attempts: [{ id: "recent", attemptedAt: recent }] },
-        { ...entry, id: "never", name: "Never" },
-      ] },
-      { id: "home", name: "Home", createdAt: "", updatedAt: "", order: 1, exercises: [
-        { ...entry, id: "old", attempts: [{ id: "old", attemptedAt: old }] },
-      ] },
-    ]
-    expect(getLeastRecentlyTried(cards).map(({ exercise }) => exercise.id)).toEqual(["never", "old", "recent"])
-    expect(cards[0].exercises[0].id).toBe("recent")
-  })
   it("uses local calendar days for labels", () => {
     const today = new Date(2026, 8, 15, 1)
     expect(formatFrontierLastTried(null, today)).toBe("No recorded attempts")
@@ -93,6 +80,51 @@ describe("least recently tried", () => {
   })
 })
 
+describe("exercise recency indicators", () => {
+  const today = new Date(2026, 8, 18, 12)
+
+  it.each([
+    [0, "recent", "Today"],
+    [1, "recent", "1d"],
+    [6, "recent", "6d"],
+    [7, "aging", "7d"],
+    [13, "aging", "13d"],
+    [14, "stale", "14d"],
+    [90, "stale", "90d"],
+  ])("assigns the right color and age at %i days", (days, tone, shortLabel) => {
+    const timestamp = new Date(2026, 8, 18 - days, 23).toISOString()
+    expect(getFrontierRecency(timestamp, today)).toEqual({
+      days, tone, shortLabel,
+      description: days === 0 ? "Tried today" : days === 1 ? "Last tried yesterday" : `Last tried ${days} days ago`,
+    })
+  })
+
+  it.each([null, "", "invalid"])("keeps missing or invalid history unknown: %s", (timestamp) => {
+    expect(getFrontierRecency(timestamp, today)).toEqual({
+      days: null, tone: "unknown", shortLabel: "—", description: "No recorded attempts",
+    })
+  })
+
+  it("switches color at local midnight, rather than after complete 24-hour periods", () => {
+    const timestamp = new Date(2026, 8, 11, 23, 59).toISOString()
+    expect(getFrontierRecency(timestamp, new Date(2026, 8, 17, 23, 59)).tone).toBe("recent")
+    expect(getFrontierRecency(timestamp, new Date(2026, 8, 18, 0)).tone).toBe("aging")
+  })
+
+  it("counts calendar days across both daylight-saving transitions", () => {
+    const spring = getFrontierRecency(new Date(2026, 2, 1, 12).toISOString(), new Date(2026, 2, 8, 12))
+    const fall = getFrontierRecency(new Date(2026, 9, 25, 12).toISOString(), new Date(2026, 10, 1, 12))
+    expect(spring).toMatchObject({ days: 7, tone: "aging" })
+    expect(fall).toMatchObject({ days: 7, tone: "aging" })
+  })
+
+  it("does not show negative ages when an effort has a future timestamp", () => {
+    expect(getFrontierRecency(new Date(2026, 8, 19, 12).toISOString(), today)).toMatchObject({
+      days: 0, tone: "recent", shortLabel: "Today",
+    })
+  })
+})
+
 describe("check-ins across cards", () => {
   const today = new Date(2026, 8, 16, 12)
   const exercise: FrontierExercise = { id: "exercise", name: "Hold", metric: "reps", changes: [], order: 0, createdAt: "", updatedAt: "" }
@@ -104,7 +136,8 @@ describe("check-ins across cards", () => {
     expect(result[0]).toBe(cards[0])
     expect(result[1].exercises[0].attempts).toHaveLength(1)
     expect(getFrontierLastTried(result[1].exercises[0])).toBe(today.toISOString())
-    expect(getLeastRecentlyTried(result)[0].card.id).toBe("home")
+    expect(getFrontierRecency(getFrontierLastTried(result[0].exercises[0]), today).tone).toBe("unknown")
+    expect(getFrontierRecency(getFrontierLastTried(result[1].exercises[0]), today).tone).toBe("recent")
   })
 
   it("undoes today's manual check-in without changing earlier attempts", () => {

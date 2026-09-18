@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Accessibility,
   ArrowRight,
@@ -15,11 +15,18 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatFrontierChange, getCurrentFrontierChange } from "@/lib/frontier-utils"
-import { formatFrontierLastTried, getFrontierLastTried } from "@/lib/frontier-attempts"
+import { getFrontierLastTried, getFrontierRecency } from "@/lib/frontier-attempts"
 import { FrontierAttemptButton } from "./frontier-attempt-button"
 import { FrontierEffortUndo } from "./frontier-effort-undo"
 import { getFrontierExerciseStructure } from "@/lib/frontier-structure"
 import { FrontierBodyPart, FrontierCard, FrontierExercise } from "@/types/frontier"
+
+const RECENCY_DOT_COLORS = {
+  recent: "bg-emerald-600",
+  aging: "bg-amber-500",
+  stale: "bg-rose-400",
+  unknown: "bg-slate-400",
+}
 
 interface FrontierPaperCardProps {
   card: FrontierCard
@@ -50,6 +57,7 @@ export function FrontierPaperCard({
   const [expandedExerciseId, setExpandedExerciseId] = useState<string | null>(null)
   const [collapsedEquipment, setCollapsedEquipment] = useState<Set<string>>(new Set())
   const equipmentGroups = useMemo(() => groupExercises(card.exercises), [card.exercises])
+  const today = useLocalToday()
 
   const handleTouchStart = (event: React.TouchEvent) => {
     touchStartXRef.current = event.changedTouches[0]?.clientX ?? null
@@ -169,6 +177,8 @@ export function FrontierPaperCard({
                                 const expanded = expandedExerciseId === exercise.id
                                 const historyId = `frontier-history-${exercise.id}`
                                 const currentChange = getCurrentFrontierChange(exercise.metric, exercise.changes)
+                                const lastTried = getFrontierLastTried(exercise)
+                                const recency = getFrontierRecency(lastTried, today)
 
                                 return (
                                   <li key={exercise.id} className="border-b border-sky-200/80">
@@ -180,8 +190,15 @@ export function FrontierPaperCard({
                                         aria-controls={historyId}
                                         className="group grid min-h-14 min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 py-2.5 pl-3 pr-1 text-left transition-colors hover:bg-indigo-50/60 focus-visible:bg-indigo-50 focus-visible:outline-none sm:pl-5"
                                       >
-                                        <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-800">
-                                          {displayName}
+                                        <span className="flex min-w-0 items-start gap-2" title={recency.description}>
+                                          <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${RECENCY_DOT_COLORS[recency.tone]}`} />
+                                          <span className="min-w-0">
+                                            <span className="block break-words text-sm font-semibold leading-snug text-slate-800">{displayName}</span>
+                                            <span className="mt-0.5 block text-[11px] font-medium tabular-nums leading-snug text-slate-500">
+                                              <span aria-hidden="true">{recency.shortLabel}</span>
+                                              <span className="sr-only">{recency.description}</span>
+                                            </span>
+                                          </span>
                                         </span>
                                         <span className="flex min-w-0 items-center justify-end gap-1.5">
                                           <span className="min-w-0 break-words text-right font-mono text-sm font-bold text-indigo-950 transition-colors group-hover:text-indigo-700">
@@ -267,8 +284,11 @@ export function FrontierPaperCard({
                                         )}
 
                                         <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-indigo-100 pt-2.5">
-                                          <p className="text-[11px] text-slate-400">
-                                            {formatFrontierLastTried(getFrontierLastTried(exercise))}
+                                          <p className="text-xs text-slate-500">
+                                            {recency.description}
+                                            {lastTried && <time dateTime={lastTried} className="mt-0.5 block">
+                                              {new Date(lastTried).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                            </time>}
                                           </p>
                                           <FrontierAttemptButton exercise={exercise} onSetToday={(tried) => onSetAttemptToday(exercise, tried)} />
                                         </div>
@@ -303,6 +323,34 @@ export function FrontierPaperCard({
       </article>
     </div>
   )
+}
+
+/** Refresh dates at local midnight and when returning to an open card. */
+function useLocalToday() {
+  const [today, setToday] = useState(() => new Date())
+  useEffect(() => {
+    let timeout: number
+    const schedule = () => {
+      const now = new Date()
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      timeout = window.setTimeout(refresh, midnight.getTime() - now.getTime() + 100)
+    }
+    const refresh = () => {
+      window.clearTimeout(timeout)
+      setToday(new Date())
+      schedule()
+    }
+    const onVisible = () => { if (document.visibilityState === "visible") refresh() }
+    schedule()
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearTimeout(timeout)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [])
+  return today
 }
 
 interface ExerciseDisplay {
