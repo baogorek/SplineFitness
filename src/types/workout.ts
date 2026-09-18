@@ -2,6 +2,8 @@ export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "liss-co
 export type WorkoutVariant = "A" | "B"
 export type SitPhase =
   | "ready"
+  | "guided-warmup"
+  // Legacy warmup phases remain readable in saved sessions.
   | "warmup-countdown"
   | "general-warmup"
   | "post-warmup-shakeout"
@@ -218,11 +220,12 @@ export interface SitWorkoutSession {
 
 export interface SitSessionProgress {
   phase: SitPhase
-  tissuePrepSet: number
+  tissuePrepSet?: number
   sprintNumber: number
   sprintHistory: SprintRecord[]
   bestTime: number | null
-  warmupCountdown: number
+  warmupCountdown?: number
+  warmup?: SitWarmupProgress
   workoutTimerSeconds: number
   phaseTimerElapsedSeconds: number
   workoutTimerRunning?: boolean
@@ -230,6 +233,15 @@ export interface SitSessionProgress {
   phasesCompleted: number
   startedAt: string
   savedAt: string
+}
+
+export interface SitWarmupProgress {
+  version: 1
+  stepIndex: number
+  status: "ready" | "countdown" | "active" | "paused" | "done"
+  elapsedMs: number
+  startedAtMs: number | null
+  countdownEndsAtMs: number | null
 }
 
 // LISS + Core Endurance Types

@@ -23,8 +23,8 @@ const RECOVERY_WINDOWS = [
   },
   {
     maxSeconds: Infinity,
-    label: "Full Recovery",
-    description: "Best window for another true max-effort sprint.",
+    label: "Extended Recovery",
+    description: "Five minutes elapsed. Continue when ready, or take longer.",
     color: "bg-green-500",
   },
 ]
@@ -46,8 +46,8 @@ export function RecoveryStatusBar({ elapsedSeconds }: RecoveryStatusBarProps) {
     : elapsedSeconds < 180
       ? "Quality window starts at 3:00"
       : elapsedSeconds < 300
-        ? "Full recovery at 5:00"
-        : "Full recovery window"
+        ? "Next time marker: 5:00"
+        : "5:00+ elapsed"
 
   return (
     <div className="w-full space-y-3">

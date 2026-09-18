@@ -60,7 +60,7 @@ const workoutModes = [
     icon: Zap,
     title: "SIT Sprint",
     subtitle: "All-out effort",
-    description: "Sprint interval training with ATP recovery tracking",
+    description: "Progressive running warmup, sprint timing and recovery",
     color: "bg-green-500",
     lightBg: "bg-green-50",
     border: "border-green-200",
