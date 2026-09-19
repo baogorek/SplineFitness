@@ -17,8 +17,8 @@ export function SprintReady({ sprintNumber, onGo, onEndWorkout }: SprintReadyPro
       <p className="text-sm font-semibold uppercase tracking-wider text-green-600">
         Sprint {sprintNumber}
       </p>
-      <p className="text-sm text-muted-foreground text-center max-w-xs">
-        Press Ready to start a 4-second countdown. Hold phone in one hand. Place other hand on the ground in sprinter&apos;s stance.
+      <p className="text-xl leading-relaxed text-muted-foreground text-center max-w-sm">
+        Keep walking until you feel warm and ready. Use your usual starting stance. Hold your phone to time the sprint. Press Ready for a 4-second countdown.
       </p>
       {sprintNumber >= 5 && (
         <div className="max-w-xs rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">

@@ -236,12 +236,14 @@ export interface SitSessionProgress {
 }
 
 export interface SitWarmupProgress {
-  version: 1
+  version: 1 | 2 | 3
   stepIndex: number
-  status: "ready" | "countdown" | "active" | "paused" | "done"
+  status: "ready" | "setup" | "countdown" | "active" | "paused" | "done"
   elapsedMs: number
   startedAtMs: number | null
   countdownEndsAtMs: number | null
+  setupEndsAtMs?: number | null
+  repeatRun?: boolean
 }
 
 // LISS + Core Endurance Types

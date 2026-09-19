@@ -20,7 +20,7 @@ import {
 } from "@/lib/storage"
 import { SprintRecord, SitPhase, SitSessionProgress, SitWorkoutSession, SitWarmupProgress } from "@/types/workout"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
-import { BUILD_UP_EFFORTS, BUILD_UP_DISTANCE_METERS, createSitWarmup, isLegacySitWarmup, restoreSitWarmup, SIT_WARMUP_STEPS } from "@/lib/sit-warmup"
+import { BUILD_UP_CUES, BUILD_UP_SECONDS, createSitWarmup, isLegacySitWarmup, POGO_SECONDS, restoreSitWarmup, SIT_WARMUP_STEPS } from "@/lib/sit-warmup"
 
 interface SitWorkoutProps {
   onModeChange: () => void
@@ -209,13 +209,15 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
   }, [saveProgressSnapshot])
 
   const handleStartWorkout = useCallback(() => {
+    // Unlock browser audio during the user's tap, before automatic voice/timer cues.
+    audio.playCountdownTick()
     workoutStartedRef.current = true
     startedAtRef.current = new Date().toISOString()
     phasesCompletedRef.current = 0
     setWarmupProgress(createSitWarmup())
     workoutTimer.start()
     setPhase("guided-warmup")
-  }, [workoutTimer])
+  }, [audio, workoutTimer])
 
   const handleWarmupProgress = useCallback((progress: SitWarmupProgress) => {
     const step = SIT_WARMUP_STEPS[progress.stepIndex]
@@ -313,6 +315,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
       setTimeout(() => { audio.playCountdownTick(); setSprintCountdownValue(1) }, tick * 3),
       setTimeout(() => {
         audio.playCountdownGo()
+        audio.speak("Go.")
         setSprintCountdownValue(null)
         sprintStopHandledRef.current = false
         sprintStartRef.current = performance.now()
@@ -570,7 +573,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
                 Back
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">SIT SPRINT</span>
-              <button
+              {phase !== "guided-warmup" && <button
                 type="button"
                 aria-pressed={testMode}
                 disabled={phase !== "ready"}
@@ -583,15 +586,15 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
               >
                 <Zap className="h-3 w-3" />
                 {testMode ? "12x" : "Test"}
-              </button>
-              <button
+              </button>}
+              {phase !== "guided-warmup" && <button
                 type="button"
                 onClick={handleTestAudio}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Volume2 className="h-3 w-3" />
                 Audio
-              </button>
+              </button>}
             </div>
             {phase === "sprint-ready" || phase === "sprint-recovery" ? (
               <div className="text-right">
@@ -606,7 +609,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-shrink-0 px-4 pt-4 pb-2 bg-background">
-          {workoutStartedRef.current && (
+          {workoutStartedRef.current && phase !== "guided-warmup" && (
             <RoundTimer
               formattedTime={workoutTimer.formattedTime}
               isRunning={workoutTimer.isRunning}
@@ -622,14 +625,14 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
               </div>
               <div className="text-center space-y-2">
                 <h2 className="text-2xl font-bold text-foreground">SIT Sprint</h2>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  Easy jogging, dynamic movement, then four progressive build-ups with walk-back recovery.
+                <p className="text-xl text-muted-foreground max-w-sm">
+                  Press Start once. Follow the voice cues. Pause whenever you need.
                 </p>
               </div>
-              <div className="max-w-sm rounded-xl bg-muted/50 p-4 text-sm leading-relaxed text-muted-foreground">
-                <p>3 minutes easy jogging → brief marching, leg swings and ankle rocks → {BUILD_UP_EFFORTS.map((effort) => `${effort}%`).join(" / ")} build-ups.</p>
-                <p className="mt-2">Use about {BUILD_UP_DISTANCE_METERS} m of clear, level space, with room to slow down. Percentages are rough speed guides. Recover for a minute between runs and 3 minutes after the last; take longer or repeat a run as needed.</p>
-                <p className="mt-2">Every movement waits for your start. Warmup runs stay out of your sprint records.</p>
+              <div className="max-w-sm space-y-3 rounded-xl bg-muted/50 p-4 text-lg leading-relaxed text-muted-foreground">
+                <p>3 minutes easy jogging, then marching, leg swings, and one {POGO_SECONDS}-second set of easy pogo hops.</p>
+                <p>Four {BUILD_UP_SECONDS}-second build-ups: {BUILD_UP_CUES.join(" → ")}. Stay below all-out effort. Use a clear, level route with room to slow down.</p>
+                <p>Walk back for a minute between runs and 3 minutes after the last. Everything advances automatically. Pause for extra recovery or to queue a repeat.</p>
               </div>
               <Button
                 size="lg"
@@ -646,7 +649,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
               >
                 Already Warmed Up
               </Button>
-              <p className="text-xs text-muted-foreground text-center max-w-xs -mt-2">
+              <p className="text-base text-muted-foreground text-center max-w-xs -mt-2">
                 Skip the guided warmup and go straight to sprint setup.
               </p>
             </div>
