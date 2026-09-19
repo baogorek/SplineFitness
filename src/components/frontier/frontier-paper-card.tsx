@@ -271,6 +271,7 @@ export function FrontierPaperCard({
                                                           : "border-slate-200 bg-white/70 text-slate-500"
                                                       }`}
                                                     >
+                                                      {change.kind === "correction" && <span className="mr-1 font-sans text-amber-700">Corrected:</span>}
                                                       {formatFrontierChange(exercise.metric, change)}
                                                       {current && <span className="sr-only"> (current)</span>}
                                                     </span>

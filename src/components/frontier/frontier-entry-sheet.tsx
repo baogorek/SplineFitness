@@ -147,7 +147,7 @@ export function FrontierEntrySheet({
       && (!exercise || metricChanged
         ? hasMeasure || measureFieldsEmpty
         : hasMeasure
-          ? correcting || improvement || (detailsChanged && !valueChanged)
+          ? (correcting && valueChanged) || improvement || (detailsChanged && !valueChanged)
           : detailsChanged && measureFieldsEmpty)
   )
 
@@ -196,6 +196,9 @@ export function FrontierEntrySheet({
   const selectedMetric = FRONTIER_METRIC_OPTIONS.find((option) => option.value === metric)
   const invalidFrontier = Boolean(exercise && !metricChanged && hasMeasure && valueChanged && !improvement && !correcting)
   const invalidMeasure = !hasMeasure && !measureFieldsEmpty
+  const proposedMark = formatFrontierChange(metric, {
+    id: "draft", kind: "correction", value: parsedValue ?? undefined, rawValue: rawValue ?? undefined,
+  })
 
   return (
     <div className={active ? "fixed inset-0 z-[70] flex items-end justify-center sm:items-center" : "hidden"}>
@@ -217,7 +220,7 @@ export function FrontierEntrySheet({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-500">
-              {exercise ? (correcting ? "Correct frontier" : "Edit exercise") : "New exercise"}
+              {exercise ? (correcting ? "Correct record" : "Edit exercise") : "New exercise"}
             </p>
             <h2 id="frontier-entry-title" className="mt-1 text-xl font-bold text-slate-900">
               {initialStructure?.name ?? "Add a row"}
@@ -351,13 +354,23 @@ export function FrontierEntrySheet({
 
           {exercise && currentChange && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">
-                Current frontier
-              </p>
-              <p className="mt-1 font-mono text-2xl font-bold text-indigo-950">
-                {formatFrontierChange(metric, currentChange)}
-              </p>
-              <p className="mt-1 text-xs text-indigo-700/70">{selectedMetric?.description}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-indigo-500">
+                    Your frontier
+                  </p>
+                  <p className="mt-1 break-words font-mono text-2xl font-bold text-indigo-950">
+                    {formatFrontierChange(metric, currentChange)}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="h-11 shrink-0 border-indigo-200 bg-white text-indigo-700"
+                  onClick={() => setCorrecting((value) => !value)}
+                >
+                  {correcting ? "Cancel correction" : "Correct record"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -379,15 +392,27 @@ export function FrontierEntrySheet({
           )}
 
           {invalidFrontier && (
-            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              This does not exceed the current frontier. Use correction mode if the card is wrong.
-            </p>
+            <div className="space-y-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+              <p>This does not improve your frontier. If the saved record is wrong, you can correct it.</p>
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 w-full whitespace-normal border-amber-300 bg-white px-3 py-2 text-amber-900"
+                onClick={() => setCorrecting(true)}
+              >
+                Correct {formatFrontierChange(metric, currentChange)} → {proposedMark}
+              </Button>
+            </div>
           )}
 
           {correcting && (
-            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Correction mode allows the frontier to move backward. The previous value remains available in change history.
-            </p>
+            <div role="status" className="space-y-1 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <p className="break-words font-semibold">
+                {hasMeasure && valueChanged
+                  ? `Correct ${formatFrontierChange(metric, currentChange)} → ${proposedMark}`
+                  : "Enter the correct record."}
+              </p>
+              <p>Your previous record stays in history. This correction won&apos;t count as a new effort.</p>
+            </div>
           )}
 
           <Button
@@ -397,27 +422,19 @@ export function FrontierEntrySheet({
             onClick={handleSubmit}
           >
             {!exercise
-              ? hasMeasure ? "Add to card" : "Add exercise"
+              ? hasMeasure ? "Set frontier" : "Add exercise"
               : metricChanged
                 ? "Save measurement"
                 : correcting
                   ? "Save correction"
                 : detailsChanged && !valueChanged
                   ? "Save exercise"
-                  : "Update frontier"}
+                  : currentChange ? "Update frontier" : "Set frontier"}
           </Button>
 
           {exercise && (
             <div className="border-t border-slate-200 pt-4">
               <div className="flex flex-wrap gap-2">
-                {!metricChanged && currentChange && <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCorrecting((value) => !value)}
-                  className={cn(correcting && "border-amber-300 bg-amber-50 text-amber-800")}
-                >
-                  Correct value
-                </Button>}
                 {!metricChanged && exercise.changes.length > 1 && onUndo && (
                   <Button variant="outline" size="sm" onClick={onUndo}>
                     <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
@@ -486,25 +503,31 @@ function FrontierHistoryList({ metric, changes, currentId }: {
   if (changes.length === 0) return null
   return (
     <ol className="divide-y divide-slate-100 rounded-xl border border-slate-200 px-3">
-      {[...changes].reverse().map((change) => (
-        <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-          <div>
-            <span className="font-mono font-semibold text-slate-800">
-              {formatFrontierChange(metric, change)}
+      {[...changes].reverse().map((change, reverseIndex) => {
+        const previous = change.kind === "correction"
+          ? getCurrentFrontierChange(metric, changes.slice(0, changes.length - 1 - reverseIndex))
+          : null
+        return (
+          <li key={change.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <div className="min-w-0 break-words">
+              {change.kind === "correction" && (
+                <span className="block text-xs font-semibold text-amber-700">Corrected</span>
+              )}
+              <span className="font-mono font-semibold text-slate-800">
+                {previous && <>{formatFrontierChange(metric, previous)} → </>}
+                {formatFrontierChange(metric, change)}
+              </span>
+            </div>
+            <span className="shrink-0 text-xs text-slate-400">
+              {change.id === currentId
+                ? "Current"
+                : change.recordedAt
+                  ? new Date(change.recordedAt).toLocaleDateString()
+                  : "Imported"}
             </span>
-            {change.kind === "correction" && (
-              <span className="ml-2 text-[10px] font-semibold uppercase text-amber-600">correction</span>
-            )}
-          </div>
-          <span className="text-xs text-slate-400">
-            {change.id === currentId
-              ? "Current"
-              : change.recordedAt
-                ? new Date(change.recordedAt).toLocaleDateString()
-                : "Imported"}
-          </span>
-        </li>
-      ))}
+          </li>
+        )
+      })}
     </ol>
   )
 }
@@ -570,7 +593,7 @@ function FrontierValueFields({
   }
 
   const configuration = {
-    reps: { label: "Repetitions", suffix: "reps", step: "1" },
+    reps: { label: "Best single set", suffix: "reps", step: "1" },
     weight: { label: "Weight", suffix: "lb", step: "any" },
     speed: { label: "Speed", suffix: "mph", step: "any" },
   }[metric]
@@ -583,6 +606,7 @@ function FrontierValueFields({
       suffix={configuration.suffix}
       step={configuration.step}
       optional={allowEmpty}
+      description={metric === "reps" ? "Your personal frontier" : undefined}
       onChange={onPrimaryChange}
     />
   )
@@ -595,6 +619,7 @@ function NumberField({
   suffix,
   step,
   optional = false,
+  description,
   onChange,
 }: {
   id: string
@@ -603,6 +628,7 @@ function NumberField({
   suffix: string
   step: string
   optional?: boolean
+  description?: string
   onChange: (value: string) => void
 }) {
   return (
@@ -610,6 +636,7 @@ function NumberField({
       <label htmlFor={id} className="text-sm font-semibold text-slate-700">
         {label}{optional && <span className="font-normal text-slate-400"> (optional)</span>}
       </label>
+      {description && <p id={`${id}-help`} className="text-sm text-slate-500">{description}</p>}
       <div className="relative">
         <Input
           id={id}
@@ -617,11 +644,12 @@ function NumberField({
           min="0"
           step={step}
           inputMode="decimal"
+          aria-describedby={`${description ? `${id}-help ` : ""}${id}-unit`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="h-12 pr-14 font-mono text-base"
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">
+        <span id={`${id}-unit`} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">
           {suffix}
         </span>
       </div>
