@@ -243,23 +243,6 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
                 </div>
               </button>
             ))}
-            <a
-              href="/movement-lab"
-              className="group relative rounded-2xl bg-white border-2 border-teal-200 hover:border-teal-300 p-6 text-left transition-all duration-200 hover:shadow-lg hover:-translate-y-1 sm:col-span-2"
-            >
-              <div className="absolute top-0 left-6 right-6 h-1 bg-teal-500 rounded-b-full" />
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-50 mb-4 transition-transform duration-200 group-hover:scale-110">
-                <Activity className="h-7 w-7 text-teal-600" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">Movement Lab</h2>
-                  <ChevronRight className="h-5 w-5 text-slate-300 transition-all duration-200 group-hover:text-slate-500 group-hover:translate-x-1" />
-                </div>
-                <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Interactive anatomy</p>
-                <p className="text-sm text-slate-500 pt-1">Move joints, follow muscles and compare how their paths change.</p>
-              </div>
-            </a>
           </div>
 
           {/* Secondary links */}
