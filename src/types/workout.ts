@@ -273,6 +273,7 @@ export interface CardioIntervalSelection {
 
 export interface CableExerciseSetup {
   weight?: number
+  pulleyHeight?: number
   pulleyPosition?: string
   attachment?: string
   setupNote?: string
@@ -336,6 +337,8 @@ export interface LissCoreWorkoutSession {
 }
 
 export interface LissCoreSessionProgress {
+  /** Missing on older sessions, which always started rotations on the left. */
+  rotationOrder?: "alternating" | "left-first"
   phase: "active" | "complete"
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup

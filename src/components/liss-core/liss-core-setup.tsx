@@ -8,6 +8,7 @@ import {
   Clock3,
   Play,
   Save,
+  Settings2,
   Volume2,
   VolumeX,
 } from "lucide-react"
@@ -33,6 +34,8 @@ interface LissCoreSetupProps {
   initialTemplate: LissCoreTemplate
   previousCableSetup: LissCoreCableSetup
   initialVoiceCues: boolean
+  initialCardioSelections?: Record<string, CardioIntervalSelection>
+  duringWorkout?: boolean
   onBack: () => void
   onStart: (
     template: LissCoreTemplate,
@@ -51,6 +54,31 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`
 }
 
+export function CableHeightField({ setup, onChange, dark = false }: {
+  setup: CableExerciseSetup
+  onChange: (setup: CableExerciseSetup) => void
+  dark?: boolean
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className={`text-xs font-medium ${dark ? "text-slate-300" : "text-slate-600"}`}>Cable machine height (optional)</span>
+      <Input
+        type="number"
+        inputMode="numeric"
+        min="0"
+        step="1"
+        value={setup.pulleyHeight ?? ""}
+        placeholder="Height number"
+        className={dark ? "border-white/20 bg-white/5 text-white placeholder:text-slate-500" : undefined}
+        onChange={(event) => {
+          const value = event.target.value === "" ? undefined : Number(event.target.value)
+          onChange({ ...setup, pulleyHeight: value !== undefined && Number.isFinite(value) ? Math.max(0, Math.round(value)) : undefined })
+        }}
+      />
+    </label>
+  )
+}
+
 export function CableSetupFields({
   label,
   setup,
@@ -65,7 +93,7 @@ export function CableSetupFields({
   return (
     <div className="space-y-3 rounded-xl border bg-slate-50 p-3">
       <p className="text-sm font-semibold text-slate-800">{label}</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="space-y-1.5">
           <span className="text-xs font-medium text-slate-600">Resistance</span>
           <div className="relative">
@@ -88,11 +116,12 @@ export function CableSetupFields({
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">lb</span>
           </div>
         </label>
+        <CableHeightField setup={setup} onChange={onChange} />
         <label className="space-y-1.5">
-          <span className="text-xs font-medium text-slate-600">Pulley height / position</span>
+          <span className="text-xs font-medium text-slate-600">Pulley position note (optional)</span>
           <Input
             value={setup.pulleyPosition ?? ""}
-            placeholder="e.g. 11 or chest"
+            placeholder="e.g. chest height"
             onChange={(event) => onChange({ ...setup, pulleyPosition: event.target.value || undefined })}
           />
         </label>
@@ -211,6 +240,8 @@ export function LissCoreSetup({
   initialTemplate,
   previousCableSetup,
   initialVoiceCues,
+  initialCardioSelections = {},
+  duringWorkout = false,
   onBack,
   onStart,
   onSaveDefault,
@@ -225,9 +256,10 @@ export function LissCoreSetup({
       ...previousCableSetup.backExtension,
     },
   }))
-  const [cardioSelections, setCardioSelections] = useState<Record<string, CardioIntervalSelection>>({})
+  const [cardioSelections, setCardioSelections] = useState<Record<string, CardioIntervalSelection>>(initialCardioSelections)
   const [voiceCues, setVoiceCues] = useState(initialVoiceCues)
   const [savedMessage, setSavedMessage] = useState(false)
+  const [showOptions, setShowOptions] = useState(duringWorkout)
 
   const plannedSeconds = useMemo(() => getPlannedWorkoutSeconds(template), [template])
   const cardioBlocks = template.blocks.filter((block) => block.kind === "cardio")
@@ -296,7 +328,24 @@ export function LissCoreSetup({
           <p className="mt-2 text-sm text-slate-500">{formatDuration(plannedSeconds)} planned · {template.blocks.length} work blocks</p>
         </div>
 
-        <Card className="gap-4 border-violet-200 py-5">
+        <p className="text-center text-sm text-slate-500">
+          {duringWorkout ? "The timer continues. Adjust your cable setup, cardio, and voice cues here." : "Ready when you are. Adjust resistance and optional cable height as you go."}
+        </p>
+        {!duringWorkout && (
+          <Button variant="outline" className="w-full" aria-expanded={showOptions} aria-controls="liss-workout-options" onClick={() => setShowOptions(!showOptions)}>
+            <Settings2 /> {showOptions ? "Hide options" : "Workout options"}
+          </Button>
+        )}
+        {showOptions && <div id="liss-workout-options" className="space-y-4">
+        {duringWorkout ? (
+          <Card className="p-5">
+            <h2 className="font-bold text-slate-900">Workout sequence</h2>
+            <p className="text-sm text-slate-500">Set durations and order before starting a workout.</p>
+            <ol className="space-y-2 text-sm text-slate-700">
+              {template.blocks.map((block) => <li key={block.id}>{blockOccurrenceLabel(template.blocks, block)} · {formatDuration(block.durationSeconds)}{block.kind === "rotation" ? " per side" : ""}</li>)}
+            </ol>
+          </Card>
+        ) : <Card className="gap-4 border-violet-200 py-5">
           <CardHeader className="px-5">
             <div className="flex items-center gap-2">
               <Clock3 className="h-5 w-5 text-violet-600" />
@@ -338,7 +387,7 @@ export function LissCoreSetup({
               </div>
             ))}
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card className="gap-4 py-5">
           <CardHeader className="px-5">
@@ -393,15 +442,16 @@ export function LissCoreSetup({
           </CardContent>
         </Card>
 
-        <div className="space-y-2">
+        {!duringWorkout && <div className="space-y-2">
           <Button variant="outline" className="h-11 w-full" onClick={handleSaveDefault}><Save /> Save Today&apos;s Workout as Default</Button>
           {savedMessage && <p className="text-center text-xs font-medium text-emerald-600">Default template updated.</p>}
-        </div>
+        </div>}
+        </div>}
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-violet-100 bg-white/95 p-4 backdrop-blur">
         <Button className="mx-auto h-12 w-full max-w-2xl bg-violet-600 text-base hover:bg-violet-700" onClick={() => onStart(normalizeLissCoreTemplate(template), cableSetup, cardioSelections, voiceCues)}>
-          <Play className="h-5 w-5 fill-current" /> Start Workout · {formatDuration(plannedSeconds)}
+          {duringWorkout ? <><Save /> Save options & return</> : <><Play className="h-5 w-5 fill-current" /> Start Workout · {formatDuration(plannedSeconds)}</>}
         </Button>
       </div>
     </div>

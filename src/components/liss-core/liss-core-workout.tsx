@@ -66,7 +66,7 @@ import {
   LissCoreTemplate,
   LissCoreWorkoutSession,
 } from "@/types/workout"
-import { CableSetupFields, CardioModalityFields, LissCoreSetup } from "./liss-core-setup"
+import { CableHeightField, CableSetupFields, CardioModalityFields, LissCoreSetup } from "./liss-core-setup"
 
 interface LissCoreWorkoutProps {
   onModeChange: () => void
@@ -74,6 +74,7 @@ interface LissCoreWorkoutProps {
 }
 
 interface ActiveConfig {
+  rotationOrder?: LissCoreSessionProgress["rotationOrder"]
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup
   previousCableSetup: LissCoreCableSetup
@@ -123,7 +124,7 @@ function formatCableSetupDetails(setup: CableExerciseSetup | null): string | nul
 
 function getResumeLabel(progress: LissCoreSessionProgress): string {
   if (progress.phase === "complete") return "Workout complete — finish logging"
-  const steps = buildLissCoreSteps(progress.template)
+  const steps = buildLissCoreSteps(progress.template, progress.rotationOrder ?? "left-first")
   const step = steps[Math.min(progress.stepIndex, steps.length - 1)]
   if (!step) return "Workout in progress"
   return step.label
@@ -501,19 +502,22 @@ function ActiveWorkout({
   onViewCalendar: () => void
   onExit: () => void
 }) {
-  const steps = useMemo(() => buildLissCoreSteps(config.template), [config.template])
+  const steps = useMemo(() => buildLissCoreSteps(config.template, config.rotationOrder), [config.template, config.rotationOrder])
   const [voiceCues, setVoiceCues] = useState(config.voiceCues)
   const [cableSetup, setCableSetup] = useState(config.cableSetup)
   const [cardioSelections, setCardioSelections] = useState(config.cardioSelections)
   const [openInfoStep, setOpenInfoStep] = useState<LissCoreStep | null>(null)
   const [editingCableStep, setEditingCableStep] = useState<LissCoreStep | null>(null)
   const [editingCardioStep, setEditingCardioStep] = useState<LissCoreStep | null>(null)
+  const [showOptions, setShowOptions] = useState(false)
+  const optionsDialogRef = useDialogFocus<HTMLDivElement>(showOptions, () => setShowOptions(false))
   const initializedRef = useRef(false)
   const completionStagedRef = useRef(false)
 
   const handleBoundary = useCallback((previousStep: LissCoreStep, nextStep: LissCoreStep) => {
     const sideSwitch = previousStep.exerciseId === "rotation" &&
-      previousStep.side === "left" && nextStep.exerciseId === "rotation" && nextStep.side === "right"
+      nextStep.exerciseId === "rotation" && previousStep.blockId === nextStep.blockId &&
+      previousStep.side !== nextStep.side
 
     if (sideSwitch) {
       audio.playSideSwitchSound()
@@ -602,6 +606,7 @@ function ActiveWorkout({
     if (completionStagedRef.current) return
     const captured = captureTimer()
     saveLissCoreProgress({
+      rotationOrder: config.rotationOrder ?? "alternating",
       phase: captured.isComplete ? "complete" : "active",
       template: config.template,
       cableSetup,
@@ -619,7 +624,7 @@ function ActiveWorkout({
       stepResults: captured.stepResults,
       endedEarly: captured.endedEarly,
     })
-  }, [cableSetup, captureTimer, cardioSelections, config.previousCableSetup, config.startedAt, config.template, voiceCues])
+  }, [cableSetup, captureTimer, cardioSelections, config.previousCableSetup, config.rotationOrder, config.startedAt, config.template, voiceCues])
 
   useEffect(() => {
     const interval = window.setInterval(saveProgressSnapshot, 2000)
@@ -715,6 +720,9 @@ function ActiveWorkout({
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <span className="text-xs font-bold tracking-wider text-violet-300">LISS + CORE ENDURANCE</span>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="text-violet-300 hover:bg-white/10 hover:text-white" onClick={() => setShowOptions(true)}>
+              <Settings2 /> Options
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -828,6 +836,9 @@ function ActiveWorkout({
                   <Settings2 /> Edit
                 </Button>
               </div>
+              <div className="mt-3">
+                <CableHeightField dark setup={currentCableSetup ?? {}} onChange={(setup) => updateCableSetupForStep(cableDisplayStep, setup)} />
+              </div>
               {currentSetupDetails && <p className="mt-2 text-xs text-slate-400">{currentSetupDetails}</p>}
               {currentCableSetup?.setupNote && <p className="mt-1 text-xs text-slate-400">{currentCableSetup.setupNote}</p>}
             </div>
@@ -874,6 +885,30 @@ function ActiveWorkout({
         </div>
       </main>
 
+      {showOptions && (
+        <div ref={optionsDialogRef} role="dialog" aria-modal="true" aria-label="Workout options" tabIndex={-1} className="fixed inset-0 z-50 overflow-y-auto bg-white text-slate-900">
+          <LissCoreSetup
+            duringWorkout
+            initialTemplate={config.template}
+            previousCableSetup={cableSetup}
+            initialCardioSelections={cardioSelections}
+            initialVoiceCues={voiceCues}
+            onBack={() => setShowOptions(false)}
+            onStart={(_template, setup, selections, enabledVoiceCues) => {
+              setCableSetup(setup)
+              setCardioSelections(selections)
+              setVoiceCues(enabledVoiceCues)
+              saveLissCoreVoiceCues(enabledVoiceCues)
+              setShowOptions(false)
+            }}
+            onSaveDefault={saveLissCoreTemplate}
+            onVoiceCuesChange={(enabled) => {
+              setVoiceCues(enabled)
+              saveLissCoreVoiceCues(enabled)
+            }}
+          />
+        </div>
+      )}
       {openInfoStep && <ExerciseInfoModal step={openInfoStep} onClose={() => setOpenInfoStep(null)} />}
       {editingCableStep && (
         <CableSetupModal
@@ -942,6 +977,7 @@ export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkou
       cardioSelections: pendingProgress.cardioSelections,
       voiceCues: pendingProgress.voiceCues,
       startedAt: pendingProgress.startedAt,
+      rotationOrder: pendingProgress.rotationOrder ?? "left-first",
       initialProgress: pendingProgress,
       resumeDetectedAtMs,
     })

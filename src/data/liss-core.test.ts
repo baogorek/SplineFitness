@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   DEFAULT_LISS_CORE_TEMPLATE,
+  buildLissCoreSteps,
+  getCableSetupForExercise,
   getPlannedWorkoutSeconds,
   migrateSavedLissCoreTemplate,
   setCableSetupForExercise,
@@ -40,6 +42,33 @@ describe("LISS + Core factory sequence", () => {
       .filter((block) => block.kind === "cardio")
       .map((block) => block.durationSeconds)).toEqual([10 * 60, 16 * 60, 16 * 60])
     expect(getPlannedWorkoutSeconds(DEFAULT_LISS_CORE_TEMPLATE)).toBe(66 * 60)
+  })
+
+  it("alternates rotation starting sides while preserving duration and side setup", () => {
+    const rotations = buildLissCoreSteps(DEFAULT_LISS_CORE_TEMPLATE).filter((step) => step.exerciseId === "rotation")
+    expect(rotations.map((step) => step.side)).toEqual(["left", "right", "right", "left"])
+    expect(rotations.map((step) => step.id)).toEqual(["rotation-1-left", "rotation-1-right", "rotation-2-right", "rotation-2-left"])
+    expect(rotations.every((step) => step.durationSeconds === 120)).toBe(true)
+    const setup: LissCoreCableSetup = {
+      useSideSpecificRotation: true,
+      rotation: {},
+      rotationLeft: { weight: 20, pulleyHeight: 8 },
+      rotationRight: { weight: 25, pulleyHeight: 9 },
+      crunch: {},
+      backExtension: {},
+    }
+    expect(getCableSetupForExercise(setup, rotations[2].exerciseId, rotations[2].side)).toEqual(setup.rotationRight)
+  })
+
+  it("alternates by rotation occurrence even when blocks are reordered", () => {
+    const template = { ...DEFAULT_LISS_CORE_TEMPLATE, blocks: [...DEFAULT_LISS_CORE_TEMPLATE.blocks].reverse() }
+    const rotations = buildLissCoreSteps(template).filter((step) => step.exerciseId === "rotation")
+    expect(rotations.map((step) => step.id)).toEqual(["rotation-2-left", "rotation-2-right", "rotation-1-right", "rotation-1-left"])
+  })
+
+  it("preserves the sequence of an older workout when resumed", () => {
+    const rotations = buildLissCoreSteps(DEFAULT_LISS_CORE_TEMPLATE, "left-first").filter((step) => step.exerciseId === "rotation")
+    expect(rotations.map((step) => step.side)).toEqual(["left", "right", "left", "right"])
   })
 
   it("upgrades the previous factory sequence", () => {

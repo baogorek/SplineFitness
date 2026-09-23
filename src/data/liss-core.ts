@@ -188,12 +188,21 @@ function buildWorkSteps(block: LissCoreTemplateBlock, blockIndex: number, blockC
   }]
 }
 
-export function buildLissCoreSteps(input: LissCoreTemplate): LissCoreStep[] {
+export function buildLissCoreSteps(
+  input: LissCoreTemplate,
+  rotationOrder: "alternating" | "left-first" = "alternating"
+): LissCoreStep[] {
   const template = normalizeLissCoreTemplate(input)
   const steps: LissCoreStep[] = []
+  let rotationCount = 0
 
   template.blocks.forEach((block, blockIndex) => {
-    steps.push(...buildWorkSteps(block, blockIndex, template.blocks.length))
+    const workSteps = buildWorkSteps(block, blockIndex, template.blocks.length)
+    if (block.kind === "rotation") {
+      if (rotationOrder === "alternating" && rotationCount % 2 === 1) workSteps.reverse()
+      rotationCount += 1
+    }
+    steps.push(...workSteps)
     if (blockIndex < template.blocks.length - 1 && block.transitionAfterSeconds > 0) {
       steps.push({
         id: `transition-after-${block.id}`,
@@ -262,6 +271,7 @@ export function formatCableSetup(setup: CableExerciseSetup | null | undefined): 
   if (!setup) return null
   const parts = [
     setup.weight !== undefined ? `${setup.weight} lb` : null,
+    setup.pulleyHeight !== undefined ? `Height ${setup.pulleyHeight}` : null,
     setup.pulleyPosition?.trim() ? `Pulley ${setup.pulleyPosition.trim()}` : null,
     setup.attachment?.trim() || null,
   ].filter((part): part is string => Boolean(part))
