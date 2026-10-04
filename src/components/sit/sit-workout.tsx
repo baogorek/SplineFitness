@@ -9,7 +9,6 @@ import { useWakeLock } from "@/hooks/use-wake-lock"
 import { useNavigationGuard } from "@/hooks/use-navigation-guard"
 import { RoundTimer } from "@/components/circuit/round-timer"
 import { CompletedWorkoutSave } from "@/components/shared/completed-workout-save"
-import { SitWarmup } from "./sit-warmup"
 import { SprintReady, SprintActive, SprintRecovery } from "./sit-sprint-cycle"
 import { PerformanceDropModal } from "./performance-drop-modal"
 import {
@@ -18,9 +17,8 @@ import {
   saveSitProgress,
   stageCompletedWorkout,
 } from "@/lib/storage"
-import { SprintRecord, SitPhase, SitSessionProgress, SitWorkoutSession, SitWarmupProgress } from "@/types/workout"
+import { SprintRecord, SitPhase, SitSessionProgress, SitWorkoutSession } from "@/types/workout"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
-import { BUILD_UP_CUES, BUILD_UP_SECONDS, createSitWarmup, isLegacySitWarmup, POGO_SECONDS, restoreSitWarmup, SIT_WARMUP_STEPS } from "@/lib/sit-warmup"
 
 interface SitWorkoutProps {
   onModeChange: () => void
@@ -33,15 +31,21 @@ function formatSavedAtLabel(savedAt: string): string {
   return new Date(savedAt).toLocaleString()
 }
 
+function getResumePhase(phase: SitPhase): SitPhase {
+  if (phase === "sprint-recovery") return phase
+  if (phase === "sprint-ready" || phase === "sprint-active") return "sprint-ready"
+  // Retired warm-up checkpoints return to the preparation card.
+  return "ready"
+}
+
 function getResumeCheckpointLabel(progress: SitSessionProgress): string {
-  if (isLegacySitWarmup(progress.phase)) return "Updated guided warmup · restart from easy jogging"
-  if (progress.phase === "guided-warmup") return SIT_WARMUP_STEPS[restoreSitWarmup(progress.warmup).stepIndex].title
-  return progress.phase === "sprint-recovery" ? "Sprint recovery" : `Sprint ${progress.sprintNumber} ready`
+  const phase = getResumePhase(progress.phase)
+  if (phase === "ready") return "Warm-up guidelines"
+  return phase === "sprint-recovery" ? "Sprint recovery" : `Sprint ${progress.sprintNumber} ready`
 }
 
 export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
   const [phase, setPhase] = useState<SitPhase>("ready")
-  const [warmupProgress, setWarmupProgress] = useState<SitWarmupProgress | null>(null)
   const [sprintNumber, setSprintNumber] = useState(1)
   const [sprintHistory, setSprintHistory] = useState<SprintRecord[]>([])
   const [bestTime, setBestTime] = useState<number | null>(null)
@@ -158,7 +162,6 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
     const savedAtMs = Date.now()
     saveSitProgress({
       phase: checkpointPhase,
-      warmup: warmupProgress ?? undefined,
       sprintNumber,
       sprintHistory,
       bestTime,
@@ -174,7 +177,6 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
     })
   }, [
     phase,
-    warmupProgress,
     sprintNumber,
     sprintHistory,
     bestTime,
@@ -209,24 +211,8 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
   }, [saveProgressSnapshot])
 
   const handleStartWorkout = useCallback(() => {
-    // Unlock browser audio during the user's tap, before automatic voice/timer cues.
+    // Unlock browser audio during the user's tap, before the sprint countdown.
     audio.playCountdownTick()
-    workoutStartedRef.current = true
-    startedAtRef.current = new Date().toISOString()
-    phasesCompletedRef.current = 0
-    setWarmupProgress(createSitWarmup())
-    workoutTimer.start()
-    setPhase("guided-warmup")
-  }, [audio, workoutTimer])
-
-  const handleWarmupProgress = useCallback((progress: SitWarmupProgress) => {
-    const step = SIT_WARMUP_STEPS[progress.stepIndex]
-    phasesCompletedRef.current = step.section === "Progressive runs" ? 2
-      : step.section === "Dynamic movement" || progress.status === "done" ? 1 : 0
-    setWarmupProgress(progress)
-  }, [])
-
-  const handleSkipWarmup = useCallback(() => {
     workoutStartedRef.current = true
     startedAtRef.current = new Date().toISOString()
     phasesCompletedRef.current = 3
@@ -237,14 +223,23 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
     workoutTimer.reset()
     workoutTimer.start()
     setPhase("sprint-ready")
-  }, [clearCountdownTimeouts, phaseTimer, workoutTimer])
+  }, [audio, clearCountdownTimeouts, phaseTimer, workoutTimer])
 
   const handleResume = useCallback(() => {
     if (!pendingResume) return
 
+    const resumedPhase = getResumePhase(pendingResume.phase)
+    if (resumedPhase === "ready") {
+      // A retired warm-up has no sprint results to restore. Start the workout
+      // clock only after the user confirms they have finished preparing.
+      clearSitProgress()
+      setPendingResume(null)
+      setPhase("ready")
+      return
+    }
+
     const restoredAtMs = resumeDetectedAt
-    const workoutWasRunning = pendingResume.workoutTimerRunning
-      ?? (pendingResume.phase !== "warmup-countdown")
+    const workoutWasRunning = pendingResume.workoutTimerRunning ?? true
     const phaseWasRunning = pendingResume.phaseTimerRunning
       ?? (pendingResume.phase === "sprint-recovery")
     const restoredWorkoutElapsed = restoreElapsedSeconds({
@@ -268,14 +263,6 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
     workoutTimer.resetTo(restoredWorkoutElapsed)
     setPendingResume(null)
 
-    if (pendingResume.phase === "guided-warmup" || isLegacySitWarmup(pendingResume.phase)) {
-      const restored = restoreSitWarmup(pendingResume.warmup)
-      handleWarmupProgress(restored)
-      // Work and setup resume under user control, without guessing what was done away.
-      setPhase("guided-warmup")
-      return
-    }
-
     if (pendingResume.phase === "sprint-recovery") {
       restoreTimedPhaseRef.current = {
         phase: pendingResume.phase,
@@ -293,8 +280,8 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
     }
 
     if (workoutWasRunning) workoutTimer.start()
-    setPhase(pendingResume.phase)
-  }, [pendingResume, workoutTimer, resumeDetectedAt, handleWarmupProgress])
+    setPhase(resumedPhase)
+  }, [pendingResume, workoutTimer, resumeDetectedAt])
 
   const handleDiscardResume = useCallback(() => {
     clearSitProgress()
@@ -573,7 +560,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
                 Back
               </Button>
               <span className="text-sm font-semibold tracking-tight text-foreground">SIT SPRINT</span>
-              {phase !== "guided-warmup" && <button
+              <button
                 type="button"
                 aria-pressed={testMode}
                 disabled={phase !== "ready"}
@@ -586,15 +573,15 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
               >
                 <Zap className="h-3 w-3" />
                 {testMode ? "12x" : "Test"}
-              </button>}
-              {phase !== "guided-warmup" && <button
+              </button>
+              <button
                 type="button"
                 onClick={handleTestAudio}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Volume2 className="h-3 w-3" />
                 Audio
-              </button>}
+              </button>
             </div>
             {phase === "sprint-ready" || phase === "sprint-recovery" ? (
               <div className="text-right">
@@ -609,7 +596,7 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-shrink-0 px-4 pt-4 pb-2 bg-background">
-          {workoutStartedRef.current && phase !== "guided-warmup" && (
+          {workoutStartedRef.current && (
             <RoundTimer
               formattedTime={workoutTimer.formattedTime}
               isRunning={workoutTimer.isRunning}
@@ -625,50 +612,30 @@ export function SitWorkout({ onModeChange, onViewCalendar }: SitWorkoutProps) {
               </div>
               <div className="text-center space-y-2">
                 <h2 className="text-2xl font-bold text-foreground">SIT Sprint</h2>
-                <p className="text-xl text-muted-foreground max-w-sm">
-                  Press Start once. Follow the voice cues. Pause whenever you need.
-                </p>
               </div>
-              <div className="max-w-sm space-y-3 rounded-xl bg-muted/50 p-4 text-lg leading-relaxed text-muted-foreground">
-                <p>3 minutes easy jogging, then marching, leg swings, and one {POGO_SECONDS}-second set of easy pogo hops.</p>
-                <p>Four {BUILD_UP_SECONDS}-second build-ups: {BUILD_UP_CUES.join(" → ")}. Stay below all-out effort. Use a clear, level route with room to slow down.</p>
-                <p>Walk back for a minute between runs and 3 minutes after the last. Everything advances automatically. Pause for extra recovery or to queue a repeat.</p>
-              </div>
+              <section aria-labelledby="sit-preparation-heading" className="w-full max-w-sm space-y-4 rounded-xl bg-muted/50 p-5 text-lg leading-relaxed text-muted-foreground">
+                <h3 id="sit-preparation-heading" className="text-xl font-semibold text-foreground">Before you sprint</h3>
+                <p>Start with easy walking or jogging. Then do several relaxed practice runs, gradually increasing speed toward your planned sprint effort. Walk and recover between runs.</p>
+                <p>Give yourself time to feel prepared. These practice runs should build you up without exhausting you.</p>
+                <p className="text-sm">General warm-up guidance. The linked study tested a specific routine.</p>
+                <a
+                  href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6835031/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block rounded text-base font-medium text-green-700 underline underline-offset-4 hover:text-green-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-green-600 dark:text-green-400 dark:hover:text-green-300"
+                >
+                  Read the study: a 10-minute progressive running warm-up
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              </section>
               <Button
                 size="lg"
                 onClick={handleStartWorkout}
-                className="h-14 px-8 text-lg font-semibold bg-green-500 hover:bg-green-600 text-white"
+                className="h-auto min-h-14 w-full max-w-sm whitespace-normal px-6 py-3 text-lg font-semibold bg-green-500 hover:bg-green-600 text-white"
               >
-                Start Workout
+                I&apos;m warmed up — continue
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={handleSkipWarmup}
-                className="h-12 px-8 text-base font-semibold"
-              >
-                Already Warmed Up
-              </Button>
-              <p className="text-base text-muted-foreground text-center max-w-xs -mt-2">
-                Skip the guided warmup and go straight to sprint setup.
-              </p>
             </div>
-          )}
-
-          {phase === "guided-warmup" && (
-            <SitWarmup
-              audio={audio}
-              initialProgress={warmupProgress}
-              speedMultiplier={speedMultiplier}
-              onProgress={handleWarmupProgress}
-              onClockRunning={(running) => { if (running) workoutTimer.start(); else workoutTimer.pause() }}
-              onComplete={() => {
-                phasesCompletedRef.current = 3
-                workoutTimer.start()
-                transitionTo("sprint-ready")
-              }}
-              onEndWorkout={handleEndWorkout}
-            />
           )}
 
           {phase === "sprint-ready" && sprintCountdownValue !== null && (

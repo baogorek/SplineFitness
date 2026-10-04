@@ -2,8 +2,8 @@ export type WorkoutMode = "freeform" | "circuit" | "interval" | "sit" | "liss-co
 export type WorkoutVariant = "A" | "B"
 export type SitPhase =
   | "ready"
-  | "guided-warmup"
   // Legacy warmup phases remain readable in saved sessions.
+  | "guided-warmup"
   | "warmup-countdown"
   | "general-warmup"
   | "post-warmup-shakeout"
@@ -235,6 +235,7 @@ export interface SitSessionProgress {
   savedAt: string
 }
 
+// Retained only to read checkpoints saved before the guided warm-up was removed.
 export interface SitWarmupProgress {
   version: 1 | 2 | 3
   stepIndex: number

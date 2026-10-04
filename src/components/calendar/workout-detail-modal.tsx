@@ -180,7 +180,7 @@ function SitDataView({ session }: { session: SitWorkoutSession }) {
         </div>
         <div className="col-span-2 rounded-lg bg-muted/50 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Workout</p>
-          <p className="mt-1 text-sm font-bold text-foreground">{formatDuration(session.totalTimeSeconds)} · {session.phasesCompleted}/4 phases</p>
+          <p className="mt-1 text-sm font-bold text-foreground">{formatDuration(session.totalTimeSeconds)}</p>
         </div>
       </div>
       {session.sprintTimes.length > 0 && (
