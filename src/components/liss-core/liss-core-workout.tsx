@@ -37,6 +37,7 @@ import {
   formatCableSetup,
   formatCardioSelection,
   getCableSetupForExercise,
+  getLissCoreProgressPercent,
   getNextWorkStep,
   migrateSavedLissCoreTemplate,
   normalizeLissCoreTemplate,
@@ -67,6 +68,7 @@ import {
   LissCoreWorkoutSession,
 } from "@/types/workout"
 import { CableHeightField, CableSetupFields, CardioModalityFields, LissCoreSetup } from "./liss-core-setup"
+import { WorkoutStartCountdown } from "./workout-start-countdown"
 
 interface LissCoreWorkoutProps {
   onModeChange: () => void
@@ -662,9 +664,7 @@ function ActiveWorkout({
   const nextCardioText = nextWorkStep?.blockId && nextWorkStep.exerciseId === "cardio"
     ? formatCardioSelection(cardioSelections[nextWorkStep.blockId])
     : null
-  const progressPercent = currentStep
-    ? Math.min(100, Math.max(0, ((currentStep.durationSeconds - timer.remainingMs / 1000) / currentStep.durationSeconds) * 100))
-    : 0
+  const progressPercent = getLissCoreProgressPercent(steps, timer.stepIndex, timer.remainingMs)
 
   const updateCableSetupForStep = (step: LissCoreStep, setup: CableExerciseSetup) => {
     setCableSetup((current) => setCableSetupForExercise(
@@ -788,8 +788,14 @@ function ActiveWorkout({
             {formatTimer(timer.remainingSeconds)}
           </div>
 
-          <div className="mt-6 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
-            <div className={`h-full rounded-full transition-[width] duration-200 ${isTransition ? "bg-amber-400" : "bg-violet-500"}`} style={{ width: `${progressPercent}%` }} />
+          <div className="mt-6 w-full max-w-md">
+            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-400">
+              <span>Overall workout</span>
+              <span>{Math.floor(progressPercent)}%</span>
+            </div>
+            <div role="progressbar" aria-label="Overall workout progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(progressPercent)} className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-violet-500 transition-[width] duration-200" style={{ width: `${progressPercent}%` }} />
+            </div>
           </div>
 
           {!isTransition && currentStep.exerciseId === "cardio" && (
@@ -942,6 +948,7 @@ export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkou
   const resumeDialogRef = useDialogFocus<HTMLDivElement>(Boolean(pendingProgress))
   const [resumeDetectedAtMs] = useState(() => Date.now())
   const [activeConfig, setActiveConfig] = useState<ActiveConfig | null>(null)
+  const [startConfig, setStartConfig] = useState<Omit<ActiveConfig, "startedAt"> | null>(null)
 
   const handleStart = (
     template: LissCoreTemplate,
@@ -950,21 +957,31 @@ export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkou
     enabledVoiceCues: boolean
   ) => {
     clearLissCoreProgress()
-    audio.playExerciseStartChime()
-    vibrate(180)
-    if (enabledVoiceCues) {
-      const firstCardio = template.blocks.find((block) => block.kind === "cardio")
-      const modality = firstCardio ? formatCardioSelection(cardioSelections[firstCardio.id]) : null
-      audio.speak(`Cardio.${modality ? ` ${modality}.` : ""}`)
-    }
-    setActiveConfig({
+    // Unlock audio in the Start tap; announce the exercise when the countdown ends.
+    audio.playCountdownTick()
+    if (enabledVoiceCues) audio.speak("Get ready.")
+    setStartConfig({
       template,
       cableSetup,
       previousCableSetup,
       cardioSelections,
       voiceCues: enabledVoiceCues,
-      startedAt: new Date().toISOString(),
     })
+  }
+
+  const handleCountdownComplete = () => {
+    if (!startConfig) return
+    const firstStep = buildLissCoreSteps(startConfig.template)[0]
+    audio.playCountdownGo()
+    vibrate(180)
+    if (startConfig.voiceCues) {
+      const modality = firstStep.exerciseId === "cardio" && firstStep.blockId
+        ? formatCardioSelection(startConfig.cardioSelections[firstStep.blockId])
+        : null
+      audio.speak(`${speechForStep(firstStep)}${modality ? ` ${modality}.` : ""}`)
+    }
+    setActiveConfig({ ...startConfig, startedAt: new Date().toISOString() })
+    setStartConfig(null)
   }
 
   const handleResume = () => {
@@ -1004,6 +1021,15 @@ export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkou
           saveLissCoreVoiceCues(enabled)
         }}
       />
+
+      {startConfig && (
+        <WorkoutStartCountdown
+          firstStep={buildLissCoreSteps(startConfig.template)[0]}
+          audio={audio}
+          onStart={handleCountdownComplete}
+          onCancel={() => setStartConfig(null)}
+        />
+      )}
 
       {pendingProgress && (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">

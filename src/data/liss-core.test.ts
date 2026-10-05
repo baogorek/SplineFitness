@@ -3,6 +3,7 @@ import {
   DEFAULT_LISS_CORE_TEMPLATE,
   buildLissCoreSteps,
   getCableSetupForExercise,
+  getLissCoreProgressPercent,
   getPlannedWorkoutSeconds,
   migrateSavedLissCoreTemplate,
   setCableSetupForExercise,
@@ -100,5 +101,38 @@ describe("LISS + Core factory sequence", () => {
       ...setup,
       rotationRight: { weight: 35 },
     })
+  })
+})
+
+describe("whole-workout progress", () => {
+  const steps = buildLissCoreSteps(DEFAULT_LISS_CORE_TEMPLATE)
+
+  it("uses the full 66-minute session and stays continuous at step boundaries", () => {
+    expect(getLissCoreProgressPercent(steps, 0, 600_000)).toBe(0)
+    expect(getLissCoreProgressPercent(steps, 0, 0)).toBeCloseTo(10 / 66 * 100)
+    expect(getLissCoreProgressPercent(steps, 1, 30_000)).toBeCloseTo(10 / 66 * 100)
+    expect(getLissCoreProgressPercent(steps, 1, 15_000)).toBeCloseTo(10.25 / 66 * 100)
+    expect(getLissCoreProgressPercent(steps, 2, 120_000)).toBeCloseTo(10.5 / 66 * 100)
+  })
+
+  it("shows half of the workout at 33 minutes and 100 percent at the end", () => {
+    const secondCardio = steps.findIndex((step) => step.id === "cardio-2")
+    // Cardio 2 starts at minute 22 and ends at minute 38.
+    expect(getLissCoreProgressPercent(steps, secondCardio, 300_000)).toBe(50)
+    expect(getLissCoreProgressPercent(steps, steps.length - 1, 0)).toBe(100)
+  })
+
+  it("uses a customized duration and reflects skipping, going back, or restarting", () => {
+    const customized = buildLissCoreSteps({
+      version: 2,
+      blocks: [
+        { id: "cardio-1", kind: "cardio", durationSeconds: 60, transitionAfterSeconds: 0 },
+        { id: "cardio-2", kind: "cardio", durationSeconds: 180, transitionAfterSeconds: 0 },
+      ],
+    })
+    expect(getLissCoreProgressPercent(customized, 1, 180_000)).toBe(25)
+    expect(getLissCoreProgressPercent(customized, 1, 120_000)).toBe(50)
+    expect(getLissCoreProgressPercent(customized, 0, 60_000)).toBe(0)
+    expect(getLissCoreProgressPercent([], 0, 0)).toBe(0)
   })
 })

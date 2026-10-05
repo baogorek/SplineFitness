@@ -34,7 +34,7 @@ export default function PrivacyPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Privacy Policy</h1>
-          <p className="text-muted-foreground">Last updated: August 19, 2026</p>
+          <p className="text-muted-foreground">Last updated: October 4, 2026</p>
         </div>
 
         <div className="prose prose-slate dark:prose-invert max-w-none">
@@ -70,6 +70,18 @@ export default function PrivacyPage() {
               <li>Workout duration and timestamps</li>
               <li>Any notes you add to your workouts</li>
             </ul>
+
+            <h3 className="text-lg font-medium text-foreground mb-2">Usage Analytics</h3>
+            <p className="text-muted-foreground mb-4">
+              We use Vercel Web Analytics to measure visits and page views, including visits made without
+              signing in. It collects information such as pages viewed, referring websites, approximate
+              location, and browser and device type. These statistics help us understand how people find
+              and use Spline Fitness. Vercel Web Analytics does not use cookies, and we do not send your
+              account information or workout records as analytics events. Learn more in{" "}
+              <a href="https://vercel.com/docs/analytics/privacy-policy" className="underline underline-offset-4">
+                Vercel&apos;s analytics privacy documentation
+              </a>.
+            </p>
           </section>
 
           <section className="mb-8">
@@ -79,6 +91,7 @@ export default function PrivacyPage() {
               <li>Provide and maintain the workout tracking service</li>
               <li>Display your workout history and progress</li>
               <li>Associate your workouts with your account so you can access them across devices</li>
+              <li>Understand aggregate site traffic and improve the application</li>
             </ul>
             <p className="text-muted-foreground mb-4">
               We do not sell, rent, or share your personal information with third parties for marketing purposes.
@@ -98,7 +111,7 @@ export default function PrivacyPage() {
             <p className="text-muted-foreground mb-4">We use the following third-party services:</p>
             <ul className="list-disc list-inside text-muted-foreground mb-4 space-y-1">
               <li><strong>Google Firebase</strong> - For authentication and secure workout data storage</li>
-              <li><strong>Vercel</strong> - For hosting the application</li>
+              <li><strong>Vercel</strong> - For hosting the application and aggregate website analytics</li>
             </ul>
             <p className="text-muted-foreground mb-4">
               Each of these services has their own privacy policies governing their use of data.

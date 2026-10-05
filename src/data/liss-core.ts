@@ -228,6 +228,18 @@ export function getPlannedWorkoutSeconds(template: LissCoreTemplate): number {
   return buildLissCoreSteps(template).reduce((total, step) => total + step.durationSeconds, 0)
 }
 
+/** Position in the planned sequence, including transitions and skipped steps. */
+export function getLissCoreProgressPercent(steps: LissCoreStep[], stepIndex: number, remainingMs: number): number {
+  const totalSeconds = steps.reduce((total, step) => total + step.durationSeconds, 0)
+  if (totalSeconds <= 0) return 0
+  const currentStep = steps[stepIndex]
+  const precedingSeconds = steps.slice(0, stepIndex).reduce((total, step) => total + step.durationSeconds, 0)
+  const currentSeconds = currentStep
+    ? Math.min(currentStep.durationSeconds, Math.max(0, currentStep.durationSeconds - remainingMs / 1000))
+    : 0
+  return Math.min(100, Math.max(0, (precedingSeconds + currentSeconds) / totalSeconds * 100))
+}
+
 export function getCableSetupForExercise(
   cableSetup: LissCoreCableSetup,
   exerciseId?: LissCoreStep["exerciseId"],
