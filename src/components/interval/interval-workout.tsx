@@ -19,12 +19,9 @@ import {
 } from "@/lib/storage"
 import { IntervalPhase, IntervalSessionProgress, IntervalWorkoutSession } from "@/types/workout"
 import { restoreElapsedSeconds } from "@/lib/timer-persistence"
-import {
-  INTERVAL_SPEECH_CUES,
-  INTERVAL_COMPLETE_CUE,
-  INTERVAL_DURATION_SECONDS,
-  TOTAL_SETS,
-} from "@/data/interval-cues"
+
+const INTERVAL_DURATION_SECONDS = 240
+const TOTAL_SETS = 4
 
 interface IntervalWorkoutProps {
   onModeChange: () => void
@@ -47,7 +44,6 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
   useWakeLock(activeWorkout)
   useNavigationGuard(activeWorkout)
 
-  const spokenCuesRef = useRef<Set<number>>(new Set())
   const startedAtRef = useRef<string>("")
   const countdownTimeoutsRef = useRef<NodeJS.Timeout[]>([])
   const setNotesRef = useRef<Record<number, string>>({})
@@ -89,18 +85,7 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
 
   const intervalTimer = useTimer({
     targetSeconds: INTERVAL_DURATION_SECONDS,
-    onTick: (remainingSeconds) => {
-      const elapsed = INTERVAL_DURATION_SECONDS - remainingSeconds
-      for (const cue of INTERVAL_SPEECH_CUES) {
-        if (elapsed >= cue.elapsedSeconds && !spokenCuesRef.current.has(cue.elapsedSeconds)) {
-          spokenCuesRef.current.add(cue.elapsedSeconds)
-          audio.speak(cue.text)
-        }
-      }
-    },
     onComplete: () => {
-      audio.speak(INTERVAL_COMPLETE_CUE)
-      spokenCuesRef.current.clear()
       intervalTimer.reset()
       if (currentSet >= TOTAL_SETS) {
         completionInProgressRef.current = true
@@ -143,11 +128,6 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
     const restored = restoredIntervalRef.current
     if (restored === null) return
 
-    spokenCuesRef.current = new Set(
-      INTERVAL_SPEECH_CUES
-        .filter((cue) => cue.elapsedSeconds <= restored.elapsedSeconds)
-        .map((cue) => cue.elapsedSeconds)
-    )
     intervalTimer.resetTo(restored.elapsedSeconds)
     restoredIntervalRef.current = null
     if (restored.isRunning) intervalTimer.start()
@@ -304,7 +284,6 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
     setNoteEditorOpen(false)
     restTimer.pause()
     restTimer.reset()
-    spokenCuesRef.current.clear()
     clearCountdownTimeouts()
   }, [workoutStarted, workoutTimer, restTimer, clearCountdownTimeouts, saveCurrentNote, clearIOSUndoStack])
 
@@ -322,12 +301,10 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
     clearIOSUndoStack()
     clearCountdownTimeouts()
     setNoteEditorOpen(false)
-    spokenCuesRef.current.clear()
     setPhase("countdown")
 
     const tick = 1000 / speedMultiplier
 
-    audio.speak(`Set ${currentSet}`)
     setCountdownDisplay("5")
 
     const timeouts = [
@@ -338,7 +315,7 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
       setTimeout(startInterval, tick * 5),
     ]
     countdownTimeoutsRef.current = timeouts
-  }, [currentSet, audio, speedMultiplier, saveCurrentNote, clearIOSUndoStack, clearCountdownTimeouts, startInterval])
+  }, [audio, speedMultiplier, saveCurrentNote, clearIOSUndoStack, clearCountdownTimeouts, startInterval])
 
   const handleStartSetImmediate = useCallback(() => {
     startInterval()
@@ -352,13 +329,11 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
   const handleCancelCountdown = useCallback(() => {
     clearCountdownTimeouts()
     setCountdownDisplay("")
-    spokenCuesRef.current.clear()
     intervalTimer.reset()
     setPhase("ready")
   }, [clearCountdownTimeouts, intervalTimer])
 
   const handleResetInterval = useCallback(() => {
-    spokenCuesRef.current.clear()
     intervalTimer.reset()
   }, [intervalTimer])
 
@@ -393,7 +368,6 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
     restTimer.resetTo(restoredRestElapsed)
     intervalTimer.pause()
     intervalTimer.reset()
-    spokenCuesRef.current.clear()
     clearCountdownTimeouts()
     setPendingResume(null)
 
@@ -447,10 +421,6 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
     setCompletedSessionData(stageCompletedWorkout(session) as IntervalWorkoutSession)
     setPhase("complete")
   }, [phase, currentSet, clearCountdownTimeouts, intervalTimer, workoutTimer, restTimer, buildSession, saveCurrentNote])
-
-  const handleTestAudio = () => {
-    audio.speak("Oxidative system approaching VO2 max.")
-  }
 
   const leaveCompletedWorkout = useCallback((next: () => void) => {
     if (!completedSessionData) {
@@ -639,11 +609,11 @@ export function IntervalWorkout({ onModeChange, onViewCalendar }: IntervalWorkou
               </button>
               <button
                 type="button"
-                onClick={handleTestAudio}
+                onClick={audio.playCountdownTick}
                 className="flex h-6 px-2 items-center gap-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Volume2 className="h-3 w-3" />
-                Audio
+                Test beep
               </button>
             </div>
             <div className="flex items-center gap-3">

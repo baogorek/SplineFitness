@@ -138,11 +138,6 @@ export interface CircuitSessionProgress {
 }
 
 // Interval Types
-export interface IntervalSpeechCue {
-  elapsedSeconds: number
-  text: string
-}
-
 export interface IntervalWorkoutSession {
   mode: "interval"
   startedAt: string
