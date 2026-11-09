@@ -22,7 +22,7 @@ describe("frontier suggestions from real effort times", () => {
   it.each([90, 99, 104.9, 104.999])("does not round %s seconds into eligibility", (seconds) => {
     expect(getFrontierTimerProposal(exercise(), seconds)).toBeNull()
   })
-  it.each([[105, 105], [111, 105], [112.5, 120], [119, 120]])("rounds %s only after the full 15-second improvement", (seconds, rounded) => {
+  it.each([[105, 105], [111, 105], [112.5, 105], [119.999, 105], [120, 120]])("credits only the 15-second mark reached at %s seconds", (seconds, rounded) => {
     expect(getFrontierTimerProposal(exercise(), seconds)).toEqual({ value: { primary: rounded } })
   })
   it("measures against the stored frontier, including non-rounded marks", () => {
@@ -34,11 +34,16 @@ describe("frontier suggestions from real effort times", () => {
     expect(getFrontierTimerProposal(exercise("duration-faster"), 75)).toEqual({ value: { primary: 75 } })
     expect(getFrontierTimerProposal(exercise("duration-faster"), 110)).toBeNull()
   })
+  it("credits a faster mark only after reaching it", () => {
+    const entry = exercise("duration-faster")
+    expect(getFrontierTimerProposal(entry, 60.001)).toEqual({ value: { primary: 75 } })
+    expect(getFrontierTimerProposal(entry, 60)).toEqual({ value: { primary: 60 } })
+  })
   it("preserves the custom descriptor and uses the custom time as the target", () => {
     expect(getFrontierTimerTarget(custom)).toBe(105)
     expect(getFrontierTimerProposal(custom, 119.999)).toBeNull()
     expect(getFrontierTimerProposal(custom, 120)).toEqual({ rawValue: "arms side / 2:00" })
-    expect(getFrontierTimerProposal({ ...custom, changes: [{ ...custom.changes[0], rawValue: "arms side/1:45" }] }, 130)).toEqual({ rawValue: "arms side/2:15" })
+    expect(getFrontierTimerProposal({ ...custom, changes: [{ ...custom.changes[0], rawValue: "arms side/1:45" }] }, 130)).toEqual({ rawValue: "arms side/2:00" })
   })
   it.each(["520 Peak / 435 Avg", "level / 12", "arms side", "hold / 1:99", "hold / -20s"])("does not infer a duration from %s", (rawValue) => {
     const entry = { ...custom, changes: [{ ...custom.changes[0], rawValue }] }
@@ -53,7 +58,7 @@ describe("frontier suggestions from real effort times", () => {
     expect(getFrontierTimerProposal(entry, 105, 130)).toEqual({ value: { primary: 130, secondary: 105 } })
   })
   it("can establish a first time mark without inventing a custom mark", () => {
-    expect(getFrontierTimerProposal({ ...exercise(), changes: [] }, 40)).toEqual({ value: { primary: 45 } })
+    expect(getFrontierTimerProposal({ ...exercise(), changes: [] }, 40)).toEqual({ value: { primary: 30 } })
     expect(getFrontierTimerProposal({ ...custom, changes: [] }, 40)).toBeNull()
   })
   it.each(["reps", "weight", "speed"] as const)("does not change a %s frontier based on time", (metric) => {

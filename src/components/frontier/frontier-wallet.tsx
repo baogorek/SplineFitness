@@ -44,6 +44,7 @@ import {
 import { FrontierEntrySheet } from "./frontier-entry-sheet"
 import { FrontierImportSheet } from "./frontier-import-sheet"
 import { FrontierPaperCard } from "./frontier-paper-card"
+import { FrontierRestTimer } from "./frontier-rest-timer"
 import { FrontierTimer } from "./frontier-timer"
 
 interface FrontierWalletProps {
@@ -79,6 +80,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   const [locationSheetMode, setLocationSheetMode] = useState<"add" | "edit" | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [restStartedAt, setRestStartedAt] = useState<number | null>(null)
   const [timerSession, setTimerSession] = useState<{ cardId: string; exercise: FrontierExercise | null; initialWeight?: number } | null>(null)
   const [timerExpanded, setTimerExpanded] = useState(true)
   const saveVersionRef = useRef(0)
@@ -338,6 +340,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
   }
 
   const handleSetAttemptToday = async (cardId: string, exerciseId: string, tried: boolean) => {
+    if (tried) setRestStartedAt(Date.now())
     const nextCards = setFrontierAttemptToday(cardsRef.current, cardId, exerciseId, tried)
     cardsRef.current = nextCards
     setCards(nextCards)
@@ -435,6 +438,10 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
     )
   }
 
+  const restTimer = restStartedAt === null ? null : (
+    <FrontierRestTimer key={restStartedAt} startedAt={restStartedAt} onDismiss={() => setRestStartedAt(null)} />
+  )
+
   return (
     <div className="min-h-screen w-full overflow-hidden bg-[radial-gradient(circle_at_top,_#e0e7ff_0,_#f8fafc_42%,_#e2e8f0_100%)] text-slate-900">
       <header className="border-b border-white/70 bg-white/75 px-4 py-3 backdrop-blur-xl">
@@ -460,6 +467,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
       </header>
 
       <main className={`mx-auto flex w-full max-w-3xl flex-col px-2 pt-6 sm:px-6 sm:pt-8 ${timerSession ? "pb-28" : "pb-8"}`}>
+        {!(timerSession && timerExpanded) && restTimer}
         <div className="mb-4 flex items-center justify-between px-2 sm:px-8">
           <Button
             variant="outline"
@@ -557,6 +565,9 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
             const exercise = cards.find((card) => card.id === cardId)?.exercises.find((item) => item.id === exerciseId)
             if (exercise) setTimerSession({ cardId, exercise })
           }}
+          restTimer={restTimer}
+          onSetStart={() => setRestStartedAt(null)}
+          onSetFinish={() => setRestStartedAt(Date.now())}
           onRecord={async (attempt, update) => {
             if (!timerSession.exercise) return
             const nextCards = recordFrontierTimerEffort(cardsRef.current, timerSession.cardId, timerSession.exercise.id, attempt, update)

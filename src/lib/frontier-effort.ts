@@ -58,7 +58,10 @@ export function getFrontierTimerProposal(
     ? currentSeconds - elapsedSeconds : elapsedSeconds - currentSeconds
   // Test the real effort BEFORE rounding: 1:44.9 does not beat 1:30 by 15 seconds.
   if (improvementSeconds !== null && improvementSeconds < 15) return null
-  const roundedSeconds = Math.round(elapsedSeconds / 15) * 15
+  // Credit only marks the effort actually reached.
+  const roundedSeconds = (exercise.metric === "duration-faster"
+    ? Math.ceil(elapsedSeconds / 15)
+    : Math.floor(elapsedSeconds / 15)) * 15
   if (roundedSeconds <= 0) return null
 
   if (exercise.metric === "freeform") {

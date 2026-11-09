@@ -23,11 +23,14 @@ interface FrontierTimerProps {
   initialWeight?: number
   choices: { cardId: string; cardName: string; exercise: FrontierExercise }[]
   onSelectExercise: (cardId: string, exerciseId: string) => void
+  restTimer: React.ReactNode
+  onSetStart: () => void
+  onSetFinish: () => void
   onRecord: (attempt: FrontierAttempt, update?: { baseline: FrontierExercise; proposal: FrontierTimerProposal }) => Promise<void>
   onUndoEffort: (attemptId: string) => Promise<void>
 }
 
-export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose, initialWeight, choices, onSelectExercise, onRecord, onUndoEffort }: FrontierTimerProps) {
+export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClose, initialWeight, choices, onSelectExercise, restTimer, onSetStart, onSetFinish, onRecord, onUndoEffort }: FrontierTimerProps) {
   const [targetInput, setTargetInput] = useState(() => formatDurationInput(getFrontierTimerTarget(exercise) ?? undefined))
   const [weightInput, setWeightInput] = useState(() => String(initialWeight ?? (exercise ? getCurrentFrontierChange(exercise.metric, exercise.changes)?.value?.primary : undefined) ?? ""))
   const [baseline, setBaseline] = useState(exercise)
@@ -120,7 +123,9 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
 
   const finishEffort = () => {
     const result = timer.finish()
-    if (!result || result.elapsedSeconds <= 0 || !exercise) return
+    if (!result || result.elapsedSeconds <= 0) return
+    onSetFinish()
+    if (!exercise) return
     const attempt: FrontierAttempt = {
       id: crypto.randomUUID(), attemptedAt: new Date().toISOString(), source: "timer",
       elapsedSeconds: result.elapsedSeconds,
@@ -240,6 +245,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
             <p className="mb-4 text-center text-sm leading-relaxed text-slate-500">Count down to your target, then keep counting total time until you finish.</p>
             <Button className="h-14 w-full bg-indigo-600 text-base font-bold text-white hover:bg-indigo-700" disabled={invalidTarget || invalidWeight} onClick={() => {
               setBaseline(exercise)
+              onSetStart()
               timer.start(parsedTarget)
             }}>
               <Play className="mr-2 h-5 w-5" />Start · 5s to get ready
@@ -247,6 +253,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
           </>
         ) : finished ? (
           <>
+            {restTimer}
             {effort && (
               <div className="mb-4 space-y-3">
                 <p role="status" className={`text-sm ${saveState === "error" ? "text-red-700" : "text-emerald-700"}`}>{resultStatus}</p>
@@ -259,7 +266,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
                 {proposal && baseline && !updated && !undone && (
                   <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                     <p className="text-sm font-semibold">Update frontier to <span className="break-words font-mono">{formatFrontierChange(baseline.metric, { id: "proposal", kind: "progress", ...proposal })}</span>?</p>
-                    <p className="mt-1 text-xs text-slate-600">Suggested time rounded to the nearest 15 seconds.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} lb.`}</p>
+                    <p className="mt-1 text-xs text-slate-600">Suggested time uses the last 15-second mark you reached.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} lb.`}</p>
                     <Button className="mt-3 w-full bg-indigo-600 text-white hover:bg-indigo-700" disabled={saveState !== "saved"} onClick={() => void saveEffort(effort, true)}>Update frontier</Button>
                     <p className="mt-2 text-xs text-slate-500">Choose Done to keep only the recorded effort.</p>
                   </div>
