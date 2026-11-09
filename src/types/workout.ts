@@ -297,7 +297,7 @@ export interface LissCoreStep {
   side?: "left" | "right"
   holdNumber?: number
   workCategory?: LissCoreWorkCategory
-  transitionType?: "between-blocks"
+  transitionType?: "between-blocks" | "switch-sides"
   instructions?: string
   blockId?: string
   blockIndex?: number
@@ -333,6 +333,8 @@ export interface LissCoreWorkoutSession {
 }
 
 export interface LissCoreSessionProgress {
+  /** Older snapshots store step indexes from the sequence before timed side changes. */
+  timedTransitions?: boolean
   /** Missing on older sessions, which always started rotations on the left. */
   rotationOrder?: "alternating" | "left-first"
   phase: "active" | "complete"

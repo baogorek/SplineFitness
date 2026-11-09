@@ -77,6 +77,7 @@ interface LissCoreWorkoutProps {
 
 interface ActiveConfig {
   rotationOrder?: LissCoreSessionProgress["rotationOrder"]
+  legacyTransitions?: boolean
   template: LissCoreTemplate
   cableSetup: LissCoreCableSetup
   previousCableSetup: LissCoreCableSetup
@@ -126,7 +127,7 @@ function formatCableSetupDetails(setup: CableExerciseSetup | null): string | nul
 
 function getResumeLabel(progress: LissCoreSessionProgress): string {
   if (progress.phase === "complete") return "Workout complete — finish logging"
-  const steps = buildLissCoreSteps(progress.template, progress.rotationOrder ?? "left-first")
+  const steps = buildLissCoreSteps(progress.template, progress.rotationOrder ?? "left-first", !progress.timedTransitions)
   const step = steps[Math.min(progress.stepIndex, steps.length - 1)]
   if (!step) return "Workout in progress"
   return step.label
@@ -504,7 +505,7 @@ function ActiveWorkout({
   onViewCalendar: () => void
   onExit: () => void
 }) {
-  const steps = useMemo(() => buildLissCoreSteps(config.template, config.rotationOrder), [config.template, config.rotationOrder])
+  const steps = useMemo(() => buildLissCoreSteps(config.template, config.rotationOrder, config.legacyTransitions), [config.template, config.rotationOrder, config.legacyTransitions])
   const [voiceCues, setVoiceCues] = useState(config.voiceCues)
   const [cableSetup, setCableSetup] = useState(config.cableSetup)
   const [cardioSelections, setCardioSelections] = useState(config.cardioSelections)
@@ -521,7 +522,7 @@ function ActiveWorkout({
       nextStep.exerciseId === "rotation" && previousStep.blockId === nextStep.blockId &&
       previousStep.side !== nextStep.side
 
-    if (sideSwitch) {
+    if (sideSwitch || nextStep.transitionType === "switch-sides") {
       audio.playSideSwitchSound()
       vibrate([140, 80, 140])
       if (voiceCues) audio.speak("Switch sides.")
@@ -609,6 +610,7 @@ function ActiveWorkout({
     const captured = captureTimer()
     saveLissCoreProgress({
       rotationOrder: config.rotationOrder ?? "alternating",
+      timedTransitions: !config.legacyTransitions,
       phase: captured.isComplete ? "complete" : "active",
       template: config.template,
       cableSetup,
@@ -626,7 +628,7 @@ function ActiveWorkout({
       stepResults: captured.stepResults,
       endedEarly: captured.endedEarly,
     })
-  }, [cableSetup, captureTimer, cardioSelections, config.previousCableSetup, config.rotationOrder, config.startedAt, config.template, voiceCues])
+  }, [cableSetup, captureTimer, cardioSelections, config.previousCableSetup, config.legacyTransitions, config.rotationOrder, config.startedAt, config.template, voiceCues])
 
   useEffect(() => {
     const interval = window.setInterval(saveProgressSnapshot, 2000)
@@ -756,7 +758,7 @@ function ActiveWorkout({
           {isTransition ? (
             <>
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-300">
-                {currentStep.kind === "reset" ? "Reset" : "Get ready"}
+                {currentStep.transitionType === "switch-sides" ? currentStep.label : currentStep.kind === "reset" ? "Reset" : "Get ready"}
               </p>
               <h1 className="mt-3 text-3xl font-bold">{upcomingLabel}</h1>
               {(nextWorkStep?.substep || currentStep.substep) && (
@@ -995,6 +997,7 @@ export function LissCoreWorkout({ onModeChange, onViewCalendar }: LissCoreWorkou
       voiceCues: pendingProgress.voiceCues,
       startedAt: pendingProgress.startedAt,
       rotationOrder: pendingProgress.rotationOrder ?? "left-first",
+      legacyTransitions: !pendingProgress.timedTransitions,
       initialProgress: pendingProgress,
       resumeDetectedAtMs,
     })

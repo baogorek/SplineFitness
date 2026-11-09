@@ -20,6 +20,7 @@ import {
   getPlannedWorkoutSeconds,
   normalizeLissCoreTemplate,
   WORK_BLOCK_NAMES,
+  MIN_LISS_TRANSITION_SECONDS,
 } from "@/data/liss-core"
 import {
   CableExerciseSetup,
@@ -375,8 +376,8 @@ export function LissCoreSetup({
                   {index < template.blocks.length - 1 && (
                     <NumberSetting
                       label="Transition after"
-                      value={block.transitionAfterSeconds}
-                      min={0}
+                      value={Math.max(MIN_LISS_TRANSITION_SECONDS, block.transitionAfterSeconds)}
+                      min={MIN_LISS_TRANSITION_SECONDS}
                       max={1800}
                       step={5}
                       suffix="sec"

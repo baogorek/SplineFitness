@@ -188,9 +188,12 @@ function buildWorkSteps(block: LissCoreTemplateBlock, blockIndex: number, blockC
   }]
 }
 
+export const MIN_LISS_TRANSITION_SECONDS = 5
+
 export function buildLissCoreSteps(
   input: LissCoreTemplate,
-  rotationOrder: "alternating" | "left-first" = "alternating"
+  rotationOrder: "alternating" | "left-first" = "alternating",
+  legacyTransitions = false
 ): LissCoreStep[] {
   const template = normalizeLissCoreTemplate(input)
   const steps: LissCoreStep[] = []
@@ -202,13 +205,28 @@ export function buildLissCoreSteps(
       if (rotationOrder === "alternating" && rotationCount % 2 === 1) workSteps.reverse()
       rotationCount += 1
     }
+    if (block.kind === "rotation" && !legacyTransitions) {
+      workSteps.splice(1, 0, {
+        id: `switch-sides-${block.id}`,
+        kind: "transition",
+        label: "Switch sides",
+        durationSeconds: MIN_LISS_TRANSITION_SECONDS,
+        transitionType: "switch-sides",
+        blockId: block.id,
+        blockIndex,
+        blockCount: template.blocks.length,
+      })
+    }
     steps.push(...workSteps)
-    if (blockIndex < template.blocks.length - 1 && block.transitionAfterSeconds > 0) {
+    const transitionSeconds = legacyTransitions
+      ? block.transitionAfterSeconds
+      : Math.max(MIN_LISS_TRANSITION_SECONDS, block.transitionAfterSeconds)
+    if (blockIndex < template.blocks.length - 1 && transitionSeconds > 0) {
       steps.push({
         id: `transition-after-${block.id}`,
         kind: "transition",
         label: "Transition",
-        durationSeconds: block.transitionAfterSeconds,
+        durationSeconds: transitionSeconds,
         transitionType: "between-blocks",
         blockId: template.blocks[blockIndex + 1].id,
         blockIndex: blockIndex + 1,
