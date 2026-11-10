@@ -331,8 +331,19 @@ function CompletedWorkout({
   const [ratings, setRatings] = useState<Partial<Record<CoreExerciseId | "overall", CoreDifficulty>>>({})
   const [notes, setNotes] = useState("")
   const [saved, setSaved] = useState(false)
-  const [completedSessionData, setCompletedSessionData] = useState<LissCoreWorkoutSession | null>(null)
   const summary = useMemo(() => summarizeWorkout(steps, stepResults), [steps, stepResults])
+  const [completedSessionData, setCompletedSessionData] = useState<LissCoreWorkoutSession>(() => ({
+    mode: "liss-core",
+    startedAt: config.startedAt,
+    completedAt: new Date().toISOString(),
+    totalTimeSeconds,
+    template: config.template,
+    cableSetup,
+    cardioSelections,
+    stepResults,
+    ...summary,
+    endedEarly,
+  }))
 
   const setupRows = useMemo(() => {
     if (cableSetup.useSideSpecificRotation) {
@@ -349,6 +360,15 @@ function CompletedWorkout({
       ["Back extension", cableSetup.backExtension],
     ] as const
   }, [cableSetup])
+
+  const initialCompletionRef = useRef(false)
+  useEffect(() => {
+    if (initialCompletionRef.current) return
+    initialCompletionRef.current = true
+    onWorkoutStaged()
+    saveLissCoreCableSetup(cableSetup)
+    stageCompletedWorkout(completedSessionData)
+  }, [cableSetup, completedSessionData, onWorkoutStaged])
 
   const handleSave = () => {
     if (saved) return
@@ -468,10 +488,11 @@ function CompletedWorkout({
           </CardContent>
         </Card>
 
+        {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
         {!saved ? (
           <div className="space-y-3">
             <Button className="h-12 w-full bg-violet-600 text-base hover:bg-violet-700" onClick={handleSave}>
-              <Save /> {user ? "Save Workout" : "Finish Workout"}
+              <Save /> Save Ratings and Notes
             </Button>
             {!user && FEATURES.AUTH_ENABLED && (
               <button type="button" className="w-full text-center text-sm text-violet-700 underline-offset-4 hover:underline" onClick={() => void signInWithGoogle().catch((error) => console.error("Sign-in error:", error))}>
@@ -482,7 +503,6 @@ function CompletedWorkout({
         ) : (
           <div className="space-y-3 text-center">
             <p className="text-sm font-medium text-emerald-600">Workout finished. Your cable setup is saved on this device.</p>
-            {completedSessionData && <CompletedWorkoutSave session={completedSessionData} />}
             <Button variant="outline" className="h-12 w-full gap-2" onClick={onViewCalendar}>
               <Calendar className="h-4 w-4" /> View Workout Calendar
             </Button>

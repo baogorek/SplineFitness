@@ -48,6 +48,31 @@ const STORAGE_KEYS = {
   PENDING_WORKOUTS: "strength-tracker:pending-workouts",
 } as const
 
+function completedWorkoutIds(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    const ids = JSON.parse(localStorage.getItem("strength-tracker:completed-workout-ids") || "[]")
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []
+  } catch {
+    return []
+  }
+}
+
+function rememberCompletedWorkout(session: Pick<ActiveWorkoutSession, "mode" | "startedAt">): void {
+  if (typeof window === "undefined") return
+  const id = `${session.mode}:${session.startedAt}`
+  try {
+    localStorage.setItem("strength-tracker:completed-workout-ids", JSON.stringify([...new Set([...completedWorkoutIds(), id])]))
+  } catch (error) {
+    console.warn("Error remembering completed workout:", error)
+  }
+}
+
+function isCompletedWorkout(mode: ActiveWorkoutSession["mode"], startedAt: string): boolean {
+  return completedWorkoutIds().includes(`${mode}:${startedAt}`)
+    || getPendingWorkoutEntries().some((entry) => entry.session.mode === mode && entry.session.startedAt === startedAt)
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
@@ -178,6 +203,7 @@ async function savePendingWorkoutEntry(entry: PendingWorkoutEntry): Promise<Work
       createdAt: serverTimestamp(),
     })
 
+    rememberCompletedWorkout(entry.session)
     clearPendingWorkoutEntry(entry.id, entry.revision)
     clearMatchingWorkoutProgress(entry.session)
 
@@ -195,6 +221,7 @@ async function savePendingWorkoutEntry(entry: PendingWorkoutEntry): Promise<Work
 export function stageCompletedWorkout(session: ActiveWorkoutSession): ActiveWorkoutSession {
   const { entry, persisted } = queuePendingWorkoutSession(session)
   if (persisted) {
+    rememberCompletedWorkout(entry.session)
     clearMatchingWorkoutProgress(entry.session)
   }
   return entry.session
@@ -350,18 +377,22 @@ function clearMatchingWorkoutProgress(session: ActiveWorkoutSession): void {
     clearCurrentSession()
   }
 
-  const progress = (() => {
-    switch (session.mode) {
-      case "interval": return getIntervalProgress()
-      case "sit": return getSitProgress()
-      case "circuit": return getCircuitProgress()
-      case "freeform": return getFreeformProgress()
-      case "vo2max": return getVo2MaxProgress()
-      case "liss-core": return getLissCoreProgress()
+  if (typeof window === "undefined") return
+  const keys = {
+    interval: STORAGE_KEYS.INTERVAL_PROGRESS,
+    sit: STORAGE_KEYS.SIT_PROGRESS,
+    circuit: STORAGE_KEYS.CIRCUIT_PROGRESS,
+    freeform: STORAGE_KEYS.FREEFORM_PROGRESS,
+    vo2max: STORAGE_KEYS.VO2MAX_PROGRESS,
+    "liss-core": STORAGE_KEYS.LISS_CORE_PROGRESS,
+  }
+  try {
+    const raw = localStorage.getItem(keys[session.mode])
+    if (raw && JSON.parse(raw).startedAt === session.startedAt) {
+      clearWorkoutProgress(session.mode)
     }
-  })()
-  if (progress?.startedAt === session.startedAt) {
-    clearWorkoutProgress(session.mode)
+  } catch (error) {
+    console.warn("Error clearing completed workout progress:", error)
   }
 }
 
@@ -394,7 +425,8 @@ export async function clearProgressAlreadySavedToHistory(): Promise<void> {
       })
 
       if (alreadyCompleted) {
-        clearWorkoutProgress(entry.mode)
+        rememberCompletedWorkout({ mode: entry.mode, startedAt: entry.progress!.startedAt })
+        clearMatchingWorkoutProgress({ mode: entry.mode, startedAt: entry.progress!.startedAt } as ActiveWorkoutSession)
       }
     }
   } catch (error) {
@@ -404,6 +436,7 @@ export async function clearProgressAlreadySavedToHistory(): Promise<void> {
 
 export function saveIntervalProgress(progress: IntervalSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("interval", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.INTERVAL_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -415,6 +448,7 @@ export function getIntervalProgress(): IntervalSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.INTERVAL_PROGRESS)
+    if (data && isCompletedWorkout("interval", JSON.parse(data).startedAt)) return null
     return data ? JSON.parse(data) : null
   } catch {
     return null
@@ -432,6 +466,7 @@ export function clearIntervalProgress(): void {
 
 export function saveSitProgress(progress: SitSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("sit", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.SIT_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -443,6 +478,7 @@ export function getSitProgress(): SitSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.SIT_PROGRESS)
+    if (data && isCompletedWorkout("sit", JSON.parse(data).startedAt)) return null
     return data ? JSON.parse(data) : null
   } catch {
     return null
@@ -460,6 +496,7 @@ export function clearSitProgress(): void {
 
 export function saveCircuitProgress(progress: CircuitSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("circuit", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.CIRCUIT_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -471,6 +508,7 @@ export function getCircuitProgress(): CircuitSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.CIRCUIT_PROGRESS)
+    if (data && isCompletedWorkout("circuit", JSON.parse(data).startedAt)) return null
     if (!data) return null
     const parsed: unknown = JSON.parse(data)
     if (
@@ -508,6 +546,7 @@ export function clearCircuitProgress(): void {
 
 export function saveFreeformProgress(progress: FreeformSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("freeform", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.FREEFORM_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -519,6 +558,7 @@ export function getFreeformProgress(): FreeformSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.FREEFORM_PROGRESS)
+    if (data && isCompletedWorkout("freeform", JSON.parse(data).startedAt)) return null
     if (!data) return null
     const parsed: unknown = JSON.parse(data)
     if (
@@ -547,6 +587,7 @@ export function clearFreeformProgress(): void {
 
 export function saveVo2MaxProgress(progress: Vo2MaxSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("vo2max", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.VO2MAX_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -558,6 +599,7 @@ export function getVo2MaxProgress(): Vo2MaxSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.VO2MAX_PROGRESS)
+    if (data && isCompletedWorkout("vo2max", JSON.parse(data).startedAt)) return null
     return data ? JSON.parse(data) : null
   } catch {
     return null
@@ -575,6 +617,7 @@ export function clearVo2MaxProgress(): void {
 
 export function saveLissCoreProgress(progress: LissCoreSessionProgress): void {
   if (typeof window === "undefined") return
+  if (isCompletedWorkout("liss-core", progress.startedAt)) return
   try {
     localStorage.setItem(STORAGE_KEYS.LISS_CORE_PROGRESS, JSON.stringify(progress))
   } catch (error) {
@@ -586,6 +629,7 @@ export function getLissCoreProgress(): LissCoreSessionProgress | null {
   if (typeof window === "undefined") return null
   try {
     const data = localStorage.getItem(STORAGE_KEYS.LISS_CORE_PROGRESS)
+    if (data && isCompletedWorkout("liss-core", JSON.parse(data).startedAt)) return null
     if (!data) return null
     const parsed = JSON.parse(data) as LissCoreSessionProgress
     if (parsed.template?.version !== 2 || !Array.isArray(parsed.template.blocks)) {

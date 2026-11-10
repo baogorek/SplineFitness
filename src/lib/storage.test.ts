@@ -45,6 +45,8 @@ import {
   saveFrontierCards,
   saveWorkoutSession,
   stageCompletedWorkout,
+  saveFreeformProgress,
+  getFreeformProgress,
   updateIntervalWorkoutNotes,
 } from "./storage"
 import { FrontierCard } from "@/types/frontier"
@@ -103,6 +105,19 @@ describe("completed workout persistence", () => {
     firestoreMocks.batchSet.mockReset()
     firestoreMocks.batchDelete.mockReset()
     firestoreMocks.batchCommit.mockReset()
+  })
+
+  it("prevents an old timer from restoring a completed checkpoint", () => {
+    const session: FreeformWorkoutSession = {
+      mode: "freeform", startedAt: "2026-08-19T12:34:56.000Z",
+      completedAt: "2026-08-19T12:45:00.000Z", exercises: [],
+    }
+    stageCompletedWorkout(session)
+    const progress = { exercises: [], elapsedSeconds: 10, startedAt: session.startedAt, savedAt: session.completedAt! }
+    saveFreeformProgress(progress)
+    expect(getFreeformProgress()).toBeNull()
+    saveFreeformProgress({ ...progress, startedAt: "2026-08-20T12:00:00.000Z" })
+    expect(getFreeformProgress()?.startedAt).toBe("2026-08-20T12:00:00.000Z")
   })
 
   it("queues the completed workout before clearing its active checkpoint", () => {

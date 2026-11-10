@@ -296,49 +296,31 @@ function ModeSelection({ onSelectMode }: { onSelectMode: (mode: AppMode) => void
 
 export function WorkoutLogger() {
   const [mode, setMode] = useState<AppMode | null>(null)
-  const [checkingSavedProgress, setCheckingSavedProgress] = useState(true)
+  const { user, loading } = useAuth()
+  const [savedWorkouts, setSavedWorkouts] = useState<{ mode: WorkoutMode; review: boolean }[]>([])
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-
-    const getSavedMode = (): WorkoutMode | null => {
-      if (getCircuitProgress()) {
-        return "circuit"
-      }
-      if (getFreeformProgress()) {
-        return "freeform"
-      }
-      if (getIntervalProgress()) {
-        return "interval"
-      }
-      if (getSitProgress()) {
-        return "sit"
-      }
-      if (getLissCoreProgress()) {
-        return "liss-core"
-      }
-      if (getVo2MaxProgress()) {
-        return "vo2max"
-      }
-      return null
+    const refresh = async () => {
+      if (!loading && user) await clearProgressAlreadySavedToHistory()
+      const candidates = [
+        { mode: "circuit" as const, progress: getCircuitProgress(), review: false },
+        { mode: "freeform" as const, progress: getFreeformProgress(), review: false },
+        { mode: "interval" as const, progress: getIntervalProgress(), review: false },
+        { mode: "sit" as const, progress: getSitProgress(), review: false },
+        { mode: "liss-core" as const, progress: getLissCoreProgress(), review: getLissCoreProgress()?.phase === "complete" },
+        { mode: "vo2max" as const, progress: getVo2MaxProgress(), review: getVo2MaxProgress()?.stage === "entry" },
+      ]
+      if (!cancelled) setSavedWorkouts(candidates.filter((entry) => entry.progress))
     }
-
-    const restoreSavedProgress = async () => {
-      if (FEATURES.AUTH_ENABLED && getSavedMode()) {
-        await clearProgressAlreadySavedToHistory()
-      }
-
-      if (!cancelled) {
-        setMode(getSavedMode())
-        setCheckingSavedProgress(false)
-      }
-    }
-
-    void restoreSavedProgress()
+    void refresh()
+    window.addEventListener("online", refresh)
     return () => {
       cancelled = true
+      window.removeEventListener("online", refresh)
     }
-  }, [])
+  }, [user, loading, mode])
 
   const handleModeChange = () => {
     setMode(null)
@@ -346,10 +328,6 @@ export function WorkoutLogger() {
 
   const handleViewCalendar = () => {
     setMode("history")
-  }
-
-  if (checkingSavedProgress) {
-    return <div className="text-muted-foreground">Loading...</div>
   }
 
   if (mode === "circuit") {
@@ -388,5 +366,19 @@ export function WorkoutLogger() {
     return <BookingView onBack={handleModeChange} />
   }
 
-  return <ModeSelection onSelectMode={setMode} />
+  return (
+    <div className="w-full">
+      {!dismissed && savedWorkouts.length > 0 && (
+        <div className="mx-auto max-w-3xl space-y-2 p-4">
+          {savedWorkouts.map((entry) => (
+            <Button key={entry.mode} variant="outline" className="w-full whitespace-normal" onClick={() => setMode(entry.mode)}>
+              {entry.review ? "Review results" : "Continue unfinished workout"} · {workoutModes.find((item) => item.id === entry.mode)?.title}
+            </Button>
+          ))}
+          <Button variant="ghost" onClick={() => setDismissed(true)}>Dismiss</Button>
+        </div>
+      )}
+      <ModeSelection onSelectMode={setMode} />
+    </div>
+  )
 }
