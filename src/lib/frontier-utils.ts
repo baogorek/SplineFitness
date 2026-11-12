@@ -87,18 +87,19 @@ export function isFrontierImprovement(
 export function formatFrontierValue(metric: FrontierMetric, value: FrontierValue | null): string {
   if (!value) return "No mark yet"
 
+  const load = value.unit === "setting" ? `Setting ${formatNumber(value.primary)}` : `${formatNumber(value.primary)} ${value.unit ?? "lb"}`
   switch (metric) {
     case "reps":
       return `${formatNumber(value.primary)} rep${value.primary === 1 ? "" : "s"}`
     case "weight-time":
       return value.secondary === undefined
-        ? `${formatNumber(value.primary)} lb`
-        : `${formatNumber(value.primary)} lb / ${formatDuration(value.secondary)}`
+        ? load
+        : `${load} / ${formatDuration(value.secondary)}`
     case "duration-longer":
     case "duration-faster":
       return formatDuration(value.primary)
     case "weight":
-      return `${formatNumber(value.primary)} lb`
+      return load
     case "speed":
       return `${formatNumber(value.primary)} mph`
     case "freeform":

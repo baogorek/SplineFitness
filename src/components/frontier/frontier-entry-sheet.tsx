@@ -26,6 +26,7 @@ import {
   FrontierExercise,
   FrontierMetric,
   FrontierValue,
+  FrontierResistanceUnit,
 } from "@/types/frontier"
 
 interface FrontierEntrySheetProps {
@@ -64,6 +65,7 @@ export function FrontierEntrySheet({
     initialStructure?.bodyPart ?? ""
   )
   const [metric, setMetric] = useState<FrontierMetric>(exercise?.metric ?? "reps")
+  const [resistanceUnit, setResistanceUnit] = useState<FrontierResistanceUnit>(exercise?.resistanceUnit ?? "lb")
   // Untouched fields follow a newly confirmed timer mark; actual drafts stay intact.
   const [primaryDraft, setPrimary] = useState<string | null>(null)
   const primary = primaryDraft ?? (savedCurrent ? String(savedCurrent.primary) : "")
@@ -80,7 +82,7 @@ export function FrontierEntrySheet({
   const [showHistory, setShowHistory] = useState(false)
   const [showMetricOptions, setShowMetricOptions] = useState(!exercise || exercise.changes.length === 0)
 
-  const metricChanged = Boolean(exercise && metric !== exercise.metric)
+  const metricChanged = Boolean(exercise && (metric !== exercise.metric || ((metric === "weight" || metric === "weight-time") && resistanceUnit !== (exercise.resistanceUnit ?? "lb"))))
   const currentChange = metricChanged ? null : savedChange
   const current = metricChanged ? null : savedCurrent
   const historyCount = (exercise?.changes.length ?? 0)
@@ -96,11 +98,11 @@ export function FrontierEntrySheet({
       const weight = Number(primary)
       if (!Number.isFinite(weight) || weight <= 0) return null
 
-      if (!duration.trim()) return { primary: weight }
+      if (!duration.trim()) return { primary: weight, unit: resistanceUnit }
 
       const seconds = parseDuration(duration)
       if (seconds === null || seconds <= 0) return null
-      return { primary: weight, secondary: seconds }
+      return { primary: weight, secondary: seconds, unit: resistanceUnit }
     }
 
     if (metric === "duration-longer" || metric === "duration-faster") {
@@ -111,7 +113,7 @@ export function FrontierEntrySheet({
     const value = Number(primary)
     if (!Number.isFinite(value) || value <= 0) return null
     if (metric === "reps" && !Number.isInteger(value)) return null
-    return { primary: value }
+    return { primary: value, ...(metric === "weight" ? { unit: resistanceUnit } : {}) }
   })()
 
   const rawValue = metric === "freeform" ? customMark.trim() || null : null
@@ -174,6 +176,7 @@ export function FrontierEntrySheet({
       equipment: equipment.trim(),
       bodyPart,
       metric,
+      resistanceUnit,
       value: parsedValue,
       rawValue,
       valueAction: !hasMeasure
@@ -234,7 +237,7 @@ export function FrontierEntrySheet({
         <div className="space-y-5">
           {exercise && onTime && (
             <div className="space-y-2">
-              <Button variant="outline" className="h-12 w-full border-indigo-200 text-indigo-700" disabled={timerInUse} onClick={() => onTime(metric === "weight-time" && Number(primary) > 0 ? Number(primary) : undefined)}>
+              <Button variant="outline" className="h-12 w-full border-indigo-200 text-indigo-700" disabled={timerInUse || metricChanged} onClick={() => onTime(metric === "weight-time" && Number(primary) > 0 ? Number(primary) : undefined)}>
                 <Timer className="mr-2 h-4 w-4" />{timerInUse ? "Finish the active timer to start another" : "Time this exercise"}
               </Button>
               <p className="text-xs text-slate-500">Your edits stay here while you time the exercise. Frontier suggestions use the saved measurement and mark.</p>
@@ -374,7 +377,25 @@ export function FrontierEntrySheet({
             </div>
           )}
 
+          {(metric === "weight" || metric === "weight-time") && (
+            <label className="block space-y-2 text-sm font-semibold text-slate-700">
+              <span>Resistance unit</span>
+              <select className="h-12 w-full rounded-md border border-slate-200 bg-white px-3" value={resistanceUnit}
+                onChange={(event) => {
+                  setResistanceUnit(event.target.value as FrontierResistanceUnit)
+                  setPrimary("")
+                  setDuration("")
+                  setCorrecting(false)
+                }}>
+                <option value="lb">Pounds (lb)</option>
+                <option value="kg">Kilograms (kg)</option>
+                <option value="setting">Resistance setting (1, 2, 3…)</option>
+              </select>
+              <p className="text-xs font-normal text-slate-500">Use resistance settings for numbered machine levels. Higher settings count as progress.</p>
+            </label>
+          )}
           <FrontierValueFields
+            resistanceUnit={resistanceUnit}
             metric={metric}
             primary={primary}
             duration={duration}
@@ -533,6 +554,7 @@ function FrontierHistoryList({ metric, changes, currentId }: {
 }
 
 interface FrontierValueFieldsProps {
+  resistanceUnit: FrontierResistanceUnit
   metric: FrontierMetric
   primary: string
   duration: string
@@ -544,6 +566,7 @@ interface FrontierValueFieldsProps {
 }
 
 function FrontierValueFields({
+  resistanceUnit,
   metric,
   primary,
   duration,
@@ -576,9 +599,9 @@ function FrontierValueFields({
       <div className="grid grid-cols-2 gap-3">
         <NumberField
           id="frontier-weight"
-          label="Weight"
+          label={resistanceUnit === "setting" ? "Resistance setting" : "Weight"}
           value={primary}
-          suffix="lb"
+          suffix={resistanceUnit === "setting" ? "level" : resistanceUnit}
           step="any"
           optional={allowEmpty}
           onChange={onPrimaryChange}
@@ -594,7 +617,7 @@ function FrontierValueFields({
 
   const configuration = {
     reps: { label: "Best single set", suffix: "reps", step: "1" },
-    weight: { label: "Weight", suffix: "lb", step: "any" },
+    weight: { label: resistanceUnit === "setting" ? "Resistance setting" : "Weight", suffix: resistanceUnit === "setting" ? "level" : resistanceUnit, step: "any" },
     speed: { label: "Speed", suffix: "mph", step: "any" },
   }[metric]
 

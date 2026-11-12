@@ -210,6 +210,7 @@ export function FrontierWallet({ onBack }: FrontierWalletProps) {
         equipment,
         bodyPart: entry.bodyPart,
         metric: entry.metric,
+        resistanceUnit: entry.resistanceUnit ?? "lb",
         metricSource: "user",
         changes,
         order: currentCard.exercises.length,

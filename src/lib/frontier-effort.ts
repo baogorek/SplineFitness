@@ -71,7 +71,7 @@ export function getFrontierTimerProposal(
   }
   if (exercise.metric === "weight-time") {
     if (weight === undefined || !Number.isFinite(weight) || weight <= 0) return null
-    const value = { primary: weight, secondary: roundedSeconds }
+    const value = { primary: weight, secondary: roundedSeconds, ...(exercise.resistanceUnit ? { unit: exercise.resistanceUnit } : {}) }
     return isFrontierImprovement(exercise.metric, current?.value ?? null, value) ? { value } : null
   }
   if (exercise.metric === "duration-longer" || exercise.metric === "duration-faster") {
@@ -102,7 +102,7 @@ export function recordFrontierTimerEffort(
   if (update && !alreadyUpdated) {
     const baselineMark = getCurrentFrontierChange(update.baseline.metric, update.baseline.changes)
     const currentMark = getCurrentFrontierChange(exercise.metric, exercise.changes)
-    if (exercise.metric !== update.baseline.metric || currentMark?.id !== baselineMark?.id) {
+    if (exercise.metric !== update.baseline.metric || (exercise.resistanceUnit ?? "lb") !== (update.baseline.resistanceUnit ?? "lb") || currentMark?.id !== baselineMark?.id) {
       throw new Error("The frontier changed during this effort. Your attempt is recorded; review the current mark in the editor.")
     }
     const proposal = getFrontierTimerProposal(exercise, attempt.elapsedSeconds, attempt.weight)

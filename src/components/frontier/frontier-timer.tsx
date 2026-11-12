@@ -194,7 +194,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
             )}
             {exercise?.metric === "weight-time" && (
               <div className="mb-4 space-y-2">
-                <label htmlFor="frontier-timer-weight" className="text-sm font-semibold">Weight used (lb) <span className="font-normal text-slate-400">(optional)</span></label>
+                <label htmlFor="frontier-timer-weight" className="text-sm font-semibold">{exercise?.resistanceUnit === "setting" ? "Resistance setting used" : `Weight used (${exercise?.resistanceUnit ?? "lb"})`} <span className="font-normal text-slate-400">(optional)</span></label>
                 <Input id="frontier-timer-weight" inputMode="decimal" value={weightInput} onChange={(event) => setWeightInput(event.target.value)} aria-invalid={invalidWeight} className="h-12 bg-white font-mono" />
                 <p className={`text-xs ${invalidWeight ? "text-red-600" : "text-slate-500"}`}>{invalidWeight ? "Enter a weight greater than zero." : "Confirm the weight to receive a frontier suggestion."}</p>
               </div>
@@ -266,7 +266,7 @@ export function FrontierTimer({ exercise, expanded, onExpand, onMinimize, onClos
                 {proposal && baseline && !updated && !undone && (
                   <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                     <p className="text-sm font-semibold">Update frontier to <span className="break-words font-mono">{formatFrontierChange(baseline.metric, { id: "proposal", kind: "progress", ...proposal })}</span>?</p>
-                    <p className="mt-1 text-xs text-slate-600">Suggested time uses the last 15-second mark you reached.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} lb.`}</p>
+                    <p className="mt-1 text-xs text-slate-600">Suggested time uses the last 15-second mark you reached.{effort.weight !== undefined && ` Confirm this effort used ${effort.weight} ${baseline.resistanceUnit === "setting" ? "setting" : baseline.resistanceUnit ?? "lb"}.`}</p>
                     <Button className="mt-3 w-full bg-indigo-600 text-white hover:bg-indigo-700" disabled={saveState !== "saved"} onClick={() => void saveEffort(effort, true)}>Update frontier</Button>
                     <p className="mt-2 text-xs text-slate-500">Choose Done to keep only the recorded effort.</p>
                   </div>

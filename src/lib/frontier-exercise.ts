@@ -6,7 +6,7 @@ export function updateFrontierExercise(
   entry: FrontierEntrySave,
   now: string
 ): FrontierExercise {
-  const metricChanged = entry.metric !== exercise.metric
+  const metricChanged = entry.metric !== exercise.metric || ((entry.metric === "weight" || entry.metric === "weight-time") && (entry.resistanceUnit ?? "lb") !== (exercise.resistanceUnit ?? "lb"))
   const changes = metricChanged ? [] : exercise.changes
   const hasNewMark = Boolean(entry.value || entry.rawValue)
     && (metricChanged || entry.valueAction === "progress" || entry.valueAction === "correction")
@@ -28,6 +28,7 @@ export function updateFrontierExercise(
     equipment: entry.equipment,
     bodyPart: entry.bodyPart,
     metric: entry.metric,
+    resistanceUnit: entry.resistanceUnit ?? "lb",
     metricSource: "user",
     changes: nextChanges,
     ...(metricChanged ? { attempts: [] } : {}),
@@ -35,6 +36,7 @@ export function updateFrontierExercise(
       metricHistory: [...(exercise.metricHistory ?? []), {
         id: crypto.randomUUID(),
         metric: exercise.metric,
+        resistanceUnit: exercise.resistanceUnit ?? "lb",
         changes: exercise.changes,
         attempts: exercise.attempts ?? [],
         endedAt: now,

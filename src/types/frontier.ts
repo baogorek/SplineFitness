@@ -1,3 +1,5 @@
+export type FrontierResistanceUnit = "lb" | "kg" | "setting"
+
 export type FrontierMetric =
   | "reps"
   | "weight-time"
@@ -16,6 +18,7 @@ export type FrontierBodyPart =
   | "Arms"
 
 export interface FrontierValue {
+  unit?: FrontierResistanceUnit
   primary: number
   secondary?: number
 }
@@ -40,6 +43,7 @@ export interface FrontierAttempt {
 
 export interface FrontierMetricHistory {
   id: string
+  resistanceUnit?: FrontierResistanceUnit
   metric: FrontierMetric
   changes: FrontierChange[]
   attempts: FrontierAttempt[]
@@ -50,6 +54,7 @@ export interface FrontierEntrySave {
   name: string
   equipment: string
   bodyPart: FrontierBodyPart
+  resistanceUnit?: FrontierResistanceUnit
   metric: FrontierMetric
   value: FrontierValue | null
   rawValue: string | null
@@ -63,6 +68,7 @@ export interface FrontierExercise {
   equipment?: string
   /** A simple organizational category, not an anatomical classification. */
   bodyPart?: FrontierBodyPart
+  resistanceUnit?: FrontierResistanceUnit
   metric: FrontierMetric
   /** Explicit choices must not be replaced by legacy import inference. */
   metricSource?: "user" | "inferred"

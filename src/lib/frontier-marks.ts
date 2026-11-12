@@ -109,7 +109,8 @@ export function parseFrontierMarkHistory(rawValues: string[]): {
 
 export function frontierChangesMatch(a: FrontierChange, b: FrontierChange): boolean {
   if (a.value && b.value) {
-    return a.value.primary === b.value.primary
+    return (a.value.unit ?? "lb") === (b.value.unit ?? "lb")
+      && a.value.primary === b.value.primary
       && (a.value.secondary ?? null) === (b.value.secondary ?? null)
   }
 

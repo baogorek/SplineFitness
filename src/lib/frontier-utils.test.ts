@@ -91,3 +91,12 @@ describe("Frontier durations", () => {
     expect(isFrontierImprovement("weight-time", { primary: 100, secondary: 6.6 }, { primary: 100, secondary: 6.61 })).toBe(true)
   })
 })
+
+
+describe("resistance units", () => {
+  it("formats kilograms and numbered settings while retaining legacy pounds", () => {
+    expect(formatFrontierValue("weight", { primary: 20, unit: "kg" })).toBe("20 kg")
+    expect(formatFrontierValue("weight-time", { primary: 3, secondary: 90, unit: "setting" })).toBe("Setting 3 / 1:30")
+    expect(formatFrontierValue("weight", { primary: 20 })).toBe("20 lb")
+  })
+})
